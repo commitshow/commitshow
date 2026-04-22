@@ -1,0 +1,235 @@
+import { useEffect, useRef, useState } from 'react'
+import type { Project } from '../lib/supabase'
+import {
+  fetchJustRegistered,
+  fetchClimbing,
+  fetchGraduating,
+  fetchCreatorsByIds,
+  type CreatorIdentity,
+} from '../lib/projectQueries'
+import { FeaturedLaneCard } from './FeaturedLaneCard'
+
+interface LaneState<T = Project> {
+  loading: boolean
+  rows: T[]
+}
+
+type ClimberRow = Project & { delta: number }
+
+// Carousel card sizing — each card keeps the same aspect ratio as the grid
+// card, but is wider/more breathable in the horizontal lane.
+const CARD_WIDTH_PX = 300
+
+export function FeaturedLanes() {
+  const [rookie, setRookie] = useState<LaneState>({ loading: true, rows: [] })
+  const [climbers, setClimbers] = useState<LaneState<ClimberRow>>({ loading: true, rows: [] })
+  const [graduating, setGraduating] = useState<LaneState>({ loading: true, rows: [] })
+  const [creators, setCreators] = useState<Record<string, CreatorIdentity>>({})
+
+  useEffect(() => {
+    Promise.all([fetchJustRegistered(), fetchClimbing(), fetchGraduating()]).then(async ([r, c, g]) => {
+      setRookie({ loading: false, rows: r })
+      setClimbers({ loading: false, rows: c })
+      setGraduating({ loading: false, rows: g })
+
+      const allCreatorIds = [...r, ...c, ...g].map(p => p.creator_id).filter((x): x is string => !!x)
+      if (allCreatorIds.length > 0) setCreators(await fetchCreatorsByIds(allCreatorIds))
+    })
+  }, [])
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Lane
+        label="NEW APPLICATIONS"
+        hint="Week 1 · blind stage · no scores yet"
+        tone="#6B7280"
+        loading={rookie.loading}
+        empty="Nothing new this week."
+      >
+        {rookie.rows.map(p => (
+          <FeaturedLaneCard
+            key={p.id}
+            project={p}
+            creator={p.creator_id ? creators[p.creator_id] : undefined}
+            accent={{ tone: 'rookie', leftBadge: daysAgo(p.created_at) }}
+            hideScore
+          />
+        ))}
+      </Lane>
+
+      <Lane
+        label="CLIMBING"
+        hint="Biggest positive deltas this week"
+        tone="#00D4AA"
+        loading={climbers.loading}
+        empty="No climbers yet — be the first to push."
+      >
+        {climbers.rows.map(p => (
+          <FeaturedLaneCard
+            key={p.id}
+            project={p}
+            creator={p.creator_id ? creators[p.creator_id] : undefined}
+            accent={{ tone: 'climber', rightBadge: `+${p.delta}` }}
+          />
+        ))}
+      </Lane>
+
+      <Lane
+        label="GRADUATION TRACK"
+        hint="Score ≥ 70 · within the season"
+        tone="#F0C040"
+        loading={graduating.loading}
+        empty="None at the graduation bar yet."
+      >
+        {graduating.rows.map(p => (
+          <FeaturedLaneCard
+            key={p.id}
+            project={p}
+            creator={p.creator_id ? creators[p.creator_id] : undefined}
+            accent={{ tone: 'graduating', rightBadge: `${p.score_total}/100` }}
+          />
+        ))}
+      </Lane>
+    </div>
+  )
+}
+
+function Lane({ label, hint, tone, loading, empty, children }: {
+  label: string; hint: string; tone: string; loading: boolean; empty: string; children: React.ReactNode
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const count = (Array.isArray(children) ? children : [children]).filter(Boolean).length
+
+  const scrollBy = (dir: 1 | -1) => {
+    const el = scrollRef.current
+    if (!el) return
+    const cardsPerStride = Math.max(1, Math.floor(el.clientWidth / (CARD_WIDTH_PX + 12)))
+    el.scrollBy({ left: dir * cardsPerStride * (CARD_WIDTH_PX + 12), behavior: 'smooth' })
+  }
+
+  const canScroll = !loading && count > 1
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {/* Lane header · label + hint + gradient divider + arrow controls */}
+      <div className="flex items-baseline justify-between px-1 gap-3">
+        <div className="flex items-baseline gap-3 min-w-0">
+          <div>
+            <div className="font-mono text-xs tracking-widest" style={{ color: tone }}>{label}</div>
+            <div className="font-mono text-[10px] mt-0.5" style={{ color: 'rgba(248,245,238,0.35)' }}>{hint}</div>
+          </div>
+          {count > 0 && (
+            <span className="font-mono text-[10px]" style={{ color: 'rgba(248,245,238,0.35)' }}>
+              {count}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 flex items-center gap-3 min-w-0">
+          <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${tone}55, transparent)` }} />
+          {canScroll && (
+            <div className="flex gap-1 flex-shrink-0">
+              <ArrowBtn dir="left"  onClick={() => scrollBy(-1)} tone={tone} />
+              <ArrowBtn dir="right" onClick={() => scrollBy(1)}  tone={tone} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Horizontal scroller */}
+      {loading ? (
+        <div className="font-mono text-xs flex items-center justify-center py-10" style={{
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px dashed rgba(255,255,255,0.08)',
+          color: 'rgba(248,245,238,0.25)',
+          borderRadius: '2px',
+        }}>
+          Loading…
+        </div>
+      ) : count === 0 ? (
+        <div className="font-mono text-xs flex items-center justify-center py-10" style={{
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px dashed rgba(255,255,255,0.08)',
+          color: 'rgba(248,245,238,0.3)',
+          borderRadius: '2px',
+        }}>
+          {empty}
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="flex gap-3 overflow-x-auto scroll-smooth pb-1"
+          style={{
+            scrollSnapType: 'x mandatory',
+            scrollbarWidth: 'none',
+          }}
+          // WebKit scrollbar hiding (Tailwind scrollbar plugin not in use)
+          onWheelCapture={e => {
+            // Convert vertical wheel to horizontal when the user is clearly scrolling the lane
+            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+              const el = scrollRef.current
+              if (!el) return
+              // Only eat the event if the lane has room to scroll — otherwise let the page scroll
+              const canLeft  = el.scrollLeft > 0
+              const canRight = el.scrollLeft + el.clientWidth < el.scrollWidth
+              if ((e.deltaY < 0 && canLeft) || (e.deltaY > 0 && canRight)) {
+                e.preventDefault()
+                el.scrollBy({ left: e.deltaY, behavior: 'auto' })
+              }
+            }
+          }}
+        >
+          {/* hide webkit scrollbar */}
+          <style>{`.lane-scroll::-webkit-scrollbar { display: none }`}</style>
+          {(Array.isArray(children) ? children : [children]).filter(Boolean).map((child, i) => (
+            <div
+              key={i}
+              style={{ width: CARD_WIDTH_PX, flexShrink: 0, scrollSnapAlign: 'start' }}
+            >
+              {child}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ArrowBtn({ dir, onClick, tone }: { dir: 'left' | 'right'; onClick: () => void; tone: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={dir === 'left' ? 'Scroll left' : 'Scroll right'}
+      onClick={onClick}
+      className="flex items-center justify-center transition-colors"
+      style={{
+        width: 26, height: 26,
+        background: 'rgba(255,255,255,0.02)',
+        border: `1px solid ${tone}33`,
+        color: tone,
+        borderRadius: '2px',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = `${tone}18`
+        e.currentTarget.style.borderColor = `${tone}66`
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+        e.currentTarget.style.borderColor = `${tone}33`
+      }}
+    >
+      <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+           style={{ transform: dir === 'left' ? 'rotate(180deg)' : undefined }}>
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+    </button>
+  )
+}
+
+function daysAgo(iso: string): string {
+  const hrs = (Date.now() - new Date(iso).getTime()) / 3_600_000
+  if (hrs < 1)  return 'just now'
+  if (hrs < 24) return `${Math.floor(hrs)}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}

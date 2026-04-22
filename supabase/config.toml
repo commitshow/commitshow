@@ -1,0 +1,14 @@
+project_id = "tekemubwihsjdzittoqf"
+
+# Edge Functions — per-function settings.
+# We handle auth internally using the service role client, so platform-level
+# JWT verification is disabled. Required because new Supabase projects sign
+# user JWTs with ES256 which the gateway's legacy verifier doesn't accept.
+[functions.analyze-project]
+verify_jwt = false
+
+[functions.discover-mds]
+verify_jwt = false
+
+[functions.apply-artifact]
+verify_jwt = false

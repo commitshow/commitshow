@@ -1,13 +1,40 @@
+import { useNavigate } from 'react-router-dom'
+
 interface HeroProps {
   projectCount: number
   graduatedCount: number
-  onSubmitClick: () => void
-  onFeedClick: () => void
 }
 
-export function Hero({ projectCount, graduatedCount, onSubmitClick, onFeedClick }: HeroProps) {
+export function Hero({ projectCount, graduatedCount }: HeroProps) {
+  const navigate = useNavigate()
+  const onSubmitClick = () => navigate('/submit')
+  const onFeedClick = () => navigate('/projects')
   return (
-    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-16">
+    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 overflow-hidden">
+
+      {/* ── Animated WebP background · conductor + golden matrix ── */}
+      <img
+        src="/hero-bg.webp"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full pointer-events-none select-none"
+        style={{
+          objectFit: 'cover',
+          zIndex: -2,
+          opacity: 1,
+        }}
+      />
+
+      {/* Subtle vertical vignette so text stays legible while the conductor
+          frame remains clearly visible behind. Edges darker, middle clearer. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: -1,
+          background: 'linear-gradient(to bottom, rgba(6,12,26,0.45) 0%, rgba(6,12,26,0.35) 35%, rgba(6,12,26,0.35) 65%, rgba(6,12,26,0.65) 100%)',
+        }}
+      />
 
       {/* Season badge */}
       <div
@@ -26,12 +53,11 @@ export function Hero({ projectCount, graduatedCount, onSubmitClick, onFeedClick 
       {/* Main headline */}
       <h1
         className="stagger-2 font-display font-black leading-none tracking-tight mb-6"
-        style={{ fontSize: 'clamp(3.5rem, 9vw, 8rem)', letterSpacing: '-3px' }}
+        style={{ fontSize: 'clamp(3.5rem, 9vw, 8rem)', letterSpacing: '-1.5px' }}
       >
-        <span style={{ color: 'var(--cream)' }}>Where vibe</span>
+        <span style={{ color: 'var(--cream)' }}>Show your</span>
         <br />
-        <span style={{ color: 'var(--cream)' }}>coders </span>
-        <em className="gold-shimmer not-italic">debut.</em>
+        <em className="gold-shimmer not-italic">commit.</em>
       </h1>
 
       {/* Rule */}
@@ -42,8 +68,8 @@ export function Hero({ projectCount, graduatedCount, onSubmitClick, onFeedClick 
         className="stagger-3 max-w-xl mx-auto mb-10 font-light"
         style={{ color: 'rgba(248,245,238,0.55)', fontSize: '1.1rem', lineHeight: 1.8 }}
       >
-        The only league that objectively scores AI-built projects
-        and graduates the ones that are truly production-ready.
+        The vibe coding league where every commit is evidence. AI scores the work,
+        Scouts forecast the finish, and the ones ready for production graduate.
       </p>
 
       {/* CTA */}
@@ -63,7 +89,7 @@ export function Hero({ projectCount, graduatedCount, onSubmitClick, onFeedClick 
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-400)'; e.currentTarget.style.boxShadow = '0 0 60px rgba(240,192,64,0.35)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(240,192,64,0.2)'; }}
         >
-          Register Project — $99 →
+          Apply with your project →
         </button>
         <button
           onClick={onFeedClick}
@@ -79,14 +105,14 @@ export function Hero({ projectCount, graduatedCount, onSubmitClick, onFeedClick 
           onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
           onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
         >
-          Browse Projects ↓
+          Browse Projects →
         </button>
       </div>
 
       {/* Stats */}
       <div className="stagger-5 flex gap-12 justify-center flex-wrap">
         {[
-          { num: projectCount || '—', label: 'Projects Registered' },
+          { num: projectCount || '—', label: 'Applications' },
           { num: graduatedCount || '—', label: 'Graduated' },
           { num: '3wk', label: 'Season Length' },
           { num: '50%', label: 'AI Objective Score' },

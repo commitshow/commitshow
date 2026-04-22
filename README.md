@@ -1,16 +1,22 @@
-# debut.show
+# commit.show
 
-**The vibe coding league.** Submit your AI-built project, get objectively scored, and graduate to the Hall of Fame.
+**Commit your work. Show to the world.** The vibe coding league where every
+commit is evidence. AI scores the work, Scouts forecast the finish, and the
+ones ready for production graduate.
 
 > Season Zero · US Launch 2026
 
 ---
 
-## What is debut.show?
+## What is commit.show?
 
-A structured league platform for vibe-coded (AI-assisted) projects. Unlike Product Hunt's popularity contest, debut.show uses a **50% automated analysis + 30% Scout forecast + 20% community signal** scoring system to determine which projects are truly production-ready.
+A structured league platform for vibe-coded (AI-assisted) projects. Unlike
+Product Hunt's popularity contest, commit.show uses a **50% automated analysis +
+30% Scout forecast + 20% community signal** scoring system to determine which
+projects are truly production-ready.
 
-**Graduation** = Hall of Fame + Certification badge + Media exposure (10K guaranteed for Valedictorian) + Entry fee refund.
+**Graduation** = Hall of Fame + Certification badge + Media exposure (10K
+guaranteed for Valedictorian) + Entry fee refund.
 
 ---
 
@@ -19,10 +25,10 @@ A structured league platform for vibe-coded (AI-assisted) projects. Unlike Produ
 | Layer | Tech |
 |-------|------|
 | Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
-| Backend | Supabase (PostgreSQL + Auth + Edge Functions) |
+| Backend | Supabase (PostgreSQL + Auth + Edge Functions + Realtime) |
 | AI Analysis | Claude API (claude-sonnet-4-5) |
 | Lighthouse | Google PageSpeed Insights API |
-| Deployment | Netlify |
+| Deployment | Cloudflare Pages |
 
 ---
 
@@ -51,7 +57,8 @@ VITE_PAGESPEED_KEY=your_google_api_key   # optional
 
 ### 3. Set up Supabase
 
-Go to your Supabase dashboard → SQL Editor → paste and run `supabase/schema.sql`.
+Go to your Supabase dashboard → SQL Editor → paste and run `supabase/schema.sql`,
+then apply migrations under `supabase/migrations/` in chronological order.
 
 ### 4. Run dev server
 
@@ -61,7 +68,7 @@ npm run dev
 
 ---
 
-## Deploy to Cloudflare Pages (Free · Unlimited builds)
+## Deploy to Cloudflare Pages
 
 1. Push to GitHub
 2. [dash.cloudflare.com](https://dash.cloudflare.com) → Pages → Create a project → Connect GitHub → `hans1329/vibe`
@@ -74,28 +81,7 @@ npm run dev
    - `VITE_SUPABASE_ANON_KEY`
    - `VITE_PAGESPEED_KEY` (optional)
 5. Save and Deploy → `vibe.pages.dev` live
-6. Custom domain: Pages → Custom domains → debut.show (1-click if domain is on Cloudflare)
-
----
-
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── Nav.tsx          # Fixed navigation
-│   ├── Hero.tsx         # Landing hero section
-│   ├── SubmitForm.tsx   # 4-step project submission + analysis
-│   └── ProjectFeed.tsx  # Live project cards
-├── lib/
-│   ├── supabase.ts      # Supabase client + types
-│   └── analysis.ts      # Lighthouse + GitHub + Claude pipeline
-├── App.tsx              # Page layout + all sections
-├── main.tsx
-└── index.css            # Global styles + Ivy League design tokens
-supabase/
-└── schema.sql           # Full DB schema + RLS policies
-```
+6. Custom domain: Pages → Custom domains → commit.show
 
 ---
 
@@ -104,22 +90,25 @@ supabase/
 | Component | Weight | Source |
 |-----------|--------|--------|
 | Automated Analysis | 50% | GitHub API + PageSpeed API + MD integrity |
-| Scout Forecast | 30% | Weighted votes (Platinum×3, Gold×2, Silver×1.5, Bronze×1) |
+| Scout Forecast | 30% | Forecast votes (uniform value · tiered monthly quota) |
 | Community Signal | 20% | Views · comments · shares · return visits |
 
-**Graduation requires:** Total ≥ 75pts · Auto score ≥ 35/50 · ≥3 Scout votes · 2-week sustained score
+**Graduation requires (all five):** Total ≥ 75pts · Auto score ≥ 35/50 ·
+≥3 Scout forecasts · 2-week sustained ≥75 · Live URL healthcheck passes.
 
 ---
 
 ## Roadmap
 
-- **V0 (now):** Project submission + AI analysis + score card + feed
-- **V0.5:** Supabase Auth + Scout tier system + Vote/Forecast UI + Stripe $99
-- **V1:** Full 3-week season engine + Progress Bar + Applaud Week + Community Awards
-- **V1.5:** MD Marketplace + Talent Market + Season Partners
+- **V0 (shipped):** Project submission + AI analysis + score card + feed
+- **V0.5 (current):** Auth · Scout tier system · Forecast UI · Artifact Library
+  (format × tool × stack · social-signal reputation · Apply-to-my-repo)
+- **V1 (next):** 3-week season engine · Scout OR-tier promotion (Forecast accuracy
+  path) · Applaud Week · Community Awards · Stripe payments · Creator payouts
+- **V1.5:** Scaffold / BKit · Talent market · Season Partners
 
 ---
 
 ## License
 
-© 2026 debut.show · All rights reserved
+© 2026 commit.show · All rights reserved

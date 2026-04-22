@@ -19,6 +19,13 @@
   --scarlet: #C8102E;
   --border: rgba(240, 192, 64, 0.15);
   --border-strong: rgba(240, 192, 64, 0.35);
+
+  /* Semantic text tiers on cream — use these instead of inline rgba(248,245,238,X). */
+  --text-primary:   rgba(248, 245, 238, 0.95);  /* main body text on dark */
+  --text-label:     rgba(248, 245, 238, 0.75);  /* card / field labels (primary) */
+  --text-secondary: rgba(248, 245, 238, 0.55);  /* supporting copy, descriptions */
+  --text-muted:     rgba(248, 245, 238, 0.35);  /* tertiary meta, timestamps */
+  --text-faint:     rgba(248, 245, 238, 0.20);  /* placeholders, decorative */
 }
 
 /* ── Base ── */

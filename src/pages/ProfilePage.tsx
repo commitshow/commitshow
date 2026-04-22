@@ -1,0 +1,742 @@
+import { useEffect, useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
+import { supabase, type Project, type MDLibraryItem, type MemberStats, type ScoutTier } from '../lib/supabase'
+import { AvatarPicker } from '../components/AvatarPicker'
+import { deleteProject } from '../lib/projectQueries'
+import { loadEffectiveStack } from '../lib/memberStack'
+import { IconGraduation, IconWand } from '../components/icons'
+
+const TIER_COLOR: Record<ScoutTier, string> = {
+  Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
+}
+
+const CREATOR_GRADE_COLOR: Record<string, string> = {
+  Rookie: '#6B7280', Builder: '#60A5FA', Maker: '#00D4AA',
+  Architect: '#A78BFA', 'Vibe Engineer': '#F0C040', Legend: '#C8102E',
+}
+
+export function ProfilePage() {
+  const navigate = useNavigate()
+  const { user, member, updateMember } = useAuth()
+  const [stats, setStats] = useState<MemberStats | null>(null)
+  const [applications, setApplications] = useState<Project[]>([])
+  const [library, setLibrary] = useState<Array<MDLibraryItem & { projects_applied: number; projects_graduated: number }>>([])
+  const [loading, setLoading] = useState(true)
+
+  // Profile editing
+  const [editingName, setEditingName] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  useEffect(() => {
+    if (!user?.id) return
+    ;(async () => {
+      const [statsRes, appsRes, libRes] = await Promise.all([
+        supabase.from('member_stats').select('*').eq('id', user.id).maybeSingle(),
+        supabase.from('projects').select('*').eq('creator_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('md_library').select('*').eq('creator_id', user.id).order('created_at', { ascending: false }),
+      ])
+      setStats((statsRes.data as MemberStats | null) ?? null)
+      setApplications((appsRes.data ?? []) as Project[])
+
+      // Merge adoption counts from md_library_adoption view for trophy stats.
+      const libItems = (libRes.data ?? []) as MDLibraryItem[]
+      if (libItems.length > 0) {
+        const { data: adopt } = await supabase
+          .from('md_library_adoption')
+          .select('md_id, projects_applied, projects_graduated')
+          .in('md_id', libItems.map(l => l.id))
+        const adoptMap = new Map<string, { projects_applied: number; projects_graduated: number }>()
+        ;(adopt ?? []).forEach((r: { md_id: string; projects_applied: number; projects_graduated: number }) =>
+          adoptMap.set(r.md_id, { projects_applied: r.projects_applied ?? 0, projects_graduated: r.projects_graduated ?? 0 }))
+        setLibrary(libItems.map(l => ({
+          ...l,
+          projects_applied:   adoptMap.get(l.id)?.projects_applied   ?? 0,
+          projects_graduated: adoptMap.get(l.id)?.projects_graduated ?? 0,
+        })))
+      } else {
+        setLibrary([])
+      }
+      setLoading(false)
+    })()
+  }, [user?.id])
+
+  useEffect(() => {
+    if (member?.display_name) setDraftName(member.display_name)
+  }, [member?.display_name])
+
+  if (!user) {
+    return (
+      <section className="pt-24 pb-16 px-6 text-center min-h-[60vh]">
+        <div className="font-display font-bold text-2xl mb-2" style={{ color: 'var(--cream)' }}>Sign in required</div>
+        <p className="font-mono text-xs mb-6" style={{ color: 'var(--text-muted)' }}>Your profile lives behind auth.</p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-5 py-2 font-mono text-xs tracking-wide"
+          style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: 'pointer' }}
+        >
+          BACK TO HOME
+        </button>
+      </section>
+    )
+  }
+
+  const tier = (member?.tier ?? 'Bronze') as ScoutTier
+  const grade = member?.creator_grade ?? 'Rookie'
+  const gradeColor = CREATOR_GRADE_COLOR[grade] || '#6B7280'
+  const displayNameResolved = member?.display_name || user.email || ''
+  const initial = displayNameResolved.slice(0, 1).toUpperCase()
+
+  const saveName = async () => {
+    const clean = draftName.trim().slice(0, 40)
+    if (!clean) { setSaveError('Display name cannot be empty.'); return }
+    setSaving(true); setSaveError('')
+    const { error } = await updateMember({ display_name: clean })
+    setSaving(false)
+    if (error) setSaveError(error)
+    else setEditingName(false)
+  }
+
+  const onAvatarUploaded = async (url: string) => {
+    await updateMember({ avatar_url: url })
+  }
+
+  return (
+    <section className="relative z-10 pt-20 pb-16 px-6 min-h-screen">
+      <div className="max-w-5xl mx-auto">
+        {/* ── Header ── */}
+        <header className="card-navy p-6 mb-6" style={{ borderRadius: '2px' }}>
+          <div className="flex flex-wrap items-start gap-6">
+            <div className="flex-1 min-w-[280px]">
+              <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+                // MEMBER PROFILE
+              </div>
+
+              <AvatarPicker
+                currentUrl={member?.avatar_url ?? null}
+                displayInitial={initial}
+                onUploaded={onAvatarUploaded}
+              />
+
+              <div className="mt-5">
+                <label className="font-mono text-[10px] tracking-widest block mb-1.5" style={{ color: 'var(--text-label)' }}>
+                  DISPLAY NAME
+                </label>
+                {editingName ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={draftName}
+                      onChange={e => setDraftName(e.target.value)}
+                      maxLength={40}
+                      placeholder="Your display name"
+                      className="flex-1 min-w-[200px] px-3 py-2 font-display text-lg"
+                      style={{ background: 'rgba(6,12,26,0.5)', border: '1px solid rgba(240,192,64,0.35)', color: 'var(--cream)', borderRadius: '2px' }}
+                    />
+                    <button onClick={saveName} disabled={saving}
+                      className="px-3 py-2 font-mono text-xs tracking-wide"
+                      style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: saving ? 'wait' : 'pointer' }}>
+                      {saving ? 'SAVING…' : 'SAVE'}
+                    </button>
+                    <button onClick={() => { setEditingName(false); setDraftName(member?.display_name || ''); setSaveError('') }}
+                      className="px-3 py-2 font-mono text-xs tracking-wide"
+                      style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '2px', cursor: 'pointer' }}>
+                      CANCEL
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <h1 className="font-display font-black text-2xl leading-tight" style={{ color: 'var(--cream)' }}>
+                      {displayNameResolved}
+                    </h1>
+                    <button onClick={() => setEditingName(true)}
+                      className="font-mono text-xs tracking-wide"
+                      style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', padding: '4px 10px', cursor: 'pointer' }}>
+                      ✎ EDIT
+                    </button>
+                  </div>
+                )}
+                {saveError && (
+                  <div className="mt-1 font-mono text-[10px]" style={{ color: '#F87171' }}>{saveError}</div>
+                )}
+                <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  {user.email}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Three-axis standings ── */}
+            <div className="flex-1 min-w-[260px]">
+              <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// YOUR STANDINGS</div>
+              <div className="space-y-2">
+                <StandingRow
+                  label="Creator Grade"
+                  value={grade}
+                  color={gradeColor}
+                  hint={`Career tier · based on graduated projects. ${stats?.graduated_count ?? 0} graduated / ${applications.length} total.`}
+                />
+                <StandingRow
+                  label="Scout Tier"
+                  value={tier}
+                  color={TIER_COLOR[tier]}
+                  hint={`Voting activity · ${member?.activity_points ?? 0} AP earned. ${stats?.total_votes_cast ?? 0} forecasts cast.`}
+                />
+                <StandingRow
+                  label="Monthly votes left"
+                  value={stats ? `${stats.monthly_votes_remaining} / ${stats.monthly_vote_cap}` : '— / —'}
+                  color="var(--cream)"
+                  hint="Your Scout tier determines how many Forecasts you can cast each month."
+                />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* ── Your Stack editor ── */}
+        <YourStackSection />
+
+        {/* ── Graduation explainer ── */}
+        <GraduationExplainer currentGrade={grade} graduatedCount={stats?.graduated_count ?? 0} />
+
+        {/* ── My Applications ── */}
+        <div className="mb-8">
+          <div className="flex items-baseline justify-between mb-3">
+            <div>
+              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY APPLICATIONS</div>
+              <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Every project you've submitted · click to open its dashboard
+              </div>
+            </div>
+            <NavLink to="/submit" className="font-mono text-xs font-medium tracking-wide px-3 py-1.5"
+              style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}>
+              APPLY WITH A NEW PROJECT →
+            </NavLink>
+          </div>
+          {loading ? (
+            <div className="card-navy p-8 font-mono text-xs text-center" style={{ color: 'var(--text-muted)', borderRadius: '2px' }}>
+              Loading your applications…
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
+              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No applications yet</div>
+              <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
+                Register your first project on the Apply page.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {applications.map(p => (
+                <ApplicationRow
+                  key={p.id}
+                  project={p}
+                  onDeleted={() => setApplications(prev => prev.filter(x => x.id !== p.id))}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── My MD Library ── */}
+        <div>
+          <div className="flex items-baseline justify-between mb-3">
+            <div>
+              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY MD LIBRARY</div>
+              <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Your published knowledge artifacts · from Discovery panel
+              </div>
+            </div>
+          </div>
+          {loading ? (
+            <div className="card-navy p-8 font-mono text-xs text-center" style={{ color: 'var(--text-muted)', borderRadius: '2px' }}>
+              Loading…
+            </div>
+          ) : library.length === 0 ? (
+            <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
+              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No library items yet</div>
+              <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
+                After your first analysis, library-worthy files from your repo appear on the project page — publish them from there.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {library.map(item => <LibraryRow key={item.id} item={item} />)}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StandingRow({ label, value, color, hint }: { label: string; value: string; color: string; hint: string }) {
+  return (
+    <div className="px-3 py-2.5" style={{
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid rgba(255,255,255,0.05)',
+      borderRadius: '2px',
+    }}>
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color: 'var(--text-label)' }}>{label}</span>
+        <span className="font-display font-bold text-base" style={{ color }}>{value}</span>
+      </div>
+      <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>{hint}</div>
+    </div>
+  )
+}
+
+// ── Graduation explainer ──────────────────────────────────────
+const GRADUATION_MILESTONES = [
+  { grade: 'Rookie',        threshold: '0 graduated',                      note: 'Starting line — your first application counts even before graduation.' },
+  { grade: 'Builder',       threshold: '1 graduated · avg score ≥ 60',    note: 'Prove you can ship one project cleanly through 3 weeks.' },
+  { grade: 'Maker',         threshold: '2 graduated · avg ≥ 70',          note: 'Consistency kicks in.' },
+  { grade: 'Architect',     threshold: '3 graduated · avg ≥ 75 · tech diversity', note: 'Range across infra, AI, frontend, Web3, etc.' },
+  { grade: 'Vibe Engineer', threshold: '5 graduated · avg ≥ 80 · 20+ applauds received', note: 'Craft quality recognized by the community.' },
+  { grade: 'Legend',        threshold: '10+ graduated · community influence', note: 'Permanent Hall of Fame resident.' },
+]
+
+// ── Your Stack section ────────────────────────────────────────
+// Editable stack chips · auto-inferred from projects.tech_layers unless
+// the member has saved a preferred_stack override (§15.6 v1.5).
+function YourStackSection() {
+  const { user, updateMember } = useAuth()
+  const [stack, setStack] = useState<string[]>([])
+  const [autoStack, setAutoStack] = useState<string[]>([])
+  const [isAutoInferred, setIsAutoInferred] = useState(true)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user?.id) return
+    loadEffectiveStack(user.id).then(res => {
+      setStack(res.stack)
+      setAutoStack(res.autoStack)
+      setIsAutoInferred(res.isAutoInferred)
+      setLoading(false)
+    })
+  }, [user?.id])
+
+  const save = async (nextStack: string[] | null) => {
+    if (!user?.id) return
+    setSaving(true)
+    await updateMember({ preferred_stack: nextStack })
+    setSaving(false)
+    if (nextStack === null) {
+      // Reset to auto — refetch
+      const res = await loadEffectiveStack(user.id)
+      setStack(res.stack)
+      setIsAutoInferred(true)
+    } else {
+      setStack(nextStack)
+      setIsAutoInferred(false)
+    }
+  }
+
+  const addChip = () => {
+    const clean = draft.trim().toLowerCase().replace(/[^a-z0-9-_ ]/g, '')
+    if (!clean) return
+    if (stack.includes(clean)) { setDraft(''); return }
+    save([...stack, clean])
+    setDraft('')
+  }
+
+  const removeChip = (tag: string) => save(stack.filter(t => t !== tag))
+  const resetToAuto = () => save(null)
+
+  if (loading || !user) return null
+
+  return (
+    <div className="card-navy mb-6" style={{ borderRadius: '2px' }}>
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center justify-between gap-3 text-left p-5"
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+            // YOUR STACK
+          </div>
+          <div className="font-display font-bold text-lg mt-1" style={{ color: 'var(--cream)' }}>
+            What you build with
+          </div>
+          {!expanded && (
+            <div className="mt-1 flex flex-wrap gap-1.5 items-center">
+              {stack.length === 0 ? (
+                <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  None yet · will auto-fill after your first analysis
+                </span>
+              ) : (
+                <>
+                  {stack.slice(0, 6).map(t => (
+                    <span key={t} className="font-mono text-[10px] px-1.5 py-0.5" style={{
+                      background: 'rgba(240,192,64,0.08)',
+                      border: '1px solid rgba(240,192,64,0.25)',
+                      color: 'var(--gold-500)',
+                      borderRadius: '2px',
+                    }}>{t}</span>
+                  ))}
+                  {stack.length > 6 && (
+                    <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      +{stack.length - 6}
+                    </span>
+                  )}
+                  <span className="font-mono text-[10px] ml-1" style={{ color: 'var(--text-muted)' }}>
+                    {isAutoInferred ? '· auto' : '· custom'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        <span className="font-mono text-sm flex-shrink-0" style={{ color: 'var(--gold-500)' }}>
+          {expanded ? '▲' : '▼'}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(240,192,64,0.12)' }}>
+          <p className="font-light text-sm mt-4 mb-4" style={{ color: 'var(--text-primary)', lineHeight: 1.65 }}>
+            We match Library items to your stack so you see artifacts that plug into what you already use.
+            {' '}
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Default is auto-derived from your submitted projects — override anytime.
+            </span>
+          </p>
+
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+              {isAutoInferred ? 'AUTO-INFERRED FROM YOUR PROJECTS' : 'CUSTOM OVERRIDE'}
+            </span>
+            {!isAutoInferred && autoStack.length > 0 && (
+              <button
+                onClick={resetToAuto}
+                disabled={saving}
+                className="font-mono text-[10px] tracking-widest px-2 py-0.5"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '2px',
+                  cursor: saving ? 'wait' : 'pointer',
+                }}
+              >
+                Reset to auto ({autoStack.length})
+              </button>
+            )}
+          </div>
+
+          {stack.length === 0 ? (
+            <div className="font-mono text-xs p-6 text-center" style={{
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px dashed rgba(255,255,255,0.08)',
+              color: 'var(--text-muted)',
+              borderRadius: '2px',
+            }}>
+              No stack detected yet. Add a chip below, or submit a project to let us infer it automatically.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {stack.map(t => (
+                <span key={t} className="font-mono text-[11px] inline-flex items-center gap-1.5 px-2 py-0.5" style={{
+                  background: 'rgba(240,192,64,0.08)',
+                  border: '1px solid rgba(240,192,64,0.3)',
+                  color: 'var(--gold-500)',
+                  borderRadius: '2px',
+                }}>
+                  {t}
+                  <button
+                    onClick={() => removeChip(t)}
+                    disabled={saving}
+                    aria-label={`Remove ${t}`}
+                    style={{
+                      background: 'transparent', border: 'none', color: 'inherit',
+                      cursor: saving ? 'wait' : 'pointer', padding: 0, fontSize: '13px', lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip() } }}
+              placeholder="Add stack chip · e.g. nextjs, supabase, stripe"
+              className="flex-1 px-3 py-2 font-mono text-xs"
+              disabled={saving}
+            />
+            <button
+              onClick={addChip}
+              disabled={saving || !draft.trim()}
+              className="font-mono text-xs tracking-wide px-3 py-2"
+              style={{
+                background: draft.trim() ? 'var(--gold-500)' : 'rgba(255,255,255,0.06)',
+                color: draft.trim() ? 'var(--navy-900)' : 'var(--text-muted)',
+                border: 'none',
+                borderRadius: '2px',
+                cursor: draft.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              ADD
+            </button>
+          </div>
+          <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
+            Tip · use lowercase single-word tags (e.g. nextjs · tailwind · drizzle · supabase · stripe).
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GraduationExplainer({ currentGrade, graduatedCount }: { currentGrade: string; graduatedCount: number }) {
+  const [open, setOpen] = useState(false)    // collapsed by default
+  const idx = GRADUATION_MILESTONES.findIndex(m => m.grade === currentGrade)
+  const next = idx >= 0 ? GRADUATION_MILESTONES[idx + 1] : null
+
+  return (
+    <div className="card-navy mb-8" style={{ borderRadius: '2px' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-3 text-left p-5"
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+            // WHAT "GRADUATION" MEANS
+          </div>
+          <div className="font-display font-bold text-lg mt-1" style={{ color: 'var(--cream)' }}>
+            A project graduates when it clears the audition bar
+          </div>
+          {!open && next && (
+            <div className="mt-1 font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+              Next tier: <span style={{ color: 'var(--gold-500)' }}>{next.grade}</span> · {next.threshold}
+            </div>
+          )}
+        </div>
+        <span className="font-mono text-sm flex-shrink-0" style={{ color: 'var(--gold-500)' }}>
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(240,192,64,0.12)' }}>
+          <p className="font-light text-sm mt-4 mb-4" style={{ color: 'var(--text-primary)', lineHeight: 1.7 }}>
+            Each project runs a <strong style={{ color: 'var(--cream)' }}>3-week season</strong>.
+            At the end, a project <strong style={{ color: 'var(--gold-500)' }}>graduates</strong> if it hits every bar:
+            total score <strong>≥ 75</strong>, automated score <strong>≥ 35 / 50</strong>,
+            <strong> 3+ Scout forecasts</strong>, score held for <strong>2 weeks</strong>,
+            and the live URL passed its health check. Your Creator Grade advances
+            only after graduations accumulate — it's a career track, not a single-score snapshot.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {GRADUATION_MILESTONES.map((m, i) => {
+              const isCurrent = m.grade === currentGrade
+              const isPast = idx > i
+              return (
+                <div
+                  key={m.grade}
+                  className="px-3 py-2"
+                  style={{
+                    background: isCurrent ? 'rgba(240,192,64,0.08)' : 'rgba(255,255,255,0.015)',
+                    border: `1px solid ${isCurrent ? 'rgba(240,192,64,0.35)' : 'rgba(255,255,255,0.05)'}`,
+                    borderRadius: '2px',
+                    opacity: isPast ? 0.45 : 1,
+                  }}
+                >
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="font-display font-bold text-sm" style={{ color: CREATOR_GRADE_COLOR[m.grade] || 'var(--cream)' }}>
+                      {m.grade}
+                    </span>
+                    <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>{m.threshold}</span>
+                  </div>
+                  <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>{m.note}</div>
+                </div>
+              )
+            })}
+          </div>
+
+          {next && (
+            <div className="mt-3 pl-3 py-2 pr-3 font-mono text-xs"
+              style={{ borderLeft: '2px solid var(--gold-500)', background: 'rgba(240,192,64,0.04)', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+              Next: <strong style={{ color: 'var(--gold-500)' }}>{next.grade}</strong> · {next.threshold}
+              {graduatedCount > 0 ? ` · you have ${graduatedCount} graduated so far.` : ' · graduate your first project to start climbing.'}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Application row ───────────────────────────────────────────
+function ApplicationRow({ project: p, onDeleted }: { project: Project; onDeleted: () => void }) {
+  const navigate = useNavigate()
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+  const scoreColor = p.score_total >= 75 ? '#00D4AA' : p.score_total >= 50 ? '#F0C040' : '#C8102E'
+
+  const openDetail = () => navigate(`/projects/${p.id}`)
+
+  const handleDelete = async () => {
+    setDeleting(true); setError('')
+    const { error: e } = await deleteProject(p.id)
+    setDeleting(false)
+    if (e) setError(e)
+    else onDeleted()
+  }
+
+  return (
+    <div
+      className="card-navy overflow-hidden transition-colors group flex"
+      style={{ borderRadius: '2px', borderColor: confirming ? 'rgba(200,16,46,0.45)' : undefined }}
+    >
+      <div
+        role="button" tabIndex={0}
+        onClick={openDetail}
+        onKeyDown={e => { if (e.key === 'Enter') openDetail() }}
+        className="cursor-pointer"
+        style={{ width: '96px', height: '96px', background: 'var(--navy-800)', flexShrink: 0 }}
+      >
+        {p.thumbnail_url ? (
+          <img src={p.thumbnail_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>NO IMG</div>
+        )}
+      </div>
+      <div className="p-3 flex-1 min-w-0 flex flex-col justify-between">
+        <div role="button" tabIndex={0} onClick={openDetail} onKeyDown={e => { if (e.key === 'Enter') openDetail() }} className="cursor-pointer">
+          <div className="font-display font-bold text-sm truncate" style={{ color: 'var(--cream)' }}>{p.project_name}</div>
+          <div className="font-mono text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{p.description}</div>
+        </div>
+        <div className="flex items-center justify-between mt-1 gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-widest px-1.5 py-0.5" style={{
+            color: p.status === 'graduated' ? '#00D4AA' : 'var(--text-secondary)',
+            border: `1px solid ${p.status === 'graduated' ? 'rgba(0,212,170,0.35)' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: '2px',
+          }}>{p.status}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs tabular-nums font-medium" style={{ color: scoreColor }}>
+              {p.score_total}/100
+            </span>
+            {!confirming ? (
+              <button
+                onClick={() => setConfirming(true)}
+                title="Delete this project"
+                className="font-mono text-[10px] tracking-widest px-1.5 py-0.5"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--scarlet)'; e.currentTarget.style.borderColor = 'rgba(200,16,46,0.4)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+              >
+                DELETE
+              </button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="font-mono text-[10px] font-medium tracking-widest px-1.5 py-0.5"
+                  style={{
+                    background: 'var(--scarlet)',
+                    color: 'var(--cream)',
+                    border: '1px solid var(--scarlet)',
+                    borderRadius: '2px',
+                    cursor: deleting ? 'wait' : 'pointer',
+                  }}
+                >
+                  {deleting ? '…' : 'CONFIRM'}
+                </button>
+                <button
+                  onClick={() => { setConfirming(false); setError('') }}
+                  disabled={deleting}
+                  className="font-mono text-[10px] tracking-widest px-1.5 py-0.5"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '2px',
+                    cursor: deleting ? 'wait' : 'pointer',
+                  }}
+                >
+                  CANCEL
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {error && (
+          <div className="font-mono text-[10px] mt-1" style={{ color: '#F87171' }}>{error}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LibraryRow({ item }: { item: MDLibraryItem & { projects_applied: number; projects_graduated: number } }) {
+  const navigate = useNavigate()
+  return (
+    <div
+      role="button" tabIndex={0}
+      onClick={() => navigate(`/library/${item.id}`)}
+      onKeyDown={e => { if (e.key === 'Enter') navigate(`/library/${item.id}`) }}
+      className="card-navy p-3 cursor-pointer transition-colors"
+      style={{ borderRadius: '2px' }}
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <span className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5" style={{
+          color: 'var(--gold-500)',
+          background: 'rgba(240,192,64,0.08)',
+          border: '1px solid rgba(240,192,64,0.25)',
+          borderRadius: '2px',
+        }}>
+          {item.category}
+        </span>
+        {item.verified_badge && (
+          <span className="font-mono text-[10px]" style={{ color: '#00D4AA' }}>✓ VERIFIED</span>
+        )}
+      </div>
+      <div className="font-display font-bold text-sm leading-tight" style={{ color: 'var(--cream)' }}>
+        {item.title}
+      </div>
+      {item.description && (
+        <div className="font-mono text-[10px] mt-1 line-clamp-2" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          {item.description}
+        </div>
+      )}
+      <div className="flex items-center gap-3 mt-2 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        <span style={{ color: item.is_free ? '#00D4AA' : 'var(--gold-500)' }}>
+          {item.is_free ? 'FREE' : `$${(item.price_cents / 100).toFixed(0)}`}
+        </span>
+        {item.projects_graduated > 0 && (
+          <span className="inline-flex items-center gap-1" style={{ color: '#00D4AA' }}>
+            <IconGraduation size={10} /> {item.projects_graduated} graduated
+          </span>
+        )}
+        {item.projects_applied > 0 && (
+          <span className="inline-flex items-center gap-1" style={{ color: 'var(--gold-500)' }}>
+            <IconWand size={10} /> {item.projects_applied} applied
+          </span>
+        )}
+        <span>{item.downloads_count} ↓</span>
+        <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
+        <span>{item.status}</span>
+      </div>
+    </div>
+  )
+}
