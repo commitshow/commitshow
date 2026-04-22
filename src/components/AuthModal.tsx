@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../lib/auth'
+import { useAuth, type OAuthProvider } from '../lib/auth'
 
 type Mode = 'signin' | 'signup'
 
@@ -10,15 +10,21 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalProps) {
-  const { signInWithEmail, signUpWithEmail } = useAuth()
+  const { signInWithEmail, signUpWithEmail, signInWithOAuth } = useAuth()
   const [mode, setMode] = useState<Mode>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [oauthBusy, setOauthBusy] = useState<OAuthProvider | null>(null)
 
   useEffect(() => {
-    if (open) { setError(null); setMode(initialMode) }
+    if (open) {
+      setError(null)
+      setMode(initialMode)
+      setPasswordConfirm('')
+    }
   }, [open, initialMode])
 
   useEffect(() => {
@@ -31,12 +37,28 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null); setBusy(true)
+    setError(null)
+    if (mode === 'signup' && password !== passwordConfirm) {
+      setError('Passwords do not match.')
+      return
+    }
+    setBusy(true)
     const fn = mode === 'signin' ? signInWithEmail : signUpWithEmail
     const { error: err } = await fn(email, password)
     setBusy(false)
     if (err) { setError(err.message); return }
     onClose()
+  }
+
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setError(null)
+    setOauthBusy(provider)
+    const { error: err } = await signInWithOAuth(provider)
+    if (err) {
+      setOauthBusy(null)
+      setError(err.message)
+    }
+    // Success case redirects away — no need to clear busy
   }
 
   return (
@@ -47,7 +69,7 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="card-navy w-full max-w-md p-8"
+        className="card-navy w-full max-w-md p-8 max-h-[92vh] overflow-y-auto"
         style={{ borderRadius: '2px', borderColor: 'rgba(240,192,64,0.25)' }}
       >
         {/* Header */}
@@ -56,11 +78,52 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
             // {mode === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
           </div>
           <h2 className="font-display font-bold text-2xl" style={{ color: 'var(--cream)' }}>
-            {mode === 'signin' ? 'Welcome back.' : 'Join the league.'}
+            {mode === 'signin' ? 'Welcome back' : 'Join the league'}
           </h2>
         </div>
 
-        {/* Email form (Google OAuth enabled after domain setup) */}
+        {/* OAuth buttons — fast path */}
+        <div className="grid grid-cols-2 gap-2 mb-5">
+          <OAuthButton
+            provider="google"
+            label="Google"
+            busy={oauthBusy === 'google'}
+            disabled={oauthBusy !== null || busy}
+            onClick={() => handleOAuth('google')}
+          />
+          <OAuthButton
+            provider="github"
+            label="GitHub"
+            busy={oauthBusy === 'github'}
+            disabled={oauthBusy !== null || busy}
+            onClick={() => handleOAuth('github')}
+          />
+          <OAuthButton
+            provider="twitter"
+            label="X"
+            busy={oauthBusy === 'twitter'}
+            disabled={oauthBusy !== null || busy}
+            onClick={() => handleOAuth('twitter')}
+          />
+          <OAuthButton
+            provider="linkedin_oidc"
+            label="LinkedIn"
+            busy={oauthBusy === 'linkedin_oidc'}
+            disabled={oauthBusy !== null || busy}
+            onClick={() => handleOAuth('linkedin_oidc')}
+          />
+        </div>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 mb-5" aria-hidden="true">
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-muted)' }}>
+            OR CONTINUE WITH EMAIL
+          </span>
+          <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+        </div>
+
+        {/* Email form */}
         <form onSubmit={handleEmail} className="space-y-3">
           <div>
             <label className="font-mono text-xs tracking-wide block mb-1.5" style={{ color: 'rgba(248,245,238,0.5)' }}>
@@ -92,6 +155,29 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
             />
           </div>
 
+          {mode === 'signup' && (
+            <div>
+              <label className="font-mono text-xs tracking-wide block mb-1.5" style={{ color: 'rgba(248,245,238,0.5)' }}>
+                CONFIRM PASSWORD
+              </label>
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={e => setPasswordConfirm(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-3 py-2.5"
+                placeholder="• • • • • •"
+                autoComplete="new-password"
+              />
+              {passwordConfirm.length > 0 && password !== passwordConfirm && (
+                <div className="font-mono text-[10px] mt-1.5" style={{ color: 'rgba(248,120,113,0.85)' }}>
+                  Passwords don't match yet.
+                </div>
+              )}
+            </div>
+          )}
+
           {error && (
             <div className="font-mono text-xs px-3 py-2" style={{
               background: 'rgba(200,16,46,0.08)',
@@ -105,7 +191,7 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
 
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || oauthBusy !== null}
             className="w-full mt-4 px-5 py-2.5 font-mono text-sm font-medium tracking-wide transition-all"
             style={{
               background: 'var(--gold-500)',
@@ -113,9 +199,9 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
               border: 'none',
               borderRadius: '2px',
               cursor: busy ? 'not-allowed' : 'pointer',
-              opacity: busy ? 0.5 : 1,
+              opacity: busy || oauthBusy !== null ? 0.5 : 1,
             }}
-            onMouseEnter={e => !busy && (e.currentTarget.style.background = 'var(--gold-400)')}
+            onMouseEnter={e => !busy && oauthBusy === null && (e.currentTarget.style.background = 'var(--gold-400)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
           >
             {busy ? '...' : mode === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
@@ -125,7 +211,11 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
         {/* Toggle mode */}
         <div className="mt-5 text-center">
           <button
-            onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null) }}
+            onClick={() => {
+              setMode(mode === 'signin' ? 'signup' : 'signin')
+              setError(null)
+              setPasswordConfirm('')
+            }}
             className="font-mono text-xs tracking-wide transition-colors"
             style={{ color: 'rgba(248,245,238,0.5)', background: 'none', border: 'none', cursor: 'pointer' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
@@ -136,5 +226,80 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
         </div>
       </div>
     </div>
+  )
+}
+
+// ── OAuth button · monochrome brand glyph + label ─────────────
+function OAuthButton({ provider, label, busy, disabled, onClick }: {
+  provider: OAuthProvider
+  label: string
+  busy: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center justify-center gap-2 px-3 py-2.5 font-mono text-xs tracking-wide transition-colors"
+      style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        color: 'var(--cream)',
+        borderRadius: '2px',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled && !busy ? 0.4 : 1,
+      }}
+      onMouseEnter={e => {
+        if (disabled) return
+        e.currentTarget.style.borderColor = 'rgba(240,192,64,0.45)'
+        e.currentTarget.style.color = 'var(--gold-500)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
+        e.currentTarget.style.color = 'var(--cream)'
+      }}
+    >
+      {busy ? (
+        <span className="font-mono text-xs">...</span>
+      ) : (
+        <>
+          <ProviderGlyph provider={provider} />
+          <span>{label}</span>
+        </>
+      )}
+    </button>
+  )
+}
+
+function ProviderGlyph({ provider }: { provider: OAuthProvider }) {
+  const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true }
+  if (provider === 'google') {
+    return (
+      <svg {...common}>
+        <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44-3.83 0-7.19-3.02-7.19-7.27 0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81z" />
+      </svg>
+    )
+  }
+  if (provider === 'github') {
+    return (
+      <svg {...common}>
+        <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.2 11.4.6.1.82-.26.82-.58v-2c-3.34.73-4.04-1.4-4.04-1.4-.55-1.38-1.33-1.76-1.33-1.76-1.08-.74.08-.72.08-.72 1.2.08 1.83 1.24 1.83 1.24 1.07 1.83 2.8 1.3 3.48.99.1-.77.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0C17.3 4.4 18.3 4.72 18.3 4.72c.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.22.69.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
+      </svg>
+    )
+  }
+  if (provider === 'twitter') {
+    return (
+      <svg {...common}>
+        <path d="M17.53 3H21l-7.62 8.71L22 21h-6.84l-5.36-7-6.13 7H0l8.13-9.3L0 3h6.9l4.85 6.4L17.53 3zm-1.2 16h1.92L7.82 5H5.75l10.58 14z" />
+      </svg>
+    )
+  }
+  // linkedin_oidc
+  return (
+    <svg {...common}>
+      <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.03-1.85-3.03-1.85 0-2.13 1.45-2.13 2.94v5.66H9.35V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.61 0 4.28 2.37 4.28 5.47v6.27zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45C23.21 24 24 23.23 24 22.28V1.72C24 .77 23.21 0 22.22 0z" />
+    </svg>
   )
 }

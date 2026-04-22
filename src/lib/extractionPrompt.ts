@@ -230,7 +230,9 @@ function parseMarkdownTable(body: string): DelegationRow[] {
     if (!line.trim().startsWith('|')) continue
     const cols = line.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1)
     if (cols.length < 4) continue
-    if (/^[-:\s]+$/.test(cols[0])) continue                          // separator row
+    // Alternation instead of a char class — keeps Tailwind's JIT scanner
+    // from misreading the bracket contents as an arbitrary-value class.
+    if (/^(?:[-:]|\s)+$/.test(cols[0])) continue                     // separator row
     if (/domain/i.test(cols[0]) && /ai/i.test(cols[1])) continue     // header row
     const ai = parseInt(cols[1].replace(/[^0-9]/g, '')) || 0
     const hu = parseInt(cols[2].replace(/[^0-9]/g, '')) || 0

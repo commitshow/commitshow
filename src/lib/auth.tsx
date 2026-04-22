@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session, User, AuthError } from '@supabase/supabase-js'
 import { supabase, type Member } from './supabase'
 
+export type OAuthProvider = 'google' | 'github' | 'twitter' | 'linkedin_oidc'
+
 type AuthState = {
   session: Session | null
   user: User | null
@@ -10,6 +12,7 @@ type AuthState = {
   signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signUpWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
+  signInWithOAuth: (provider: OAuthProvider) => Promise<{ error: AuthError | null }>
   signOut: () => Promise<void>
   updateMember: (patch: Partial<Pick<Member, 'display_name' | 'avatar_url' | 'preferred_stack'>>) => Promise<{ error: string | null }>
   refreshMember: () => Promise<void>
@@ -64,6 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithGoogle: () =>
       supabase.auth.signInWithOAuth({
         provider: 'google',
+        options: { redirectTo: window.location.origin },
+      }).then(r => ({ error: r.error })),
+    signInWithOAuth: (provider) =>
+      supabase.auth.signInWithOAuth({
+        provider,
         options: { redirectTo: window.location.origin },
       }).then(r => ({ error: r.error })),
     signOut: async () => { await supabase.auth.signOut() },
