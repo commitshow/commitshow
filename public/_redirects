@@ -1,0 +1,7 @@
+# SPA fallback is handled by wrangler.jsonc — see
+# `assets.not_found_handling: "single-page-application"`.
+#
+# This file exists to stop Cloudflare's Vite framework preset from
+# auto-injecting `/* /index.html 200`, which Workers Static Assets
+# rejects as a redirect loop (it auto-strips `.html` / `/index` and
+# re-matches the wildcard).
