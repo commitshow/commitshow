@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
 import { Hero } from '../components/Hero'
 import { SeasonProgressBar } from '../components/SeasonProgress'
-import { supabase } from '../lib/supabase'
+import { useHeroStats } from '../lib/heroStats'
 
 // Simple monochrome line icons — inherit stroke from currentColor.
 // Kept small and editorial so the gold accent is the only color in the set.
@@ -64,21 +63,11 @@ const UNLOCK_DATA = [
 ]
 
 export function LandingPage() {
-  const [projectCount, setProjectCount] = useState(0)
-  const [graduatedCount, setGraduatedCount] = useState(0)
-
-  useEffect(() => {
-    supabase.from('projects').select('id, status').then(({ data }) => {
-      if (data) {
-        setProjectCount(data.length)
-        setGraduatedCount(data.filter(p => p.status === 'graduated').length)
-      }
-    })
-  }, [])
+  const stats = useHeroStats()
 
   return (
     <div className="relative min-h-screen">
-      <Hero projectCount={projectCount} graduatedCount={graduatedCount} />
+      <Hero stats={stats} />
 
       {/* ── SEASON PROGRESS ── */}
       <section className="relative z-10 px-6 pt-4 pb-0">

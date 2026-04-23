@@ -82,6 +82,23 @@ body::before {
   100% { background-position: -200% center; }
 }
 
+/* ── Terminal cursor · replaces the "." after the commit wordmark ── */
+.terminal-cursor {
+  display: inline-block;
+  width: 0.28em;
+  height: 0.5em;
+  margin-left: 0.08em;
+  vertical-align: baseline;
+  background: var(--gold-500);
+  box-shadow: 0 0 20px rgba(240, 192, 64, 0.35);
+  animation: cursor-blink 1.05s steps(1, end) infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 50%   { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
 /* ── Divider line ── */
 .rule-gold {
   border: none;

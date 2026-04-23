@@ -1,14 +1,77 @@
 import { useNavigate } from 'react-router-dom'
+import type { HeroStats } from '../lib/heroStats'
 
 interface HeroProps {
-  projectCount: number
-  graduatedCount: number
+  stats: HeroStats
 }
 
-export function Hero({ projectCount, graduatedCount }: HeroProps) {
+const fmtNum = (n: number | null) =>
+  n == null ? '—' : n.toLocaleString('en-US')
+
+const fmtDelta = (n: number | null, suffix: string) => {
+  if (n == null) return '—'
+  if (n === 0)   return `0 ${suffix}`
+  return `+ ${n.toLocaleString('en-US')} ${suffix}`
+}
+
+function Tile({
+  label,
+  value,
+  delta,
+  deltaTone = 'muted',
+}: {
+  label: string
+  value: string
+  delta: string
+  deltaTone?: 'muted' | 'gold'
+}) {
+  return (
+    <div className="text-center min-w-[128px]">
+      <div
+        className="font-mono text-[10px] tracking-[0.2em] uppercase mb-2.5"
+        style={{ color: 'rgba(248,245,238,0.35)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="font-display font-bold mb-1.5 tabular-nums"
+        style={{ fontSize: '2.25rem', color: 'var(--gold-500)', lineHeight: 1 }}
+      >
+        {value}
+      </div>
+      <div
+        className="font-mono text-[11px] tabular-nums"
+        style={{
+          color: deltaTone === 'gold'
+            ? 'rgba(240,192,64,0.75)'
+            : 'rgba(248,245,238,0.5)',
+        }}
+      >
+        {delta}
+      </div>
+    </div>
+  )
+}
+
+export function Hero({ stats }: HeroProps) {
   const navigate = useNavigate()
   const onSubmitClick = () => navigate('/submit')
   const onFeedClick = () => navigate('/projects')
+
+  const countdownValue = stats.graduatesIn
+    ? `${stats.graduatesIn.days}d ${stats.graduatesIn.hours}h`
+    : '—'
+  const countdownDelta =
+    stats.seasonPhase === 'active' && stats.weekNum
+      ? `Week ${stats.weekNum} closes`
+      : stats.seasonPhase === 'applaud'
+        ? 'Applaud week closes'
+        : stats.seasonPhase === 'graduation'
+          ? 'Graduation day'
+          : stats.seasonPhase === 'closed'
+            ? 'Next season opening'
+            : '—'
+
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 overflow-hidden">
 
@@ -57,7 +120,8 @@ export function Hero({ projectCount, graduatedCount }: HeroProps) {
       >
         <span style={{ color: 'var(--cream)' }}>Show your</span>
         <br />
-        <em className="gold-shimmer not-italic">commit.</em>
+        <em className="gold-shimmer not-italic">Commit</em>
+        <span className="terminal-cursor" aria-hidden="true" />
       </h1>
 
       {/* Rule */}
@@ -110,31 +174,28 @@ export function Hero({ projectCount, graduatedCount }: HeroProps) {
       </div>
 
       {/* Stats */}
-      <div className="stagger-5 flex gap-12 justify-center flex-wrap">
-        {[
-          { num: projectCount || '—', label: 'Applications' },
-          { num: graduatedCount || '—', label: 'Graduated' },
-          { num: '3wk', label: 'Season Length' },
-          { num: '50%', label: 'AI Objective Score' },
-        ].map(({ num, label }) => (
-          <div key={label} className="text-center">
-            <div
-              className="font-display font-bold mb-1"
-              style={{ fontSize: '1.75rem', color: 'var(--gold-500)' }}
-            >
-              {num}
-            </div>
-            <div className="font-mono text-xs tracking-widest uppercase" style={{ color: 'rgba(248,245,238,0.35)' }}>
-              {label}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Scroll indicator */}
-      <div className="stagger-6 absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2" style={{ color: 'rgba(248,245,238,0.2)' }}>
-        <span className="font-mono text-xs tracking-widest">SCROLL</span>
-        <div className="w-px h-8" style={{ background: 'linear-gradient(to bottom, rgba(240,192,64,0.3), transparent)' }} />
+      <div className="stagger-5 flex gap-10 md:gap-14 justify-center flex-wrap">
+        <Tile
+          label="PRODUCTS LIVE"
+          value={fmtNum(stats.productsLive)}
+          delta={fmtDelta(stats.productsDeltaWeek, 'this week')}
+        />
+        <Tile
+          label="SCOUTS ACTIVE"
+          value={fmtNum(stats.scoutsActive)}
+          delta={fmtDelta(stats.scoutsDeltaWeek, 'this week')}
+        />
+        <Tile
+          label="VOTES CAST"
+          value={fmtNum(stats.votesCast)}
+          delta={fmtDelta(stats.votesDeltaToday, 'today')}
+        />
+        <Tile
+          label="GRADUATES IN"
+          value={countdownValue}
+          delta={countdownDelta}
+          deltaTone="gold"
+        />
       </div>
     </section>
   )
