@@ -172,15 +172,86 @@ export type Vote = {
   comment: string | null
 }
 
+// v2 polymorphic applaud target · §1-A ③ · §7.5
+export type ApplaudTargetType =
+  | 'product'
+  | 'comment'
+  | 'build_log'
+  | 'stack'
+  | 'brief'
+  | 'recommit'
+
 export type Applaud = {
-  id: string
-  created_at: string
-  project_id: string
-  member_id: string | null
-  verified_at: string | null
-  verification_method: 'timer' | 'screenshot' | null
-  weight: number
-  scout_tier: ScoutTier
+  id:          string
+  created_at:  string
+  member_id:   string
+  target_type: ApplaudTargetType
+  target_id:   string
+}
+
+// v2 Community Posts (§13-B)
+export type CommunityPostType  = 'build_log' | 'stack' | 'ask' | 'office_hours'
+export type CommunityPostStatus = 'draft' | 'published' | 'archived' | 'resolved' | 'expired'
+
+export type CommunityPost = {
+  id:                string
+  author_id:         string | null
+  type:              CommunityPostType
+  subtype:           string | null
+  title:             string
+  tldr:              string | null
+  body:              string | null
+  tags:              string[]
+  linked_project_id: string | null
+  status:            CommunityPostStatus
+  published_at:      string | null
+  created_at:        string
+}
+
+export type Comment = {
+  id:           string
+  project_id:   string
+  member_id:    string | null
+  parent_id:    string | null
+  text:         string
+  upvote_count: number
+  simhash:      string | null
+  created_at:   string
+}
+
+export type OfficeHoursFormat = 'ama' | 'toolmaker' | 'pair_building'
+
+export type OfficeHoursEvent = {
+  id:               string
+  host_id:          string | null
+  scheduled_at:     string
+  format:           OfficeHoursFormat
+  title:            string
+  description:      string | null
+  discord_url:      string | null
+  recording_url:    string | null
+  summary_post_id:  string | null
+  attendees_count:  number
+  created_at:       string
+}
+
+export type AwardVendor =
+  | 'internal' | 'wise' | 'trolley' | 'tremendous' | 'stripe' | 'stripe_refund'
+export type AwardType =
+  | 'badge' | 'credit' | 'feature' | 'cash' | 'gift_card' | 'refund' | 'bonus'
+
+export type AwardLedgerEntry = {
+  id:           string
+  member_id:    string | null
+  month:        string | null
+  tier:         string | null
+  type:         AwardType
+  amount_cents: number
+  vendor:       AwardVendor | null
+  vendor_ref:   string | null
+  paid_at:      string | null
+  note:         string | null
+  created_at:   string
 }
 
 export type HallOfFame = {

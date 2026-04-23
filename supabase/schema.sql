@@ -1,5 +1,15 @@
--- commit.show · Supabase Schema v2
--- Idempotent migration: safe to re-run. Handles v1 → v2 in place.
+-- commit.show · Supabase Schema (baseline up to PRD v1.8 · 2026-04-21)
+-- Idempotent migration: safe to re-run. Handles v0 → v1.8 in place.
+--
+-- ════════════════════════════════════════════════════════════════════════════
+-- PRD v2 users (2026-04-24+):
+-- After running this baseline, APPLY EACH FILE in `supabase/migrations/` in
+-- lexicographic order. The most important one is:
+--   20260424_v2_prd_realignment.sql
+-- which swaps applauds → polymorphic target, renames ap_events →
+-- activity_point_ledger, and adds the Creator Community tables.
+-- See CLAUDE.md §1-A for the v2 deltas this baseline does NOT yet include.
+-- ════════════════════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════
 -- 1. SEASONS
