@@ -34,3 +34,7 @@ yarn-error.log*
 # Supabase local
 supabase/.branches
 supabase/.temp
+
+# Wrangler / Cloudflare local state
+.wrangler
+.dev.vars

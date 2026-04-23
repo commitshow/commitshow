@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(git check-ignore *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(grep -iE '\\(env|secret|credential|token|\\\\.pem|\\\\.key\\)$')",
+      "Bash(git commit -m ' *)",
+      "Bash(git log *)",
+      "Bash(git push *)",
+      "Bash(npx tsc *)",
+      "Bash(npm ls *)",
+      "Bash(chflags -R nouchg node_modules)",
+      "Bash(node -e \"console.log\\('vite:', require\\('./node_modules/vite/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\('typescript:', require\\('./node_modules/typescript/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\('plugin-react:', require\\('./node_modules/@vitejs/plugin-react/package.json'\\).version\\)\")",
+      "Bash(grep -iE '^\\(vite|typescript\\)$')",
+      "Bash(unset NODE_ENV)",
+      "Bash(npm cache *)",
+      "Bash(git ls-tree *)"
     ]
   }
 }
