@@ -22,7 +22,7 @@ import { EditProjectModal } from '../components/EditProjectModal'
 import { IconForecast } from '../components/icons'
 import { fetchAuditionStreak } from '../lib/auditionStreak'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
-import { GraduationChecklist } from '../components/GraduationChecklist'
+import { GraduationStanding } from '../components/GraduationStanding'
 import { useAuth } from '../lib/auth'
 import { computeSeasonProgress, loadCurrentSeason } from '../lib/season'
 import type { Season } from '../lib/supabase'
@@ -386,7 +386,7 @@ export function ProjectDetailPage() {
             )}
 
             <div className="grid gap-5">
-              <GraduationChecklist projectId={project.id} viewerMode={isOwner ? 'owner' : 'visitor'} />
+              <GraduationStanding projectId={project.id} viewerMode={isOwner ? 'owner' : 'visitor'} />
               <ScoreTimeline points={timeline} />
             </div>
           </section>

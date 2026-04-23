@@ -549,15 +549,84 @@ create trigger on_vote_enforce_cap
   for each row execute function enforce_vote_cap_and_increment();
 
 -- ────────────────────────────────────────────────────────────────────────────
--- [M] Deprecated in v2 (kept for now · replaced in P2)
+-- [M] Season standings — %-based relative ranking (§6.2 · replaces 5-AND gate)
 --
---   • evaluate_graduation(uuid) — still encodes the v1.8 5-AND gate. Superseded
---     by the %-based season-end engine in P2 (§6.2). No longer authoritative.
---   • project_applaud_signals   — not recreated. Applaud signals are now
---     target-type agnostic and surfaced per-target via direct queries.
---   • Craft Award Week UI in src/ — removed in P3.
+-- One row per (project × season) carrying the live rank, percentile, projected
+-- tier, and the basic eligibility flags. UI reads from this view instead of
+-- evaluate_graduation() which is left in place for rollback only.
+-- ────────────────────────────────────────────────────────────────────────────
+drop view if exists season_standings cascade;
+create view season_standings as
+with ranked as (
+  select
+    p.id                                                           as project_id,
+    p.season_id,
+    p.creator_id,
+    p.score_total,
+    p.status,
+    p.live_url,
+    p.created_at,
+    row_number() over (
+      partition by p.season_id
+      order by p.score_total desc nulls last, p.created_at asc
+    )                                                              as rank,
+    count(*) over (partition by p.season_id)                       as total_in_season
+  from projects p
+  where p.season_id is not null
+),
+snapshot_count as (
+  select project_id, count(*) as n
+    from analysis_snapshots
+   group by project_id
+),
+brief_presence as (
+  select b.project_id,
+         -- Core intent lives inside build_briefs as any non-empty text-bearing
+         -- column. Treat any row existence as "intent captured".
+         true as has_brief
+    from build_briefs b
+)
+select
+  r.project_id,
+  r.season_id,
+  r.creator_id,
+  r.status,
+  r.score_total,
+  r.rank,
+  r.total_in_season,
+  -- percentile: 0 = best, 100 = worst · lower is better
+  case
+    when r.total_in_season <= 1 then 0::numeric
+    else round(((r.rank - 1)::numeric / (r.total_in_season - 1)) * 100, 1)
+  end                                                              as percentile,
+  -- Projected graduation tier if the season closed right now (§6.2)
+  case
+    when r.rank = 1                                                then 'valedictorian'
+    when r.rank <= greatest(ceil(r.total_in_season * 0.05), 2)     then 'honors'
+    when r.rank <= ceil(r.total_in_season * 0.20)                  then 'graduate'
+    else                                                                'rookie_circle'
+  end                                                              as projected_tier,
+  -- Basic eligibility filter (§6.3) · a "no" here drops you to Rookie Circle
+  -- regardless of percentile.
+  (r.live_url is not null)                                         as live_url_ok,
+  coalesce(sc.n, 0) >= 2                                           as snapshots_ok,
+  coalesce(bp.has_brief, false)                                    as brief_ok,
+  coalesce(sc.n, 0)                                                as snapshots_count
+from ranked r
+left join snapshot_count sc on sc.project_id = r.project_id
+left join brief_presence bp on bp.project_id = r.project_id;
+
+comment on view season_standings is
+  'v2 · live %-based relative ranking per season (§6.2). UI-facing. Drives GraduationStanding component.';
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- [N] Deprecated in v2 (kept for rollback · replaced in the UI layer)
 --
--- No DDL changes here; just documenting the handoff to the next priority.
+--   • evaluate_graduation(uuid) — v1.8 5-AND gate · superseded by
+--     season_standings (§6.2). Left in place so old snapshots can still call
+--     it, but client code no longer references it.
+--   • project_applaud_signals — not recreated. Applaud counts are now target
+--     -type agnostic · queried directly with (target_type, target_id).
 -- ────────────────────────────────────────────────────────────────────────────
 
 commit;
