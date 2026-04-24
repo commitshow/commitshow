@@ -6,6 +6,7 @@ import { AvatarPicker } from '../components/AvatarPicker'
 import { deleteProject } from '../lib/projectQueries'
 import { loadEffectiveStack } from '../lib/memberStack'
 import { IconGraduation, IconWand } from '../components/icons'
+import { VerifiedIdentities } from '../components/VerifiedIdentities'
 
 const TIER_COLOR: Record<ScoutTier, string> = {
   Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
@@ -182,6 +183,8 @@ export function ProfilePage() {
                     </span>
                   </div>
                 )}
+
+                <VerifiedIdentities />
               </div>
             </div>
 

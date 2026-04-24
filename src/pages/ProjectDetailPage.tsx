@@ -24,6 +24,7 @@ import { fetchAuditionStreak } from '../lib/auditionStreak'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
 import { GraduationStanding } from '../components/GraduationStanding'
+import { BadgeSnippet } from '../components/BadgeSnippet'
 import { useAuth } from '../lib/auth'
 import { computeSeasonProgress, loadCurrentSeason } from '../lib/season'
 import type { Season } from '../lib/supabase'
@@ -462,6 +463,9 @@ export function ProjectDetailPage() {
             <section id="brief" className="scroll-mt-28">
               <SectionHeader label="PRIVATE BRIEF" hint="Only you can see this — editor + integrity score." />
               <OwnerBriefPanel projectId={project.id} />
+              <div className="mt-6">
+                <BadgeSnippet projectId={project.id} projectName={project.project_name} />
+              </div>
             </section>
           )}
         </div>
