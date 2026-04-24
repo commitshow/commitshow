@@ -263,7 +263,7 @@ function ScoutRow({ rank, member: m }: { rank: number; member: MemberStats }) {
           }}
         >
           {m.avatar_url
-            ? <img src={m.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+            ? <img src={m.avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
             : initial}
         </div>
         <div className="min-w-0">

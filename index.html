@@ -7,7 +7,12 @@
     <meta name="description" content="commit.show — Commit your work. Show to the world. The vibe coding league where every commit is evidence." />
     <title>commit.show — Commit your work. Show to the world.</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <!-- Preload the hero poster so it's the LCP candidate (12KB static WebP).
+         The animated 5.6MB variant loads on idle after first paint. -->
+    <link rel="preload" as="image" href="/hero-poster.webp" fetchpriority="high" />
   </head>
   <body>
     <div id="root"></div>

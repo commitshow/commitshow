@@ -85,7 +85,7 @@ export function CommunityPostCard({ post }: Props) {
           }}
         >
           {post.author?.avatar_url
-            ? <img src={post.author.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+            ? <img src={post.author.avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
             : resolveCreatorInitial({ display_name: post.author?.display_name })}
         </span>
         <span>{resolveCreatorName({ display_name: post.author?.display_name })}</span>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { HeroStats } from '../lib/heroStats'
 
@@ -75,18 +76,12 @@ export function Hero({ stats }: HeroProps) {
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 overflow-hidden">
 
-      {/* ── Animated WebP background · conductor + golden matrix ── */}
-      <img
-        src="/hero-bg.webp"
-        alt=""
-        aria-hidden="true"
-        className="absolute inset-0 w-full h-full pointer-events-none select-none"
-        style={{
-          objectFit: 'cover',
-          zIndex: -2,
-          opacity: 1,
-        }}
-      />
+      {/* ── Background · static poster paints instantly, animated WebP
+          swaps in once it's fully decoded. Poster is ~100KB; animated is
+          ~multi-MB so we never block LCP on it. Poster stays behind the
+          animation as a fallback if the big file never downloads. ── */}
+      <HeroBackground />
+
 
       {/* Subtle vertical vignette so text stays legible while the conductor
           frame remains clearly visible behind. Edges darker, middle clearer. */}
@@ -198,5 +193,70 @@ export function Hero({ stats }: HeroProps) {
         />
       </div>
     </section>
+  )
+}
+
+// ── Two-stage hero background ─────────────────────────────────
+// Stage 1 (instant · ~12KB): static WebP poster, the first frame of the
+//   animation. Shipped with `fetchpriority="high"` + preload in index.html
+//   so it's the LCP candidate.
+// Stage 2 (deferred · multi-MB): animated WebP loaded via an Image() after
+//   the page is idle. Swapped in only once decoded → no jank, no layout
+//   shift. Slow connections (4g downlink < 1.5 Mbps, save-data on, or
+//   reduced motion) skip it entirely and keep the still image.
+function HeroBackground() {
+  const [animatedReady, setAnimatedReady] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Respect user preferences and network hints.
+    const mediaMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    if (mediaMotion.matches) return
+
+    const nav = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string; downlink?: number } }).connection
+    if (nav?.saveData) return
+    if (nav?.effectiveType && /(^|-)2g$/.test(nav.effectiveType)) return
+    if (typeof nav?.downlink === 'number' && nav.downlink < 1.5) return
+
+    const load = () => {
+      const img = new Image()
+      img.decoding = 'async'
+      img.onload = () => setAnimatedReady(true)
+      img.src = '/hero-bg.min.webp'
+    }
+
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback
+    if (ric) ric(load, { timeout: 2500 })
+    else setTimeout(load, 800)
+  }, [])
+
+  return (
+    <>
+      <img
+        src="/hero-poster.webp"
+        alt=""
+        aria-hidden="true"
+        decoding="async"
+        fetchPriority="high"
+        className="absolute inset-0 w-full h-full pointer-events-none select-none"
+        style={{ objectFit: 'cover', zIndex: -2 }}
+      />
+      {animatedReady && (
+        <img
+          src="/hero-bg.min.webp"
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          className="absolute inset-0 w-full h-full pointer-events-none select-none"
+          style={{
+            objectFit: 'cover',
+            zIndex: -2,
+            opacity: 1,
+            animation: 'fadeIn 600ms ease-out',
+          }}
+        />
+      )}
+    </>
   )
 }

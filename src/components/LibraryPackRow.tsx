@@ -147,7 +147,7 @@ export function LibraryPackRow({ item }: Props) {
               }}
             >
               {item.author_avatar_url
-                ? <img src={item.author_avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                ? <img src={item.author_avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
                 : resolveCreatorInitial({ display_name: item.author_name })}
             </span>
             <strong style={{ color: 'var(--cream)' }}>{authorName}</strong>

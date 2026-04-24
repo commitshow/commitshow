@@ -631,7 +631,7 @@ function ApplicationRow({ project: p, onDeleted }: { project: Project; onDeleted
         style={{ width: '96px', height: '96px', background: 'var(--navy-800)', flexShrink: 0 }}
       >
         {p.thumbnail_url ? (
-          <img src={p.thumbnail_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+          <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
         ) : (
           <div className="w-full h-full flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>NO IMG</div>
         )}

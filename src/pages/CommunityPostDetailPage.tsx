@@ -159,7 +159,7 @@ export function CommunityPostDetailPage() {
               }}
             >
               {post.author?.avatar_url
-                ? <img src={post.author.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                ? <img src={post.author.avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
                 : resolveCreatorInitial({ display_name: post.author?.display_name })}
             </span>
             <span>by <strong style={{ color: 'var(--cream)' }}>{resolveCreatorName({ display_name: post.author?.display_name })}</strong></span>
@@ -224,6 +224,8 @@ export function CommunityPostDetailPage() {
                 <img
                   src={linkedProject.thumbnail_url}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   style={{ width: 60, height: 40, objectFit: 'cover', borderRadius: '2px' }}
                 />
               )}
