@@ -13,7 +13,7 @@ export interface AuditionStreak {
 export async function fetchAuditionStreak(creatorId: string): Promise<AuditionStreak> {
   // When was the most recent audition_streak reward for this creator?
   const { data: lastRow } = await supabase
-    .from('ap_events')
+    .from('activity_point_ledger')
     .select('created_at')
     .eq('member_id', creatorId)
     .eq('kind', 'audition_streak')
@@ -24,7 +24,7 @@ export async function fetchAuditionStreak(creatorId: string): Promise<AuditionSt
   const lastRewardAt = lastRow?.created_at ?? null
 
   let q = supabase
-    .from('ap_events')
+    .from('activity_point_ledger')
     .select('id', { count: 'exact', head: true })
     .eq('member_id', creatorId)
     .eq('kind', 'audition_climb')
