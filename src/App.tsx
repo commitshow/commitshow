@@ -15,6 +15,7 @@ import { StacksPage } from './pages/StacksPage'
 import { AsksPage } from './pages/AsksPage'
 import { OfficeHoursPage } from './pages/OfficeHoursPage'
 import { NewCommunityPostPage } from './pages/NewCommunityPostPage'
+import { CommunityPostDetailPage } from './pages/CommunityPostDetailPage'
 import { Navigate } from 'react-router-dom'
 import './index.css'
 
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/community/office-hours"        element={<OfficeHoursPage />} />
         {/* `typeSegment` is read by the editor to pick build_log / stack / ask */}
         <Route path="/community/:typeSegment/new"    element={<NewCommunityPostPage />} />
+        <Route path="/community/:typeSegment/:id"    element={<CommunityPostDetailPage />} />
         <Route path="*"                 element={<LandingPage />} />
       </Routes>
 
