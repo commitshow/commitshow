@@ -150,7 +150,7 @@ export function LibraryPackRow({ item }: Props) {
                 ? <img src={item.author_avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
                 : resolveCreatorInitial({ display_name: item.author_name })}
             </span>
-            <span>by <strong style={{ color: 'var(--cream)' }}>{authorName}</strong></span>
+            <strong style={{ color: 'var(--cream)' }}>{authorName}</strong>
             {authorGrade && (
               <>
                 <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
