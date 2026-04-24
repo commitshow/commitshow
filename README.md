@@ -1,8 +1,8 @@
 # commit.show
 
-**Commit your work. Show to the world.** The vibe coding league where every
-commit is evidence. AI scores the work, Scouts forecast the finish, and the
-ones ready for production graduate.
+**Every commit, on stage. Audited by the engine, auditioned for Scouts.** The
+vibe coding league where every commit is evidence. Audit scores the work,
+Scouts forecast the finish, and the top 20% of each season graduate.
 
 > Season Zero · US Launch 2026
 
@@ -89,23 +89,40 @@ npm run dev
 
 | Component | Weight | Source |
 |-----------|--------|--------|
-| Automated Analysis | 50% | GitHub API + PageSpeed API + MD integrity |
+| Audit | 50% | GitHub API + PageSpeed + Brief integrity |
 | Scout Forecast | 30% | Forecast votes (uniform value · tiered monthly quota) |
 | Community Signal | 20% | Views · comments · shares · return visits |
 
-**Graduation requires (all five):** Total ≥ 75pts · Auto score ≥ 35/50 ·
-≥3 Scout forecasts · 2-week sustained ≥75 · Live URL healthcheck passes.
+**Graduation** = top 20% of each season (relative standing), split into
+Valedictorian (≈0.5%) · Honors (5%) · Graduate (14.5%) · Rookie Circle (rest).
+Basic filter: Live URL + two snapshots in-season + Brief Core Intent submitted.
+
+---
+
+## Badge
+
+Once your project is auditioning, drop a live-updating badge into your
+project's own README:
+
+```markdown
+[![commit.show](https://tekemubwihsjdzittoqf.supabase.co/functions/v1/badge?project=YOUR_PROJECT_ID)](https://commit.show/projects/YOUR_PROJECT_ID)
+```
+
+Append `&style=pill` for the larger embed. Grab the snippet from the **README
+BADGE** section on your project page after auditioning.
 
 ---
 
 ## Roadmap
 
-- **V0 (shipped):** Project submission + AI analysis + score card + feed
-- **V0.5 (current):** Auth · Scout tier system · Forecast UI · Artifact Library
-  (format × tool × stack · social-signal reputation · Apply-to-my-repo)
-- **V1 (next):** 3-week season engine · Scout OR-tier promotion (Forecast accuracy
-  path) · Applaud Week · Community Awards · Stripe payments · Creator payouts
-- **V1.5:** Scaffold / BKit · Talent market · Season Partners
+- **V0 (shipped):** Audition flow + audit engine + score card + feed
+- **V0.5 (shipped):** Auth · Scout tier system · Forecast UI · Artifact Library
+  (Intent-first · GitHub-Trending UX · Apply-to-my-repo) · polymorphic Applaud ·
+  Creator Community (Build Logs · Stacks · Asks · Office Hours) · README badge
+- **V1 (next):** %-based season engine (top 20% auto-graduation) · Scout OR-tier
+  promotion · Stripe audition fee + Library payments · Creator payouts
+- **V1.5:** `commitshow` CLI (`npx commitshow audit`) · Scaffold / BKit · Talent
+  market · Season Partners · MCP server
 
 ---
 
