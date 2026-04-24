@@ -1,55 +1,105 @@
+// Artifact Library · v2 Trending-style list (§15 · §15.6.5).
+//
+// Primary axis: Intent (build_feature · connect_service · tune_ai · start_project).
+// Secondary filters: Time window · Format · Tool · Stack match · Price · Search · Sort.
+// URL query params mirror the filter state so every view is bookmarkable.
+//
+//   ?intent=build-feature   ?format=mcp    ?tool=cursor
+//   ?t=today|week|month|all ?price=any|free|paid
+//   ?match=stack            ?sort=reputation|verified|applied|downloads|newest|price_low
+//   ?q=<search>
+
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   supabase,
   ARTIFACT_FORMATS,
   ARTIFACT_FORMAT_LABELS,
+  ARTIFACT_INTENTS,
+  ARTIFACT_INTENT_LABELS,
+  ARTIFACT_INTENT_HINTS,
   type ArtifactFormat,
-  type MDLibraryFeedItem,
+  type ArtifactIntent,
   type CreatorGrade,
+  type MDLibraryFeedItem,
 } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { loadEffectiveStack } from '../lib/memberStack'
-import { IconGraduation, IconWand } from '../components/icons'
+import { LibraryPackRow } from '../components/LibraryPackRow'
 import { DirectUploadModal } from '../components/DirectUploadModal'
 
+type TimeWindow = 'today' | 'week' | 'month' | 'all'
 type PriceFilter = 'any' | 'free' | 'paid'
 type SortMode = 'reputation' | 'verified' | 'applied' | 'downloads' | 'newest' | 'price_low'
+type IntentFilter = 'all' | ArtifactIntent
+type FormatFilter = 'any' | ArtifactFormat
 
-const GRADE_COLORS: Record<CreatorGrade, string> = {
-  Rookie: '#6B7280', Builder: '#60A5FA', Maker: '#00D4AA',
-  Architect: '#A78BFA', 'Vibe Engineer': '#F0C040', Legend: '#C8102E',
+// Intent URL slug ↔ value mapping (human-friendly URLs).
+const INTENT_SLUG: Record<ArtifactIntent, string> = {
+  build_feature:   'build-feature',
+  connect_service: 'connect-service',
+  tune_ai:         'tune-ai',
+  start_project:   'start-project',
 }
+const slugToIntent = Object.fromEntries(
+  Object.entries(INTENT_SLUG).map(([k, v]) => [v, k]),
+) as Record<string, ArtifactIntent>
 
-// Display labels for the tool chips on cards
-const TOOL_LABEL: Record<string, string> = {
-  'cursor':           'Cursor',
-  'windsurf':         'Windsurf',
-  'continue':         'Continue',
-  'cline':            'Cline',
-  'claude-desktop':   'Claude Desktop',
-  'claude-agent-sdk': 'Agent SDK',
-  'stripe':           'Stripe',
-  'supabase':         'Supabase',
-  'clerk':            'Clerk',
-  'resend':           'Resend',
-  'posthog':          'PostHog',
-  'sentry':           'Sentry',
-  'universal':        'Any',
+const FORMAT_SLUG: Record<ArtifactFormat, string> = {
+  mcp_config:    'mcp',
+  ide_rules:     'ide-rules',
+  agent_skill:   'skill',
+  project_rules: 'rules',
+  prompt_pack:   'prompt',
+  patch_recipe:  'recipe',
+  scaffold:      'scaffold',
+}
+const slugToFormat = Object.fromEntries(
+  Object.entries(FORMAT_SLUG).map(([k, v]) => [v, k]),
+) as Record<string, ArtifactFormat>
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function windowCutoff(t: TimeWindow): Date | null {
+  const now = new Date()
+  switch (t) {
+    case 'today': return new Date(now.getTime() - 1 * DAY_MS)
+    case 'week':  return new Date(now.getTime() - 7 * DAY_MS)
+    case 'month': return new Date(now.getTime() - 30 * DAY_MS)
+    case 'all':   return null
+  }
 }
 
 export function LibraryPage() {
   const { user, member } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = useState<MDLibraryFeedItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [format, setFormat] = useState<'any' | ArtifactFormat>('any')
-  const [priceFilter, setPriceFilter] = useState<PriceFilter>('any')
-  const [sort, setSort] = useState<SortMode>('reputation')
   const [memberStack, setMemberStack] = useState<string[]>([])
-  const [stackFilter, setStackFilter] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
 
+  // ── Filter state · URL-backed ───────────────────────────────
+  const intent: IntentFilter =
+    (slugToIntent[searchParams.get('intent') ?? ''] ?? 'all') as IntentFilter
+  const format: FormatFilter =
+    (slugToFormat[searchParams.get('format') ?? ''] ?? 'any') as FormatFilter
+  const tool       = searchParams.get('tool')   ?? 'any'
+  const timeWindow = (searchParams.get('t')     ?? 'week')  as TimeWindow
+  const priceFilter = (searchParams.get('price') ?? 'any')  as PriceFilter
+  const sort        = (searchParams.get('sort')  ?? 'reputation') as SortMode
+  const stackFilter = searchParams.get('match') === 'stack'
+  const search      = searchParams.get('q') ?? ''
+
+  const patchParams = (next: Record<string, string | null>) => {
+    const merged = new URLSearchParams(searchParams)
+    Object.entries(next).forEach(([k, v]) => {
+      if (v === null || v === '' || v === 'all' || v === 'any') merged.delete(k)
+      else merged.set(k, v)
+    })
+    setSearchParams(merged, { replace: true })
+  }
+
+  // ── Data fetch ──────────────────────────────────────────────
   const reloadFeed = async () => {
     setLoading(true)
     const { data } = await supabase
@@ -58,38 +108,58 @@ export function LibraryPage() {
     setRows((data ?? []) as MDLibraryFeedItem[])
     setLoading(false)
   }
-
   useEffect(() => { void reloadFeed() }, [])
 
-  // Load member's effective stack for the "Matches my stack" filter.
   useEffect(() => {
     if (!user?.id) { setMemberStack([]); return }
     loadEffectiveStack(user.id).then(res => setMemberStack(res.stack ?? []))
   }, [user?.id])
 
+  // ── Filter + sort pipeline ──────────────────────────────────
   const filtered = useMemo(() => {
     let list = rows.slice()
+
+    // Intent primary
+    if (intent !== 'all') list = list.filter(r => r.intent === intent)
+
+    // Format secondary
     if (format !== 'any') list = list.filter(r => r.target_format === format)
+
+    // Tool filter (matches target_tools array)
+    if (tool !== 'any') {
+      list = list.filter(r => (r.target_tools ?? []).includes(tool))
+    }
+
+    // Time window — created_at cutoff
+    const cutoff = windowCutoff(timeWindow)
+    if (cutoff) list = list.filter(r => new Date(r.created_at) >= cutoff)
+
+    // Price
     if (priceFilter === 'free') list = list.filter(r => r.is_free)
     if (priceFilter === 'paid') list = list.filter(r => !r.is_free)
+
+    // Stack match
     if (stackFilter && memberStack.length > 0) {
       const mine = new Set(memberStack.map(t => t.toLowerCase()))
       list = list.filter(r =>
         (r.stack_tags ?? []).some(t => mine.has(t.toLowerCase())) ||
-        (r.tags ?? []).some(t => mine.has(t.toLowerCase()))
+        (r.tags ?? []).some(t => mine.has(t.toLowerCase())),
       )
     }
+
+    // Search
     const q = search.trim().toLowerCase()
     if (q) list = list.filter(r =>
       r.title.toLowerCase().includes(q) ||
       (r.description ?? '').toLowerCase().includes(q) ||
       (r.tags ?? []).some(t => t.toLowerCase().includes(q)) ||
       (r.target_tools ?? []).some(t => t.toLowerCase().includes(q)) ||
-      (r.stack_tags ?? []).some(t => t.toLowerCase().includes(q))
+      (r.stack_tags ?? []).some(t => t.toLowerCase().includes(q)),
     )
+
+    // Sort
     switch (sort) {
       case 'applied':
-        // Trophy sort — actual adoption (PRs opened into other repos)
         list.sort((a, b) => (b.projects_applied_count ?? 0) - (a.projects_applied_count ?? 0))
         break
       case 'downloads':
@@ -112,36 +182,50 @@ export function LibraryPage() {
         break
       case 'reputation':
       default:
-        // v1.7 · composite reputation from DB view (grade + downloads +
-        // adopted-by + graduated-with-this + verified_badge bonus).
         list.sort((a, b) => (b.reputation_score ?? 0) - (a.reputation_score ?? 0))
     }
-    return list
-  }, [rows, format, priceFilter, search, sort, stackFilter, memberStack])
 
-  const anyFilter = format !== 'any' || priceFilter !== 'any' || !!search.trim() || stackFilter
-  const formatCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    rows.forEach(r => {
-      if (r.target_format) counts[r.target_format] = (counts[r.target_format] ?? 0) + 1
-    })
+    return list
+  }, [rows, intent, format, tool, timeWindow, priceFilter, search, sort, stackFilter, memberStack])
+
+  const intentCounts = useMemo(() => {
+    const counts: Record<ArtifactIntent, number> = {
+      build_feature: 0, connect_service: 0, tune_ai: 0, start_project: 0,
+    }
+    rows.forEach(r => { if (r.intent) counts[r.intent] = (counts[r.intent] ?? 0) + 1 })
     return counts
   }, [rows])
 
+  // Collect the set of tools present in the current result set for the tool dropdown.
+  const availableTools = useMemo(() => {
+    const s = new Set<string>()
+    rows.forEach(r => (r.target_tools ?? []).forEach(t => s.add(t)))
+    return Array.from(s).sort()
+  }, [rows])
+
+  const hasAnyFilter =
+    intent !== 'all' ||
+    format !== 'any' ||
+    tool !== 'any' ||
+    timeWindow !== 'week' ||
+    priceFilter !== 'any' ||
+    stackFilter ||
+    !!search.trim()
+
   return (
     <section className="relative z-10 pt-20 pb-16 px-6 min-h-screen">
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+      <div className="max-w-5xl mx-auto">
+        {/* ── Header ──────────────────────────────── */}
+        <header className="mb-5 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
               // ARTIFACT LIBRARY
             </div>
             <h1 className="font-display font-black text-3xl md:text-4xl mb-1" style={{ color: 'var(--cream)' }}>
-              Vibe-coding artifacts worth keeping
+              What do you want to build right now?
             </h1>
             <p className="font-light text-sm" style={{ color: 'var(--text-secondary)' }}>
-              MCP configs · IDE rules · agent skills · project rules · patch recipes.
-              Published by creators · ranked by community signal.
+              Vibe-coding artifacts ranked by how often they actually ship — not by who starred them loudest.
             </p>
           </div>
           {user && (
@@ -163,56 +247,60 @@ export function LibraryPage() {
           )}
         </header>
 
-        {/* ── Format tabs ── */}
-        <div className="card-navy p-1 flex items-center gap-1 overflow-x-auto mb-3" style={{ borderRadius: '2px' }}>
-          <FormatTab active={format === 'any'} count={rows.length} onClick={() => setFormat('any')}>All</FormatTab>
-          {ARTIFACT_FORMATS.map(f => (
-            <FormatTab
-              key={f}
-              active={format === f}
-              count={formatCounts[f] ?? 0}
-              onClick={() => setFormat(f)}
-            >
-              {ARTIFACT_FORMAT_LABELS[f]}
-            </FormatTab>
-          ))}
+        {/* ── Intent primary strip (§15.1) ──────── */}
+        <div className="mb-4">
+          <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--text-muted)' }}>
+            INTENT
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <IntentChip
+              active={intent === 'all'}
+              onClick={() => patchParams({ intent: null })}
+              label="All"
+              count={rows.length}
+              tone="var(--gold-500)"
+            />
+            {ARTIFACT_INTENTS.map(i => (
+              <IntentChip
+                key={i}
+                active={intent === i}
+                onClick={() => patchParams({ intent: INTENT_SLUG[i] })}
+                label={ARTIFACT_INTENT_LABELS[i]}
+                hint={ARTIFACT_INTENT_HINTS[i]}
+                count={intentCounts[i]}
+                tone={INTENT_TONE[i]}
+              />
+            ))}
+          </div>
         </div>
 
-        {/* ── Search + price + sort + stack filter ── */}
+        {/* ── Secondary: time + format + tool + price + sort ─ */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <div className="flex-1 min-w-[220px] relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>⌕</span>
-            <input
-              type="search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search title · description · tag · tool · stack…"
-              className="w-full pl-8 pr-3 py-2 font-mono text-xs"
-              style={{ lineHeight: 1.4 }}
+          <TimeToggle
+            value={timeWindow}
+            onChange={v => patchParams({ t: v === 'week' ? null : v })}
+          />
+          <Select
+            value={format}
+            onChange={v => patchParams({ format: v === 'any' ? null : FORMAT_SLUG[v as ArtifactFormat] })}
+            options={[
+              { value: 'any', label: 'All formats' },
+              ...ARTIFACT_FORMATS.map(f => ({ value: f, label: ARTIFACT_FORMAT_LABELS[f] })),
+            ]}
+          />
+          {availableTools.length > 0 && (
+            <Select
+              value={tool}
+              onChange={v => patchParams({ tool: v === 'any' ? null : v })}
+              options={[
+                { value: 'any', label: 'Any tool' },
+                ...availableTools.map(t => ({ value: t, label: TOOL_LABEL[t] ?? t })),
+              ]}
             />
-          </div>
-          {memberStack.length > 0 && (
-            <button
-              onClick={() => setStackFilter(v => !v)}
-              className="font-mono text-xs tracking-wide px-3 py-2 flex items-center gap-1.5"
-              title={`Your stack: ${memberStack.join(' · ')}`}
-              style={{
-                background: stackFilter ? 'rgba(0,212,170,0.12)' : 'transparent',
-                border: `1px solid ${stackFilter ? 'rgba(0,212,170,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                color: stackFilter ? '#00D4AA' : 'var(--cream)',
-                borderRadius: '2px',
-                cursor: 'pointer',
-              }}
-            >
-              {stackFilter ? '✓' : '○'} Matches my stack
-              <span className="font-mono text-[10px]" style={{ opacity: 0.7 }}>
-                ({memberStack.length})
-              </span>
-            </button>
           )}
           <Select
             value={priceFilter}
-            onChange={v => setPriceFilter(v as PriceFilter)}
+            onChange={v => patchParams({ price: v === 'any' ? null : v })}
             options={[
               { value: 'any',  label: 'Any price' },
               { value: 'free', label: 'Free only' },
@@ -221,7 +309,7 @@ export function LibraryPage() {
           />
           <Select
             value={sort}
-            onChange={v => setSort(v as SortMode)}
+            onChange={v => patchParams({ sort: v === 'reputation' ? null : v })}
             options={[
               { value: 'reputation', label: 'Sort · Reputation'       },
               { value: 'verified',   label: 'Sort · Verified first'   },
@@ -233,36 +321,63 @@ export function LibraryPage() {
           />
         </div>
 
-        {/* ── Summary ── */}
-        <div className="flex items-center justify-between mb-5 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          <span>{anyFilter ? 'Filters applied' : 'Everything published'}</span>
-          <span>{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
+        {/* ── Search + stack match ───────────────── */}
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <div className="flex-1 min-w-[260px] relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>⌕</span>
+            <input
+              type="search"
+              value={search}
+              onChange={e => patchParams({ q: e.target.value || null })}
+              placeholder="Search title · description · tag · tool · stack…"
+              className="w-full pl-8 pr-3 py-2 font-mono text-xs"
+              style={{ lineHeight: 1.4 }}
+            />
+          </div>
+          {memberStack.length > 0 && (
+            <button
+              onClick={() => patchParams({ match: stackFilter ? null : 'stack' })}
+              className="font-mono text-xs tracking-wide px-3 py-2 flex items-center gap-1.5"
+              title={`Your stack: ${memberStack.join(' · ')}`}
+              style={{
+                background: stackFilter ? 'rgba(0,212,170,0.12)' : 'transparent',
+                border: `1px solid ${stackFilter ? 'rgba(0,212,170,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                color: stackFilter ? '#00D4AA' : 'var(--cream)',
+                borderRadius: '2px',
+                cursor: 'pointer',
+              }}
+            >
+              {stackFilter ? '✓' : '○'} Matches my stack
+              <span className="font-mono text-[10px]" style={{ opacity: 0.7 }}>({memberStack.length})</span>
+            </button>
+          )}
         </div>
 
-        {/* ── Grid ── */}
+        {/* ── Summary line ─────────────────────── */}
+        <div className="flex items-center justify-between mb-3 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          <span>{hasAnyFilter ? 'Filters applied' : 'Trending this week'}</span>
+          <span>{filtered.length} artifact{filtered.length === 1 ? '' : 's'}</span>
+        </div>
+
+        {/* ── Row list ─────────────────────────── */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="card-navy p-4" style={{ borderRadius: '2px' }}>
-                <div className="h-4 w-20 mb-3" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }} />
-                <div className="h-5 w-4/5 mb-2" style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '2px' }} />
-                <div className="h-3 w-full mb-1" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }} />
-                <div className="h-3 w-3/5" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }} />
+          <div className="grid gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="card-navy px-5 py-4" style={{ borderRadius: '2px' }}>
+                <div className="h-5 w-2/5 mb-2" style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '2px' }} />
+                <div className="h-3 w-3/5 mb-2" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }} />
+                <div className="h-3 w-4/5" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }} />
               </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
-            <div className="font-display font-bold text-xl mb-2" style={{ color: 'var(--text-muted)' }}>
-              No library items match
-            </div>
-            <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
-              Try broadening the format tab, or clear the search term.
-            </p>
-          </div>
+          <EmptyState
+            timeWindow={timeWindow}
+            onWiden={() => patchParams({ t: 'all' })}
+          />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(item => <LibraryCard key={item.id} item={item} />)}
+          <div className="grid gap-3">
+            {filtered.map(item => <LibraryPackRow key={item.id} item={item} />)}
           </div>
         )}
       </div>
@@ -279,27 +394,84 @@ export function LibraryPage() {
   )
 }
 
-function FormatTab({ active, count, onClick, children }: { active: boolean; count: number; onClick: () => void; children: React.ReactNode }) {
+// ── Intent chip · primary axis  (§15.1) ──────────────────────
+const INTENT_TONE: Record<ArtifactIntent, string> = {
+  build_feature:   '#F0C040',
+  connect_service: '#60A5FA',
+  tune_ai:         '#A78BFA',
+  start_project:   '#00D4AA',
+}
+
+function IntentChip({
+  active, onClick, label, hint, count, tone,
+}: {
+  active:   boolean
+  onClick:  () => void
+  label:    string
+  hint?:    string
+  count:    number
+  tone:     string
+}) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="flex-shrink-0 px-3 py-2 font-mono text-xs tracking-wide whitespace-nowrap transition-colors flex items-center gap-1.5"
+      title={hint}
+      className="font-mono text-[11px] tracking-wide px-3 py-1.5 transition-colors flex items-center gap-1.5"
       style={{
-        background: active ? 'var(--gold-500)' : 'transparent',
-        color: active ? 'var(--navy-900)' : 'var(--text-secondary)',
-        border: 'none',
+        background:   active ? `${tone}1C` : 'transparent',
+        color:        active ? tone : 'var(--text-secondary)',
+        border:       `1px solid ${active ? `${tone}55` : 'rgba(255,255,255,0.08)'}`,
         borderRadius: '2px',
-        cursor: 'pointer',
-        fontWeight: active ? 600 : 400,
+        cursor:       'pointer',
       }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.color = 'var(--cream)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.color = 'var(--text-secondary)' }}
     >
-      {children}
+      {label}
       {count > 0 && (
-        <span className="font-mono text-[10px]" style={{ opacity: 0.7 }}>{count}</span>
+        <span className="font-mono text-[10px] tabular-nums" style={{ opacity: 0.7 }}>
+          {count}
+        </span>
       )}
     </button>
+  )
+}
+
+// ── Time toggle · 4-way pill ────────────────────────────────
+function TimeToggle({ value, onChange }: { value: TimeWindow; onChange: (v: TimeWindow) => void }) {
+  const opts: Array<{ value: TimeWindow; label: string }> = [
+    { value: 'today', label: 'Today' },
+    { value: 'week',  label: 'This week' },
+    { value: 'month', label: 'This month' },
+    { value: 'all',   label: 'All time' },
+  ]
+  return (
+    <div
+      className="flex items-center gap-0 overflow-hidden"
+      style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}
+    >
+      {opts.map(o => {
+        const active = value === o.value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className="font-mono text-xs tracking-wide px-3 py-1.5 transition-colors"
+            style={{
+              background: active ? 'rgba(240,192,64,0.14)' : 'transparent',
+              color:      active ? 'var(--gold-500)' : 'var(--text-secondary)',
+              border:     'none',
+              borderLeft: o.value === 'today' ? 'none' : '1px solid rgba(255,255,255,0.08)',
+              cursor:     'pointer',
+            }}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -322,162 +494,48 @@ function Select({ value, onChange, options }: { value: string; onChange: (v: str
   )
 }
 
-function LibraryCard({ item }: { item: MDLibraryFeedItem }) {
-  const navigate = useNavigate()
-  const authorGrade = item.author_grade as CreatorGrade | null
-  const gradeColor = authorGrade ? GRADE_COLORS[authorGrade] : '#6B7280'
-  const authorName = item.author_name || 'Creator'
-  const formatLabel = item.target_format ? ARTIFACT_FORMAT_LABELS[item.target_format] : item.category
-  const applied = item.projects_applied_count ?? 0
-  const graduated = item.projects_graduated_count ?? 0
-  const priceLabel = item.is_free
-    ? 'FREE'
-    : `$${(item.price_cents / 100).toFixed(item.price_cents % 100 === 0 ? 0 : 2)}`
-
-  const hasProvenance = !!item.source_project_name && (item.source_project_status === 'graduated' || item.verified_badge)
-  const sourceScoreColor = (item.source_project_score ?? 0) >= 75
-    ? '#00D4AA'
-    : (item.source_project_score ?? 0) >= 50
-      ? '#F0C040'
-      : 'var(--text-muted)'
-
+function EmptyState({ timeWindow, onWiden }: { timeWindow: TimeWindow; onWiden: () => void }) {
   return (
-    <div
-      className="card-navy p-4 cursor-pointer transition-all flex flex-col h-full"
-      style={{ borderRadius: '2px' }}
-      onClick={() => navigate(`/library/${item.id}`)}
-    >
-      {/* Format chip + verified */}
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <span className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5" style={{
-          color: 'var(--gold-500)',
-          background: 'rgba(240,192,64,0.08)',
-          border: '1px solid rgba(240,192,64,0.25)',
-          borderRadius: '2px',
-        }}>
-          {formatLabel}
-        </span>
-        {item.verified_badge && (
-          <span className="font-mono text-[10px] tracking-widest px-1.5 py-0.5" style={{
-            color: '#00D4AA',
-            background: 'rgba(0,212,170,0.08)',
-            border: '1px solid rgba(0,212,170,0.3)',
-            borderRadius: '2px',
-          }}>
-            ✓ VERIFIED
-          </span>
-        )}
+    <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
+      <div className="font-display font-bold text-xl mb-2" style={{ color: 'var(--text-muted)' }}>
+        No artifacts match right now
       </div>
-
-      {/* Title + description */}
-      <h3 className="font-display font-bold text-base leading-tight mb-2" style={{ color: 'var(--cream)' }}>
-        {item.title}
-      </h3>
-      {item.description && (
-        <p className="font-mono text-[11px] line-clamp-3 mb-3" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-          {item.description}
-        </p>
-      )}
-
-      {/* Target tools chips */}
-      {(item.target_tools ?? []).length > 0 && (
-        <div className="flex gap-1.5 flex-wrap mb-2">
-          {item.target_tools.slice(0, 4).map(t => (
-            <span key={t} className="font-mono text-[10px] px-1.5 py-0.5" style={{
-              background: 'rgba(167,139,250,0.06)',
-              border: '1px solid rgba(167,139,250,0.25)',
-              color: '#A78BFA',
-              borderRadius: '2px',
-            }}>
-              {TOOL_LABEL[t] ?? t}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Stack tags */}
-      {(item.stack_tags ?? []).length > 0 && (
-        <div className="flex gap-1.5 flex-wrap mb-3">
-          {item.stack_tags.slice(0, 4).map(t => (
-            <span key={t} className="font-mono text-[10px] px-1.5 py-0.5" style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: 'var(--text-muted)',
-              borderRadius: '2px',
-            }}>{t}</span>
-          ))}
-        </div>
-      )}
-
-      {/* Provenance strip */}
-      {hasProvenance && (
-        <div
-          className="mb-3 pl-2 pr-2 py-1 flex items-center justify-between gap-2 font-mono text-[10px]"
+      <p className="font-mono text-xs mb-4" style={{ color: 'var(--text-faint)' }}>
+        Try widening the time window, removing the intent filter, or clearing the search term.
+      </p>
+      {timeWindow !== 'all' && (
+        <button
+          type="button"
+          onClick={onWiden}
+          className="font-mono text-xs tracking-wide px-3 py-1.5"
           style={{
-            background: 'rgba(0,212,170,0.04)',
-            borderLeft: '2px solid rgba(0,212,170,0.4)',
-            borderRadius: '0 2px 2px 0',
+            background: 'transparent',
+            color: 'var(--gold-500)',
+            border: '1px solid rgba(240,192,64,0.4)',
+            borderRadius: '2px',
+            cursor: 'pointer',
           }}
         >
-          <span className="inline-flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
-            <IconGraduation size={10} style={{ color: '#00D4AA' }} />
-            <span>from <strong style={{ color: 'var(--cream)' }}>{item.source_project_name}</strong></span>
-          </span>
-          {item.source_project_score != null && (
-            <span style={{ color: sourceScoreColor }}>
-              score {item.source_project_score}
-            </span>
-          )}
-        </div>
+          Expand to all time →
+        </button>
       )}
-
-      <div className="mt-auto pt-3 flex items-center justify-between gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        {/* Author strip */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div
-            className="flex items-center justify-center font-mono text-[10px] font-bold overflow-hidden flex-shrink-0"
-            style={{
-              width: 20, height: 20,
-              background: item.author_avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
-              color: 'var(--navy-900)',
-              border: '1px solid rgba(240,192,64,0.3)',
-              borderRadius: '2px',
-            }}
-          >
-            {item.author_avatar_url
-              ? <img src={item.author_avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
-              : authorName.slice(0, 1).toUpperCase()}
-          </div>
-          <span className="font-mono text-[10px] truncate" style={{ color: 'var(--text-primary)' }}>
-            {authorName}
-          </span>
-          {authorGrade && (
-            <span className="font-mono text-[10px] flex-shrink-0" style={{ color: gradeColor }}>
-              · {authorGrade}
-            </span>
-          )}
-        </div>
-
-        {/* Price · Adoption trophy stats · downloads */}
-        <div className="flex items-center gap-2 flex-shrink-0 font-mono text-[10px]">
-          <span style={{ color: item.is_free ? '#00D4AA' : 'var(--gold-500)' }}>{priceLabel}</span>
-          {graduated > 0 && (
-            <span title={`${graduated} graduated project${graduated === 1 ? '' : 's'} applied this artifact`}
-              className="inline-flex items-center gap-0.5"
-              style={{ color: '#00D4AA' }}>
-              <IconGraduation size={10} /> {graduated}
-            </span>
-          )}
-          {applied > 0 && (
-            <span title={`${applied} project${applied === 1 ? '' : 's'} applied this artifact`}
-              className="inline-flex items-center gap-0.5"
-              style={{ color: 'var(--gold-500)' }}>
-              <IconWand size={10} /> {applied}
-            </span>
-          )}
-          <span style={{ color: 'var(--text-muted)' }}>{item.downloads_count} ↓</span>
-        </div>
-      </div>
     </div>
   )
+}
+
+// Display labels for tool filter chips + dropdown.
+const TOOL_LABEL: Record<string, string> = {
+  'cursor':           'Cursor',
+  'windsurf':         'Windsurf',
+  'continue':         'Continue',
+  'cline':            'Cline',
+  'claude-desktop':   'Claude Desktop',
+  'claude-agent-sdk': 'Agent SDK',
+  'stripe':           'Stripe',
+  'supabase':         'Supabase',
+  'clerk':            'Clerk',
+  'resend':           'Resend',
+  'posthog':          'PostHog',
+  'sentry':           'Sentry',
+  'universal':        'Any tool',
 }

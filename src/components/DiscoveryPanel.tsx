@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { MDCategory } from '../lib/supabase'
+import type { MDCategory, ArtifactIntent } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { FormatIcon } from './iconMaps'
 import { IconGift } from './icons'
@@ -7,9 +7,17 @@ import {
   loadDiscoveriesForProject,
   dismissDiscovery,
   publishDiscovery,
+  intentForFormat,
   type MDDiscoveryRow,
 } from '../lib/mdDiscovery'
-import { MD_CATEGORIES, ARTIFACT_FORMAT_LABELS, MIN_PAID_PRICE_CENTS } from '../lib/supabase'
+import {
+  MD_CATEGORIES,
+  ARTIFACT_FORMAT_LABELS,
+  ARTIFACT_INTENTS,
+  ARTIFACT_INTENT_LABELS,
+  ARTIFACT_INTENT_HINTS,
+  MIN_PAID_PRICE_CENTS,
+} from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 
 // Paid tier minimums mirror DB trigger enforce_md_library_rules (§15.2)
@@ -260,6 +268,8 @@ function PublishDialog({ discovery, projectId, creatorId, authorGrade, onClose, 
   const [title, setTitle] = useState(discovery.suggested_title ?? '')
   const [description, setDescription] = useState(discovery.suggested_description ?? '')
   const [category, setCategory] = useState<MDCategory>(discovery.suggested_category)
+  // v2 · Library primary axis (§15.1) · default from format heuristic.
+  const [intent, setIntent] = useState<ArtifactIntent>(intentForFormat(discovery.detected_format))
   const [priceDollars, setPriceDollars] = useState('0')  // default free
   const [tags, setTags] = useState('')
   const [contentMd, setContentMd] = useState<string | null>(null)
@@ -324,6 +334,7 @@ function PublishDialog({ discovery, projectId, creatorId, authorGrade, onClose, 
         authorGrade: authorGrade as never,
         linkedProjectId: projectId,
         creatorId,
+        intent,
         targetFormat: detectedFormat,
         targetTools: discovery.detected_tools,
         variables: discovery.detected_variables.map(v => ({ name: v.name, sample: v.sample })),
@@ -369,6 +380,36 @@ function PublishDialog({ discovery, projectId, creatorId, authorGrade, onClose, 
           </Field>
           <Field label="Description">
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className="w-full px-3 py-2 font-mono text-xs" />
+          </Field>
+
+          {/* v2 · Intent primary axis (§15.1) · drives Library nav */}
+          <Field label="Intent · what is someone using this for?">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {ARTIFACT_INTENTS.map(i => {
+                const active = intent === i
+                return (
+                  <button
+                    type="button"
+                    key={i}
+                    onClick={() => setIntent(i)}
+                    title={ARTIFACT_INTENT_HINTS[i]}
+                    className="font-mono text-[11px] tracking-wide px-2.5 py-1 transition-colors"
+                    style={{
+                      background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
+                      color:        active ? 'var(--gold-500)' : 'var(--text-secondary)',
+                      border:       `1px solid ${active ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                      borderRadius: '2px',
+                      cursor:       'pointer',
+                    }}
+                  >
+                    {ARTIFACT_INTENT_LABELS[i]}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              {ARTIFACT_INTENT_HINTS[intent]}
+            </p>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">

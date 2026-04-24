@@ -275,7 +275,32 @@ export type HallOfFame = {
   badge_active: boolean
 }
 
-// v1.5 Artifact Library · format taxonomy + tool targets
+// v2 · Library primary axis · §15.1 Intent
+export type ArtifactIntent =
+  | 'build_feature'
+  | 'connect_service'
+  | 'tune_ai'
+  | 'start_project'
+
+export const ARTIFACT_INTENTS: ArtifactIntent[] = [
+  'build_feature', 'connect_service', 'tune_ai', 'start_project',
+]
+
+export const ARTIFACT_INTENT_LABELS: Record<ArtifactIntent, string> = {
+  build_feature:   'Build a feature',
+  connect_service: 'Connect a service',
+  tune_ai:         'Tune your coding AI',
+  start_project:   'Start a project',
+}
+
+export const ARTIFACT_INTENT_HINTS: Record<ArtifactIntent, string> = {
+  build_feature:   'Stripe · Auth · RAG · search · payments · email',
+  connect_service: 'MCPs · Slack · Linear · Notion · GitHub connectors',
+  tune_ai:         'Cursor/Claude rules · skills · prompt packs',
+  start_project:   'Scaffolds · starter templates · forkable kits',
+}
+
+// v1.5 Artifact Library · format taxonomy + tool targets (now 2차 필터 · §15.1.5)
 export type ArtifactFormat =
   | 'mcp_config'
   | 'ide_rules'
@@ -335,8 +360,10 @@ export type MDLibraryItem = {
   revenue_cents: number                      // v1.7 restored · author share accumulator
   is_public: boolean                         // creator may hide on retry
   status: MDStatus
-  // v1.5 Artifact Library fields
-  target_format: ArtifactFormat | null       // primary axis · format × tool
+  // v2 · Library §15.1 primary axis (2026-04-25 migration)
+  intent: ArtifactIntent                     // build_feature | connect_service | tune_ai | start_project
+  // v1.5 Artifact Library fields (now §15.1.5 secondary filter)
+  target_format: ArtifactFormat | null       // format × tool target
   target_tools: string[]                     // e.g. ['cursor','windsurf'] | ['claude-agent-sdk']
   variables: ArtifactVariable[]              // {{VAR}} placeholders
   bundle_files: ArtifactBundleFile[]         // multi-file artifacts (Skills, Recipes)

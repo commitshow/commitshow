@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import {
   ARTIFACT_FORMAT_LABELS,
+  ARTIFACT_INTENT_LABELS,
   type ArtifactFormat,
+  type ArtifactIntent,
   type CreatorGrade,
   type MDLibraryFeedItem,
 } from '../lib/supabase'
@@ -16,6 +18,14 @@ import { AuthModal } from '../components/AuthModal'
 const GRADE_COLORS: Record<CreatorGrade, string> = {
   Rookie: '#6B7280', Builder: '#60A5FA', Maker: '#00D4AA',
   Architect: '#A78BFA', 'Vibe Engineer': '#F0C040', Legend: '#C8102E',
+}
+
+// v2 · Intent primary axis (§15.1) · used in header badge + left accent rule.
+const INTENT_TONE: Record<ArtifactIntent, string> = {
+  build_feature:   '#F0C040',
+  connect_service: '#60A5FA',
+  tune_ai:         '#A78BFA',
+  start_project:   '#00D4AA',
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -145,16 +155,30 @@ export function LibraryDetailPage() {
         </button>
 
         {/* Header */}
-        <header className="card-navy p-6 mb-6" style={{ borderRadius: '2px' }}>
+        <header className="card-navy p-6 mb-6" style={{ borderRadius: '2px', borderLeft: `3px solid ${INTENT_TONE[item.intent] ?? '#F0C040'}` }}>
           <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-            <span className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5 flex items-center gap-1" style={{
-              color: 'var(--gold-500)',
-              background: 'rgba(240,192,64,0.08)',
-              border: '1px solid rgba(240,192,64,0.25)',
-              borderRadius: '2px',
-            }}>
-              <FormatIcon format={item.target_format} size={12} /> {formatLabel}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* v2 · Intent badge (§15.1) · primary axis · leads the header */}
+              <span
+                className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5"
+                style={{
+                  color:      INTENT_TONE[item.intent] ?? '#F0C040',
+                  background: `${INTENT_TONE[item.intent] ?? '#F0C040'}1C`,
+                  border:     `1px solid ${INTENT_TONE[item.intent] ?? '#F0C040'}55`,
+                  borderRadius: '2px',
+                }}
+              >
+                {ARTIFACT_INTENT_LABELS[item.intent]}
+              </span>
+              <span className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5 flex items-center gap-1" style={{
+                color: 'var(--gold-500)',
+                background: 'rgba(240,192,64,0.08)',
+                border: '1px solid rgba(240,192,64,0.25)',
+                borderRadius: '2px',
+              }}>
+                <FormatIcon format={item.target_format} size={12} /> {formatLabel}
+              </span>
+            </div>
             {item.verified_badge && (
               <span className="font-mono text-[10px] tracking-widest px-1.5 py-0.5" style={{
                 color: '#00D4AA',

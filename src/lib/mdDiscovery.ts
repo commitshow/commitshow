@@ -7,6 +7,7 @@ import {
   type MDCategory,
   type CreatorGrade,
   type ArtifactFormat,
+  type ArtifactIntent,
   type ArtifactBundleFile,
 } from './supabase'
 
@@ -74,6 +75,8 @@ export interface PublishDiscoveryInput {
   authorGrade: CreatorGrade
   linkedProjectId: string
   creatorId: string
+  // v2 · Library primary axis (§15.1)
+  intent?: ArtifactIntent
   // v1.5 format-aware fields (optional · pulled from discovery if omitted)
   targetFormat?: ArtifactFormat | null
   targetTools?: string[]
@@ -81,6 +84,22 @@ export interface PublishDiscoveryInput {
   bundleFiles?: ArtifactBundleFile[]
   stackTags?: string[]
   discoveryTotalScore?: number | null
+}
+
+// Format → intent heuristic · mirrors the SQL backfill in
+// supabase/migrations/20260425_library_v2_ui.sql so auto-classification agrees
+// whether a row is born in the DB backfill or from this publish path.
+export function intentForFormat(format: ArtifactFormat | null): ArtifactIntent {
+  switch (format) {
+    case 'mcp_config':    return 'connect_service'
+    case 'ide_rules':
+    case 'agent_skill':
+    case 'project_rules':
+    case 'prompt_pack':   return 'tune_ai'
+    case 'scaffold':      return 'start_project'
+    case 'patch_recipe':
+    default:              return 'build_feature'
+  }
 }
 
 export async function publishDiscovery(input: PublishDiscoveryInput): Promise<{ mdId: string }> {
@@ -98,6 +117,8 @@ export async function publishDiscovery(input: PublishDiscoveryInput): Promise<{ 
       author_grade:       input.authorGrade,
       status:             'published',
       is_public:          true,
+      // v2 · Library primary axis (§15.1) · default matches DB backfill heuristic.
+      intent:             input.intent ?? intentForFormat(input.targetFormat ?? null),
       // v1.5 · format-aware metadata
       target_format:      input.targetFormat ?? null,
       target_tools:       input.targetTools ?? [],
