@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { supabase, type Project, type MDLibraryItem, type MemberStats, type ScoutTier } from '../lib/supabase'
+import { supabase, PUBLIC_PROJECT_COLUMNS, type Project, type MDLibraryItem, type MemberStats, type ScoutTier } from '../lib/supabase'
 import { AvatarPicker } from '../components/AvatarPicker'
 import { deleteProject } from '../lib/projectQueries'
 import { loadEffectiveStack } from '../lib/memberStack'
@@ -35,11 +35,11 @@ export function ProfilePage() {
     ;(async () => {
       const [statsRes, appsRes, libRes] = await Promise.all([
         supabase.from('member_stats').select('*').eq('id', user.id).maybeSingle(),
-        supabase.from('projects').select('*').eq('creator_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('projects').select(PUBLIC_PROJECT_COLUMNS).eq('creator_id', user.id).order('created_at', { ascending: false }),
         supabase.from('md_library').select('*').eq('creator_id', user.id).order('created_at', { ascending: false }),
       ])
       setStats((statsRes.data as MemberStats | null) ?? null)
-      setApplications((appsRes.data ?? []) as Project[])
+      setApplications((appsRes.data ?? []) as unknown as Project[])
 
       // Merge adoption counts from md_library_adoption view for trophy stats.
       const libItems = (libRes.data ?? []) as MDLibraryItem[]

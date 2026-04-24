@@ -2,7 +2,7 @@
 // Lanes (Just registered · Climbing · Graduating) run as parallel requests;
 // filters + pagination hit the same projects table with composable modifiers.
 
-import { supabase, type Project } from './supabase'
+import { supabase, PUBLIC_PROJECT_COLUMNS, type Project } from './supabase'
 
 export const LANE_LIMIT = 6
 export const GRID_PAGE_SIZE = 12
@@ -86,7 +86,7 @@ export async function fetchProjectsFiltered(
   const from = page * GRID_PAGE_SIZE
   const to = from + GRID_PAGE_SIZE - 1
 
-  let q = supabase.from('projects').select('*', { count: 'exact' })
+  let q = supabase.from('projects').select(PUBLIC_PROJECT_COLUMNS, { count: 'exact' })
 
   if (filters.status && filters.status !== 'any') q = q.eq('status', filters.status)
   else q = q.in('status', ['active', 'graduated', 'valedictorian'])
@@ -105,7 +105,7 @@ export async function fetchProjectsFiltered(
   }
 
   const { data, count } = await q.range(from, to)
-  const rows = (data ?? []) as Project[]
+  const rows = (data ?? []) as unknown as Project[]
   const total = typeof count === 'number' ? count : null
   const hasMore = total !== null ? (total > to + 1) : rows.length === GRID_PAGE_SIZE
   return { rows, hasMore, total }
@@ -113,7 +113,11 @@ export async function fetchProjectsFiltered(
 
 // Project detail — single row + its snapshot timeline.
 export async function fetchProjectById(id: string): Promise<Project | null> {
-  const { data } = await supabase.from('projects').select('*').eq('id', id).maybeSingle()
+  const { data } = await supabase
+    .from('projects')
+    .select(PUBLIC_PROJECT_COLUMNS)
+    .eq('id', id)
+    .maybeSingle()
   return (data as Project | null) ?? null
 }
 

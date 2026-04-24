@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User, AuthError } from '@supabase/supabase-js'
-import { supabase, type Member } from './supabase'
+import { supabase, PUBLIC_MEMBER_COLUMNS, type Member } from './supabase'
 
 export type OAuthProvider = 'google' | 'github' | 'twitter' | 'linkedin_oidc'
 
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadMember = async (uid: string) => {
     const { data } = await supabase
       .from('members')
-      .select('*')
+      .select(PUBLIC_MEMBER_COLUMNS)
       .eq('id', uid)
       .maybeSingle()
     setMember(data as Member | null)
@@ -81,10 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('members')
         .update(patch)
         .eq('id', session.user.id)
-        .select('*')
+        .select(PUBLIC_MEMBER_COLUMNS)
         .single()
       if (error) return { error: error.message }
-      setMember(data as Member)
+      setMember(data as unknown as Member)
       return { error: null }
     },
     refreshMember: async () => {

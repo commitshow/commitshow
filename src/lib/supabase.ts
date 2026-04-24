@@ -50,10 +50,28 @@ export type Season = {
   created_at: string
 }
 
+// Column lists for .select() — keep email + creator_email OUT of the
+// public projections so we never leak through a stray SELECT *. The
+// DB-level column GRANT (20260425140000_email_column_grants.sql) makes
+// SELECT * on members / projects FAIL for anon + authenticated, so
+// explicit column lists are now required for those tables.
+export const PUBLIC_MEMBER_COLUMNS =
+  'id, display_name, avatar_url, tier, activity_points, monthly_votes_used, ' +
+  'votes_reset_at, creator_grade, total_graduated, avg_auto_score, ' +
+  'preferred_stack, created_at, updated_at, grade_recalc_at'
+
+export const PUBLIC_PROJECT_COLUMNS =
+  'id, created_at, github_url, live_url, description, lh_performance, ' +
+  'lh_accessibility, lh_best_practices, lh_seo, github_accessible, ' +
+  'score_auto, score_forecast, score_community, score_total, creator_grade, ' +
+  'verdict, claude_insight, tech_layers, unlock_level, status, ' +
+  'graduation_grade, season, graduated_at, media_published_at, creator_id, ' +
+  'creator_name, season_id, updated_at, project_name, last_analysis_at, ' +
+  'thumbnail_url, thumbnail_path, images'
+
 export type Member = {
   id: string
-  email: string
-  display_name: string | null
+  display_name: string | null       // always populated post 20260425130000 backfill
   avatar_url: string | null
   tier: ScoutTier
   activity_points: number
@@ -80,7 +98,10 @@ export type Project = {
   project_name: string
   creator_id: string | null
   creator_name: string | null
-  creator_email: string
+  // creator_email intentionally omitted · never surfaced to the client
+  // post 20260425140000_email_column_grants migration. Base column still
+  // exists in the DB (set by SubmitForm at insert time) but the anon +
+  // authenticated roles lack SELECT on it.
   season_id: string | null
   season: string
   github_url: string | null
