@@ -13,12 +13,12 @@ export async function fetchJustRegistered(): Promise<Project[]> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
   const { data } = await supabase
     .from('projects')
-    .select('*')
+    .select(PUBLIC_PROJECT_COLUMNS)
     .eq('status', 'active')
     .gte('created_at', sevenDaysAgo)
     .order('created_at', { ascending: false })
     .limit(LANE_LIMIT)
-  return (data ?? []) as Project[]
+  return (data ?? []) as unknown as Project[]
 }
 
 // 2) Climbing — projects whose latest snapshot has a positive score delta.
@@ -46,13 +46,13 @@ export async function fetchClimbing(): Promise<Array<Project & { delta: number }
 
   const { data: rows } = await supabase
     .from('projects')
-    .select('*')
+    .select(PUBLIC_PROJECT_COLUMNS)
     .in('id', projectIds)
     .eq('status', 'active')
 
   if (!rows) return []
 
-  return (rows as Project[])
+  return (rows as unknown as Project[])
     .map(p => ({ ...p, delta: bestByProject.get(p.id)?.delta ?? 0 }))
     .sort((a, b) => b.delta - a.delta)
     .slice(0, LANE_LIMIT)
@@ -62,12 +62,12 @@ export async function fetchClimbing(): Promise<Array<Project & { delta: number }
 export async function fetchGraduating(): Promise<Project[]> {
   const { data } = await supabase
     .from('projects')
-    .select('*')
+    .select(PUBLIC_PROJECT_COLUMNS)
     .eq('status', 'active')
     .gte('score_total', 70)
     .order('score_total', { ascending: false })
     .limit(LANE_LIMIT)
-  return (data ?? []) as Project[]
+  return (data ?? []) as unknown as Project[]
 }
 
 // Filtered + paginated feed for the main grid.

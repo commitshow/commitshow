@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase, type Project, type ProjectImage } from '../lib/supabase'
+import { supabase, PUBLIC_PROJECT_COLUMNS, type Project, type ProjectImage } from '../lib/supabase'
 import { ProjectImagesPicker } from './ProjectImagesPicker'
 
 interface Props {
@@ -70,14 +70,14 @@ export function EditProjectModal({ project, onClose, onSaved }: Props) {
       .from('projects')
       .update(patch)
       .eq('id', project.id)
-      .select('*')
+      .select(PUBLIC_PROJECT_COLUMNS)
       .single()
     if (err) {
       setError(err.message || 'Save failed.')
       setBusy(false)
       return
     }
-    onSaved(data as Project)
+    onSaved(data as unknown as Project)
   }
 
   return (
