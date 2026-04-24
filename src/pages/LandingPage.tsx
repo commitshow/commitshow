@@ -1,5 +1,6 @@
 import { Hero } from '../components/Hero'
 import { SeasonProgressBar } from '../components/SeasonProgress'
+import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
 import { useHeroStats } from '../lib/heroStats'
 
 // Simple monochrome line icons — inherit stroke from currentColor.
@@ -75,6 +76,9 @@ export function LandingPage() {
           <SeasonProgressBar />
         </div>
       </section>
+
+      {/* ── THIS WEEK IN COMMIT · P6 3-min digest hook ── */}
+      <ThisWeekHighlight />
 
       {/* ── HOW IT WORKS ── */}
       <section id="how" className="relative z-10 py-24 px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>

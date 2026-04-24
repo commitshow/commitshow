@@ -16,6 +16,7 @@ import { AsksPage } from './pages/AsksPage'
 import { OfficeHoursPage } from './pages/OfficeHoursPage'
 import { NewCommunityPostPage } from './pages/NewCommunityPostPage'
 import { CommunityPostDetailPage } from './pages/CommunityPostDetailPage'
+import { LeaderboardPage } from './pages/LeaderboardPage'
 import { Navigate } from 'react-router-dom'
 import './index.css'
 
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/library"          element={<LibraryPage />} />
         <Route path="/library/:id"      element={<LibraryDetailPage />} />
         <Route path="/scouts"           element={<ScoutsPage />} />
+        <Route path="/leaderboard"      element={<LeaderboardPage />} />
         <Route path="/rulebook"         element={<RulebookPage />} />
 
         {/* Creator Community (§13-B) */}

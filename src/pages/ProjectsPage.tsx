@@ -56,15 +56,38 @@ export function ProjectsPage() {
               </>
             )}
           </div>
-          {!user && (
+          <div className="flex items-center gap-2 flex-shrink-0">
             <NavLink
-              to="/submit"
-              className="font-mono text-[11px] font-medium tracking-wide px-3 py-1.5 flex-shrink-0"
-              style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}
+              to="/leaderboard"
+              className="font-mono text-[11px] tracking-wide px-3 py-1.5"
+              style={{
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '2px',
+                textDecoration: 'none',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)'
+                e.currentTarget.style.color = 'var(--gold-500)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'
+                e.currentTarget.style.color = 'var(--text-secondary)'
+              }}
             >
-              AUDITION →
+              MAP VIEW →
             </NavLink>
-          )}
+            {!user && (
+              <NavLink
+                to="/submit"
+                className="font-mono text-[11px] font-medium tracking-wide px-3 py-1.5"
+                style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}
+              >
+                AUDITION →
+              </NavLink>
+            )}
+          </div>
         </div>
 
         {/* ── Spotlight · horizontal scroll row · no big section header ── */}

@@ -8,6 +8,7 @@ import {
   ForecastQuotaError,
   AlreadyForecastedError,
 } from '../lib/forecast'
+import { EmotionTagRow } from './EmotionTagRow'
 
 interface ForecastModalProps {
   project: Project
@@ -189,13 +190,19 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
               <label className="block font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
                 RATIONALE (OPTIONAL · ≤140 CHARS)
               </label>
+              <EmotionTagRow
+                value={comment}
+                onChange={setComment}
+                maxLength={140}
+                className="mb-2"
+              />
               <textarea
                 value={comment}
                 maxLength={140}
                 onChange={e => setComment(e.target.value)}
                 disabled={!canSubmit}
                 rows={2}
-                placeholder="What signal moved your forecast?"
+                placeholder="What signal moved your forecast? A tag is enough — no essay needed."
                 className="w-full px-3 py-2 font-mono text-xs"
                 style={{ lineHeight: 1.5 }}
               />
