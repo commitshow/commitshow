@@ -84,6 +84,27 @@ export function IconGift(p: IconProps) {
   )
 }
 
+export function IconMenu(p: IconProps) {
+  // Hamburger — three short lines, mobile nav toggle.
+  return (
+    <BaseIcon {...p}>
+      <line x1="3" y1="6"  x2="21" y2="6"  />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </BaseIcon>
+  )
+}
+
+export function IconClose(p: IconProps) {
+  // × · close panel / dismiss
+  return (
+    <BaseIcon {...p}>
+      <line x1="6"  y1="6"  x2="18" y2="18" />
+      <line x1="18" y1="6"  x2="6"  y2="18" />
+    </BaseIcon>
+  )
+}
+
 export function IconBell(p: IconProps) {
   // Notifications — matches the rest of the line-icon family, no badge drawn.
   return (

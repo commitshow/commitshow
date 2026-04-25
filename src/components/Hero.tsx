@@ -74,7 +74,7 @@ export function Hero({ stats }: HeroProps) {
             : '—'
 
   return (
-    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 overflow-hidden">
+    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-4 md:px-6 pt-20 pb-16 overflow-hidden">
 
       {/* ── Background · static poster paints instantly, animated WebP
           swaps in once it's fully decoded. Poster is ~100KB; animated is
@@ -168,8 +168,8 @@ export function Hero({ stats }: HeroProps) {
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="stagger-5 flex gap-10 md:gap-14 justify-center flex-wrap">
+      {/* Stats · tighter gap on mobile so wrapped tiles still feel like one row */}
+      <div className="stagger-5 flex gap-6 md:gap-14 justify-center flex-wrap">
         <Tile
           label="PRODUCTS LIVE"
           value={fmtNum(stats.productsLive)}

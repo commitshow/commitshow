@@ -71,7 +71,7 @@ export function LandingPage() {
       <Hero stats={stats} />
 
       {/* ── SEASON PROGRESS ── */}
-      <section className="relative z-10 px-6 pt-4 pb-0">
+      <section className="relative z-10 px-4 md:px-6 pt-4 pb-0">
         <div className="max-w-5xl mx-auto">
           <SeasonProgressBar />
         </div>
@@ -81,10 +81,10 @@ export function LandingPage() {
       <ThisWeekHighlight />
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how" className="relative z-10 py-24 px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
+      <section id="how" className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// HOW IT WORKS</div>
-          <h2 className="font-display font-black text-4xl md:text-5xl mb-4 leading-tight">
+          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight">
             3-week league<br />Real graduation
           </h2>
           <p className="font-light max-w-md mb-14" style={{ color: 'rgba(248,245,238,0.45)' }}>
@@ -131,10 +131,10 @@ export function LandingPage() {
       </section>
 
       {/* ── GRADUATION ── */}
-      <section className="relative z-10 py-24 px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
+      <section className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// GRADUATION SYSTEM</div>
-          <h2 className="font-display font-black text-4xl md:text-5xl mb-12">
+          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-12">
             Graduate or retry
           </h2>
           <div className="grid md:grid-cols-4 gap-4">
@@ -156,10 +156,10 @@ export function LandingPage() {
       </section>
 
       {/* ── GRADES ── */}
-      <section id="grades" className="relative z-10 py-24 px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
+      <section id="grades" className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// CREATOR GRADES</div>
-          <h2 className="font-display font-black text-4xl md:text-5xl mb-4">Earn your grade</h2>
+          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">Earn your grade</h2>
           <p className="font-light max-w-md mb-10" style={{ color: 'rgba(248,245,238,0.45)' }}>
             Your cumulative graduation record determines your Creator Grade — visible on your profile, LinkedIn, and the Hall of Fame.
           </p>

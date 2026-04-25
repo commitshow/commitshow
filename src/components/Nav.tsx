@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { AuthModal } from './AuthModal'
-import { IconForecast } from './icons'
+import { IconForecast, IconMenu, IconClose } from './icons'
 import { NotificationBell } from './NotificationBell'
 import { SCOUT_MONTHLY_VOTES, type ScoutTier } from '../lib/supabase'
 
@@ -30,12 +30,21 @@ function daysUntilNextReset(): number {
   return Math.max(0, Math.ceil((next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
+const PRIMARY_LINKS: Array<{ to: string; label: string }> = [
+  { to: '/projects',  label: 'Projects'  },
+  { to: '/community', label: 'Community' },
+  { to: '/library',   label: 'Library'   },
+  { to: '/scouts',    label: 'Scouts'    },
+]
+
 export function Nav() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)        // desktop profile dropdown
+  const [mobileOpen, setMobileOpen] = useState(false)    // mobile slide-down panel
   const menuRef = useRef<HTMLDivElement>(null)
   const { user, member, signOut } = useAuth()
 
@@ -53,7 +62,20 @@ export function Nav() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [menuOpen])
 
+  // Close mobile panel on route change so it never sticks across navigation.
+  useEffect(() => { setMobileOpen(false) }, [location.pathname])
+
+  // Lock body scroll while the mobile panel is open — full-height overlay
+  // shouldn't let the page beneath scroll.
+  useEffect(() => {
+    if (!mobileOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [mobileOpen])
+
   const handleApply = () => {
+    setMobileOpen(false)
     if (!user) { setAuthMode('signup'); setAuthOpen(true); return }
     navigate('/submit')
   }
@@ -81,43 +103,33 @@ export function Nav() {
   return (
     <>
       <nav
-        className="fixed top-0 left-0 right-0 z-50 flex items-center px-8 h-16 transition-all duration-300"
+        className="fixed top-0 left-0 right-0 z-50 flex items-center px-4 md:px-8 h-16 transition-all duration-300"
         style={{
-          background: scrolled ? 'rgba(6, 12, 26, 0.92)' : 'transparent',
-          backdropFilter: scrolled ? 'blur(16px)' : 'none',
-          borderBottom: scrolled ? '1px solid rgba(240,192,64,0.1)' : 'none',
+          background: scrolled || mobileOpen ? 'rgba(6, 12, 26, 0.95)' : 'transparent',
+          backdropFilter: scrolled || mobileOpen ? 'blur(16px)' : 'none',
+          borderBottom: scrolled || mobileOpen ? '1px solid rgba(240,192,64,0.1)' : 'none',
         }}
       >
         {/* Left · Logo */}
         <div className="flex-1 flex items-center">
-          <NavLink to="/" className="flex items-center" style={{ textDecoration: 'none' }}>
+          <NavLink to="/" className="flex items-center" style={{ textDecoration: 'none' }} onClick={() => setMobileOpen(false)}>
             <span className="font-display font-bold text-xl tracking-tight" style={{ color: 'var(--cream)' }}>
               Commit<span style={{ color: 'var(--gold-500)' }}>.Show</span>
             </span>
           </NavLink>
         </div>
 
-        {/* Center · 4 primary menus */}
+        {/* Center · 4 primary menus · desktop only */}
         <div className="hidden md:flex items-center gap-8 flex-shrink-0">
-          <NavLink to="/projects" className="text-sm font-mono tracking-wide"
-            style={({ isActive }) => linkStyle(isActive)}>
-            Projects
-          </NavLink>
-          <NavLink to="/community" className="text-sm font-mono tracking-wide"
-            style={({ isActive }) => linkStyle(isActive)}>
-            Community
-          </NavLink>
-          <NavLink to="/library" className="text-sm font-mono tracking-wide"
-            style={({ isActive }) => linkStyle(isActive)}>
-            Library
-          </NavLink>
-          <NavLink to="/scouts" className="text-sm font-mono tracking-wide"
-            style={({ isActive }) => linkStyle(isActive)}>
-            Scouts
-          </NavLink>
+          {PRIMARY_LINKS.map(link => (
+            <NavLink key={link.to} to={link.to} className="text-sm font-mono tracking-wide"
+              style={({ isActive }) => linkStyle(isActive)}>
+              {link.label}
+            </NavLink>
+          ))}
         </div>
 
-        {/* Right · Audition CTA + Auth */}
+        {/* Right · Audition CTA + Auth · desktop */}
         <div className="flex-1 hidden md:flex items-center justify-end gap-4">
           <button
             onClick={handleApply}
@@ -136,10 +148,8 @@ export function Nav() {
             Audition
           </button>
 
-          {/* Notification bell · auth-only */}
           {user && <NotificationBell recipientId={user.id} />}
 
-          {/* Auth area */}
           {!user ? (
             <button
               onClick={() => { setAuthMode('signin'); setAuthOpen(true) }}
@@ -196,7 +206,6 @@ export function Nav() {
                     </div>
                   </div>
 
-                  {/* Forecast wallet — prominent so Scouts know how many casts remain */}
                   <NavLink
                     to="/projects"
                     onClick={() => setMenuOpen(false)}
@@ -230,36 +239,9 @@ export function Nav() {
                       </div>
                     )}
                   </NavLink>
-                  <NavLink
-                    to="/me"
-                    onClick={() => setMenuOpen(false)}
-                    className="block w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
-                    style={{ color: 'rgba(248,245,238,0.7)', textDecoration: 'none' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,245,238,0.7)')}
-                  >
-                    My profile
-                  </NavLink>
-                  <NavLink
-                    to="/projects"
-                    onClick={() => setMenuOpen(false)}
-                    className="block w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
-                    style={{ color: 'rgba(248,245,238,0.7)', textDecoration: 'none' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,245,238,0.7)')}
-                  >
-                    Browse projects
-                  </NavLink>
-                  <NavLink
-                    to="/rulebook"
-                    onClick={() => setMenuOpen(false)}
-                    className="block w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
-                    style={{ color: 'rgba(248,245,238,0.7)', textDecoration: 'none' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,245,238,0.7)')}
-                  >
-                    Judging rulebook
-                  </NavLink>
+                  <DropdownLink to="/me" onSelect={() => setMenuOpen(false)}>My profile</DropdownLink>
+                  <DropdownLink to="/projects" onSelect={() => setMenuOpen(false)}>Browse projects</DropdownLink>
+                  <DropdownLink to="/rulebook" onSelect={() => setMenuOpen(false)}>Judging rulebook</DropdownLink>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false) }}
                     className="w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
@@ -274,9 +256,179 @@ export function Nav() {
             </div>
           )}
         </div>
+
+        {/* Right · mobile (bell + hamburger) */}
+        <div className="flex md:hidden items-center gap-2">
+          {user && <NotificationBell recipientId={user.id} />}
+          <button
+            onClick={() => setMobileOpen(o => !o)}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            className="flex items-center justify-center"
+            style={{
+              width: 36, height: 36,
+              background: mobileOpen ? 'rgba(240,192,64,0.12)' : 'transparent',
+              color: mobileOpen ? 'var(--gold-500)' : 'var(--cream)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '2px',
+              cursor: 'pointer',
+            }}
+          >
+            {mobileOpen ? <IconClose size={18} /> : <IconMenu size={18} />}
+          </button>
+        </div>
       </nav>
+
+      {/* Mobile slide-down panel · slides from below the nav bar, fills viewport */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-x-0 z-40 overflow-y-auto"
+          style={{
+            top: 64,
+            bottom: 0,
+            background: 'rgba(6, 12, 26, 0.98)',
+            backdropFilter: 'blur(16px)',
+            borderTop: '1px solid rgba(240,192,64,0.1)',
+          }}
+        >
+          <div className="flex flex-col px-6 py-6 gap-1">
+            {PRIMARY_LINKS.map(link => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end
+                className={({ isActive }) => `font-display font-bold text-2xl py-3 transition-colors`}
+                style={({ isActive }) => ({
+                  color: isActive ? 'var(--gold-500)' : 'var(--cream)',
+                  textDecoration: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                })}
+              >
+                {link.label}
+              </NavLink>
+            ))}
+
+            {/* Audition CTA — full width on mobile so it's easy to tap */}
+            <button
+              onClick={handleApply}
+              className="mt-6 w-full py-4 font-mono text-sm font-medium tracking-wide"
+              style={{
+                background: 'var(--gold-500)',
+                color: 'var(--navy-900)',
+                border: 'none',
+                borderRadius: '2px',
+                cursor: 'pointer',
+              }}
+            >
+              Audition your product →
+            </button>
+
+            {/* Auth area · mobile */}
+            {!user ? (
+              <button
+                onClick={() => { setMobileOpen(false); setAuthMode('signin'); setAuthOpen(true) }}
+                className="mt-3 w-full py-3 font-mono text-xs tracking-widest"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--cream)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                }}
+              >
+                SIGN IN
+              </button>
+            ) : (
+              <>
+                {/* Profile summary */}
+                <div className="mt-6 px-3 py-3 flex items-center gap-3" style={{
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '2px',
+                }}>
+                  <span
+                    className="flex items-center justify-center w-9 h-9 font-mono text-sm font-bold overflow-hidden"
+                    style={{ background: member?.avatar_url ? 'var(--navy-800)' : tierColor, color: 'var(--navy-900)', borderRadius: '2px' }}
+                  >
+                    {member?.avatar_url ? (
+                      <img src={member.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                    ) : initial}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display font-bold text-sm truncate" style={{ color: 'var(--gold-500)' }}>
+                      {member?.display_name || user.email?.split('@')[0] || 'Member'}
+                    </div>
+                    <div className="font-mono text-[10px] flex gap-2" style={{ color: 'var(--text-muted)' }}>
+                      <span style={{ color: tierColor }}>{tier}</span>
+                      <span>·</span>
+                      <span>{grade}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Forecast wallet card */}
+                <div className="mt-2 px-3 py-2.5" style={{
+                  background: remaining === 0 ? 'rgba(255,255,255,0.02)' : `${tierColor}10`,
+                  border: `1px solid ${remaining === 0 ? 'rgba(255,255,255,0.06)' : `${tierColor}40`}`,
+                  borderRadius: '2px',
+                }}>
+                  <div className="flex justify-between mb-0.5">
+                    <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+                      FORECAST WALLET
+                    </span>
+                    <span className="font-mono text-[11px] tabular-nums" style={{ color: voteColor }}>
+                      <IconForecast size={11} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: 4 }} />
+                      <strong>{remaining}</strong>
+                      <span style={{ color: 'var(--text-muted)' }}> / {quota}</span>
+                    </span>
+                  </div>
+                  <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
+                    {remaining === 0 ? `Depleted · refills in ${daysUntilNextReset()}d` : 'Cast on any auditioning project'}
+                  </div>
+                </div>
+
+                <NavLink
+                  to="/me"
+                  className="mt-2 py-3 font-mono text-xs tracking-widest"
+                  style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  MY PROFILE
+                </NavLink>
+                <NavLink
+                  to="/rulebook"
+                  className="py-3 font-mono text-xs tracking-widest"
+                  style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  JUDGING RULEBOOK
+                </NavLink>
+                <button
+                  onClick={() => { signOut(); setMobileOpen(false) }}
+                  className="mt-3 w-full py-3 font-mono text-xs tracking-widest text-left"
+                  style={{ background: 'none', color: 'var(--scarlet)', border: 'none', cursor: 'pointer' }}
+                >
+                  SIGN OUT
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
     </>
+  )
+}
+
+function DropdownLink({ to, onSelect, children }: { to: string; onSelect: () => void; children: React.ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onSelect}
+      className="block w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
+      style={{ color: 'rgba(248,245,238,0.7)', textDecoration: 'none' }}
+      onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
+      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,245,238,0.7)')}
+    >
+      {children}
+    </NavLink>
   )
 }

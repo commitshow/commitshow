@@ -105,12 +105,12 @@ export function ProfilePage() {
   }
 
   return (
-    <section className="relative z-10 pt-20 pb-16 px-6 min-h-screen">
+    <section className="relative z-10 pt-20 pb-16 px-4 sm:px-6 min-h-screen">
       <div className="max-w-5xl mx-auto">
         {/* ── Header ── */}
-        <header className="card-navy p-6 mb-6" style={{ borderRadius: '2px' }}>
+        <header className="card-navy p-4 sm:p-6 mb-6" style={{ borderRadius: '2px' }}>
           <div className="flex flex-wrap items-start gap-6">
-            <div className="flex-1 min-w-[280px]">
+            <div className="flex-1 min-w-0 sm:min-w-[280px]">
               <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
                 // MEMBER PROFILE
               </div>
@@ -189,7 +189,7 @@ export function ProfilePage() {
             </div>
 
             {/* ── Three-axis standings ── */}
-            <div className="flex-1 min-w-[260px]">
+            <div className="flex-1 min-w-0 sm:min-w-[260px]">
               <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// YOUR STANDINGS</div>
               <div className="space-y-2">
                 <StandingRow

@@ -213,7 +213,7 @@ export function LibraryPage() {
     !!search.trim()
 
   return (
-    <section className="relative z-10 pt-20 pb-16 px-6 min-h-screen">
+    <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 min-h-screen">
       <div className="max-w-5xl mx-auto">
         {/* ── Header ──────────────────────────────── */}
         <header className="mb-5 flex items-start justify-between gap-4 flex-wrap">
@@ -323,7 +323,7 @@ export function LibraryPage() {
 
         {/* ── Search + stack match ───────────────── */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <div className="flex-1 min-w-[260px] relative">
+          <div className="flex-1 min-w-0 sm:min-w-[260px] relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>⌕</span>
             <input
               type="search"

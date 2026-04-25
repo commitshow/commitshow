@@ -186,7 +186,7 @@ export function ProjectDetailPage() {
   const roundCount = timeline.length
 
   return (
-    <section className="relative z-10 pt-20 pb-16 px-6 min-h-screen">
+    <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 min-h-screen">
       <div className="max-w-5xl mx-auto">
         {/* Back link */}
         <button
@@ -228,7 +228,7 @@ export function ProjectDetailPage() {
                 <div className="w-full h-full flex items-center justify-center font-mono text-xs" style={{ color: 'rgba(248,245,238,0.25)' }}>NO IMAGE</div>
               )}
             </div>
-            <div className="p-6 flex flex-col gap-4 justify-between">
+            <div className="p-4 sm:p-6 flex flex-col gap-4 justify-between">
               <div>
                 <div className="font-mono text-[10px] tracking-widest mb-2 flex items-center gap-2 flex-wrap" style={{ color: 'var(--gold-500)' }}>
                   <span>PROJECT · {(project.status === 'retry' ? 'ROOKIE CIRCLE' : project.status.toUpperCase())}</span>
@@ -605,7 +605,7 @@ function SectionNav({
 }) {
   return (
     <div
-      className="sticky z-20 mb-8 -mx-6 px-6 py-2.5"
+      className="sticky z-20 mb-8 -mx-4 md:-mx-6 px-4 md:px-6 py-2.5"
       style={{
         top: '64px',
         background: 'rgba(6,12,26,0.85)',
@@ -613,7 +613,7 @@ function SectionNav({
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}
     >
-      <div className="max-w-5xl mx-auto flex items-center gap-1 overflow-x-auto">
+      <div className="max-w-5xl mx-auto flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
         {sections.map(s => {
           const isActive = active === s.id
           return (
