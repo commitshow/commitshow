@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { Nav } from './components/Nav'
 import { ScrollToTop } from './components/ScrollToTop'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { LandingPage } from './pages/LandingPage'  // eager — first paint target
 import './index.css'
 
@@ -40,8 +41,9 @@ export default function App() {
       <ScrollToTop />
       <Nav />
 
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
+      <ErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
           <Route path="/"                 element={<LandingPage />} />
           <Route path="/projects"         element={<ProjectsPage />} />
           <Route path="/projects/:id"     element={<ProjectDetailPage />} />
@@ -63,8 +65,9 @@ export default function App() {
           <Route path="/community/:typeSegment/new"    element={<NewCommunityPostPage />} />
           <Route path="/community/:typeSegment/:id"    element={<CommunityPostDetailPage />} />
           <Route path="*"                 element={<LandingPage />} />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
 
       <footer className="relative z-10 py-10 px-6 text-center" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="font-display font-bold text-lg mb-2" style={{ color: 'var(--gold-500)' }}>

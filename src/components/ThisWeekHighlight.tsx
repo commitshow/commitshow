@@ -34,7 +34,7 @@ export function ThisWeekHighlight() {
         .from('analysis_snapshots')
         .select(`
           project_id, created_at, score_total, score_total_delta,
-          project:projects!analysis_snapshots_project_id_fkey(id, project_name, thumbnail_url)
+          project:projects!analysis_snapshots_project_id_fkey(id, project_name, thumbnail_url, status)
         `)
         .gte('created_at', since)
         .not('score_total_delta', 'is', null)
@@ -50,10 +50,13 @@ export function ThisWeekHighlight() {
           created_at:        string
           score_total:       number
           score_total_delta: number
-          project:           { id: string; project_name: string; thumbnail_url: string | null } | Array<{ id: string; project_name: string; thumbnail_url: string | null }>
+          project:           { id: string; project_name: string; thumbnail_url: string | null; status: string | null } | Array<{ id: string; project_name: string; thumbnail_url: string | null; status: string | null }>
         }
         const proj = Array.isArray(r.project) ? r.project[0] : r.project
         if (!proj) return
+        // Skip CLI preview shadows · they didn't enter the season, so they
+        // shouldn't sit at the top of "this week's movers" on the landing.
+        if (proj.status === 'preview') return
         const mover: TopMover = {
           projectId:    r.project_id,
           projectName:  proj.project_name,
