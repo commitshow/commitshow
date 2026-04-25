@@ -198,19 +198,18 @@ export function Hero({ stats }: HeroProps) {
 
 // ── Two-stage hero background ─────────────────────────────────
 // Stage 1 (instant · ~12KB): static WebP poster, the first frame of the
-//   animation. Shipped with `fetchpriority="high"` + preload in index.html
-//   so it's the LCP candidate.
-// Stage 2 (deferred · multi-MB): animated WebP loaded via an Image() after
-//   the page is idle. Swapped in only once decoded → no jank, no layout
-//   shift. Slow connections (4g downlink < 1.5 Mbps, save-data on, or
-//   reduced motion) skip it entirely and keep the still image.
+//   animation. Preloaded in index.html so it's the LCP candidate.
+// Stage 2 (deferred): hardware-decoded <video> with mp4 + webm sources,
+//   triggered after the page is idle. Animated WebP was previously
+//   software-decoded on the main thread → stutter on mid-range phones.
+//   The <video> element offloads to GPU and plays smoothly at 15fps.
+//   Slow connections (Save-Data, 2g, downlink < 1.5 Mbps) and
+//   prefers-reduced-motion users keep the still poster.
 function HeroBackground() {
-  const [animatedReady, setAnimatedReady] = useState(false)
+  const [showVideo, setShowVideo] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-
-    // Respect user preferences and network hints.
     const mediaMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
     if (mediaMotion.matches) return
 
@@ -219,16 +218,10 @@ function HeroBackground() {
     if (nav?.effectiveType && /(^|-)2g$/.test(nav.effectiveType)) return
     if (typeof nav?.downlink === 'number' && nav.downlink < 1.5) return
 
-    const load = () => {
-      const img = new Image()
-      img.decoding = 'async'
-      img.onload = () => setAnimatedReady(true)
-      img.src = '/hero-bg.min.webp'
-    }
-
+    const arm = () => setShowVideo(true)
     const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback
-    if (ric) ric(load, { timeout: 2500 })
-    else setTimeout(load, 800)
+    if (ric) ric(arm, { timeout: 2500 })
+    else setTimeout(arm, 800)
   }, [])
 
   return (
@@ -242,12 +235,15 @@ function HeroBackground() {
         className="absolute inset-0 w-full h-full pointer-events-none select-none"
         style={{ objectFit: 'cover', zIndex: -2 }}
       />
-      {animatedReady && (
-        <img
-          src="/hero-bg.min.webp"
-          alt=""
+      {showVideo && (
+        <video
           aria-hidden="true"
-          decoding="async"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          poster="/hero-poster.webp"
           className="absolute inset-0 w-full h-full pointer-events-none select-none"
           style={{
             objectFit: 'cover',
@@ -255,7 +251,11 @@ function HeroBackground() {
             opacity: 1,
             animation: 'fadeIn 600ms ease-out',
           }}
-        />
+        >
+          {/* WebM first for Chrome/Firefox · MP4 for Safari/iOS */}
+          <source src="/hero-bg.webm" type="video/webm" />
+          <source src="/hero-bg.mp4"  type="video/mp4"  />
+        </video>
       )}
     </>
   )

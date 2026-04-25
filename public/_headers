@@ -13,6 +13,12 @@
 /*.webp
   Cache-Control: public, max-age=604800, must-revalidate
 
+/*.mp4
+  Cache-Control: public, max-age=604800, must-revalidate
+
+/*.webm
+  Cache-Control: public, max-age=604800, must-revalidate
+
 /*.svg
   Cache-Control: public, max-age=604800, must-revalidate
 
