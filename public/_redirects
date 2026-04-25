@@ -1,0 +1,8 @@
+# Cloudflare Pages redirects.
+# https://developers.cloudflare.com/pages/configuration/redirects/
+
+# The legacy 5.6 MB animated WebP is no longer in the deploy, but old
+# browser caches and Cloudflare edge still hold pages requesting it.
+# Send those requests to the 12 KB static poster instead — same first
+# frame, instant download, no stutter — until those caches age out.
+/hero-bg.min.webp  /hero-poster.webp  301
