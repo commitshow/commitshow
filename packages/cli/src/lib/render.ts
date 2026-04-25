@@ -335,6 +335,34 @@ export function renderJson(view: AuditView): string {
   return JSON.stringify(toAgentShape(view), null, 2)
 }
 
+// ── Upsell panel (CLI-only · appended to preview audits) ─────────────
+// Shown after a preview audit render so Creator sees what a real audition
+// unlocks. Intentionally NOT shown for registered projects — they already
+// have access to everything listed here.
+
+export function renderUpsell(): string {
+  const lines: string[] = []
+  const bar = '─'.repeat(58)
+  lines.push('  ' + c.muted('┌' + bar + '┐'))
+  lines.push('  ' + c.muted('│ ') + c.bold(c.gold('Preview')) + c.muted(' · ') + c.cream('not entered in the season') + ' '.repeat(58 - 35) + c.muted('│'))
+  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+  lines.push('  ' + c.muted('│ ') + c.cream('Audition to unlock:') + ' '.repeat(58 - 20) + c.muted('│'))
+  const items = [
+    'Scout forecasts · human verdicts (30% of score)',
+    'Season ranking  · top 20% graduate each 3-week cycle',
+    'Hall of Fame    · permanent archive + public badge',
+    'Live applauds   · notifications when reviewers react',
+    'Recommit loop   · weekly delta + trajectory share card',
+  ]
+  for (const it of items) {
+    lines.push('  ' + c.muted('│ ') + c.teal('→ ') + c.cream(pad(it, 54)) + c.muted('│'))
+  }
+  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+  lines.push('  ' + c.muted('│ ') + c.gold('→ https://commit.show/submit') + ' '.repeat(58 - 30) + c.muted('│'))
+  lines.push('  ' + c.muted('└' + bar + '┘'))
+  return lines.join('\n')
+}
+
 export function writeAuditJson(dir: string | undefined, json: string): string | null {
   if (!dir) return null
   try {

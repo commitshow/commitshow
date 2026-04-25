@@ -124,6 +124,77 @@ export async function fetchStanding(projectId: string): Promise<StandingRow | nu
   return rows[0] ?? null
 }
 
+// ── Preview audit for unregistered repos ─────────────────────────────
+//
+// Calls the audit-preview Edge Function. Returns the same {project,snapshot,
+// standing} envelope the CLI renders, plus `is_preview` and `cache_hit` hints.
+// Full Claude audit depth is preserved — the difference from a real audition
+// is that preview rows don't compete in a season, don't earn applauds, and
+// don't show up on the leaderboard.
+
+export interface PreviewEnvelope {
+  project:    ProjectRow
+  snapshot:   SnapshotRow | null
+  standing:   null
+  is_preview: boolean
+  cache_hit:  boolean
+}
+
+export interface PreviewPending {
+  project_id:    string
+  status:        'running'
+  is_preview:    boolean
+  cache_hit:     boolean
+  poll_after_ms: number
+}
+
+export interface PreviewError {
+  error:   string
+  message?: string
+  limit?:  number
+  count?:  number
+}
+
+/** Kicks off (or returns cached) a preview audit. 202 → poll; 200 → done. */
+export async function runPreviewAudit(
+  githubUrl: string,
+  liveUrl?: string,
+): Promise<PreviewEnvelope | PreviewPending | PreviewError> {
+  const res = await fetch(`${baseUrl()}/functions/v1/audit-preview`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ github_url: githubUrl, live_url: liveUrl }),
+  })
+  const body = await res.json().catch(() => ({ error: 'invalid_json' }))
+  if (res.status === 202) return body as PreviewPending
+  if (!res.ok) return body as PreviewError
+  return body as PreviewEnvelope
+}
+
+/** Poll a preview job until the snapshot lands or we time out. */
+export async function waitForPreviewSnapshot(
+  projectId: string,
+  timeoutMs = 180_000,
+  intervalMs = 4_000,
+): Promise<PreviewEnvelope | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const project = await findProjectById(projectId)
+    if (project && project.last_analysis_at) {
+      const snapshot = await fetchLatestSnapshot(projectId)
+      return {
+        project,
+        snapshot,
+        standing: null,
+        is_preview: project.status === 'preview',
+        cache_hit: false,
+      }
+    }
+    await new Promise(r => setTimeout(r, intervalMs))
+  }
+  return null
+}
+
 // ── Trigger reaudit (requires member token · V1 backend) ─────────────
 
 export async function triggerReaudit(projectId: string): Promise<SnapshotRow> {
