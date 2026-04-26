@@ -112,7 +112,8 @@ interface GitHubInfo {
     mcp_server_files: number             // files matching mcp/mcp-server patterns
     has_claude_md: boolean
     has_prd_docs: boolean                // prd*.md, spec*.md in repo root/docs
-    has_rls_policies: boolean            // "enable row level security" in any .sql
+    has_rls_policies: boolean            // "enable row level security" OR "create policy" in any sampled .sql
+    rls_policy_count: number             // count of "create policy" definitions across sampled files
     test_files: number                   // *.test.* / *.spec.*
     uses_web3_libs: string[]             // ['viem', 'ethers', 'wagmi', ...]
     uses_ai_libs: string[]               // ['@anthropic-ai/sdk', 'openai', ...]
@@ -145,7 +146,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     signals: {
       solidity_files: 0, edge_functions: 0, sql_files: 0, create_table_count: 0,
       react_components: 0, page_files: 0, mcp_server_files: 0,
-      has_claude_md: false, has_prd_docs: false, has_rls_policies: false,
+      has_claude_md: false, has_prd_docs: false, has_rls_policies: false, rls_policy_count: 0,
       test_files: 0, uses_web3_libs: [], uses_ai_libs: [], uses_mcp_libs: [],
       package_deps_count: 0,
     },
@@ -245,15 +246,35 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     .slice(0, 20)
     .map(c => ({ path: c.path, sha: (blobs.find(b => b.path === c.path) as { sha?: string } | undefined)?.sha ?? null }))
 
-  // Parse .sql files for CREATE TABLE and RLS markers
+  // Parse .sql files for CREATE TABLE and RLS markers.
+  // Sample up to 12 files (GitHub API budget allows ~5000/hr with token),
+  // and prioritise files most likely to define security: schema.sql first,
+  // then any file whose path mentions rls / policy / security / auth.
   let createTableCount = 0
   let hasRls = false
-  const sqlSample = sqlFiles.slice(0, 3)  // limit fetches
+  let rlsPolicyCount = 0
+  const sqlPriority = (p: string): number => {
+    const name = p.toLowerCase()
+    if (/(^|\/)schema\.sql$/.test(name)) return 0   // schema.sql wins
+    if (/(rls|polic|security|auth)/.test(name))   return 1
+    return 2
+  }
+  const sqlSample = sqlFiles
+    .map(p => ({ p, r: sqlPriority(p) }))
+    .sort((a, b) => a.r - b.r || a.p.length - b.p.length)
+    .slice(0, 12)
+    .map(x => x.p)
   for (const sql of sqlSample) {
     const text = await ghText(`/contents/${encodeURI(sql)}?ref=${defBranch}`)
     if (!text) continue
     createTableCount += (text.match(/create\s+table\s+(if\s+not\s+exists\s+)?[a-zA-Z_]/gi) || []).length
+    // Two signals — `enable row level security` (the toggle) and
+    // `create policy` (the actual policy definition). Either one means
+    // the project takes RLS seriously; counting both gives Claude
+    // intensity, not just a boolean.
     if (/enable\s+row\s+level\s+security/i.test(text)) hasRls = true
+    if (/create\s+policy\b/i.test(text))               hasRls = true
+    rlsPolicyCount += (text.match(/create\s+policy\b/gi) || []).length
   }
 
   // Parse package.json for deps
@@ -362,6 +383,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_claude_md: hasClaudeMd,
       has_prd_docs: hasPrdDocs,
       has_rls_policies: hasRls,
+      rls_policy_count: rlsPolicyCount,
       test_files: testFiles.length,
       uses_web3_libs: web3Libs,
       uses_ai_libs: aiLibs,
