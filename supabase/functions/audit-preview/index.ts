@@ -114,16 +114,45 @@ async function bumpAndCheck(
   return { ok: count <= limit, count, limit }
 }
 
+// Quota breakdown surfaced to clients on every response. CLI uses this to
+// show "remaining today" hints + countdown to reset.
+interface RateQuota {
+  reset_at:        string                          // ISO 8601 · next UTC midnight
+  ip:     { count: number; limit: number; remaining: number; tier: 'anon' | 'authed' }
+  url:    { count: number; limit: number; remaining: number }
+  global: { count: number; limit: number; remaining: number }
+}
+
 interface RateLimitDecision {
-  ok:     true
+  ok:    true
+  quota: RateQuota
 }
 
 interface RateLimitDeny {
-  ok:     false
-  reason: 'ip_cap' | 'url_cap' | 'global_cap'
+  ok:      false
+  reason:  'ip_cap' | 'url_cap' | 'global_cap'
   message: string
   limit:   number
   count:   number
+  quota:   RateQuota
+}
+
+function nextResetIso(): string {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+  return next.toISOString()
+}
+
+// Read current count without bumping — used when we want to surface remaining
+// quota without burning budget (e.g., cache hits).
+async function peekCount(admin: any, key: string, today: string): Promise<number> {
+  const { data } = await admin
+    .from('preview_rate_limits')
+    .select('count')
+    .eq('ip_hash', key)
+    .eq('day', today)
+    .maybeSingle()
+  return data?.count ?? 0
 }
 
 // 3-tier rate limit. The IP cap is enforced on every request (cheap defence
@@ -136,25 +165,56 @@ async function enforceRateLimit(
   willCostClaude: boolean,
 ): Promise<RateLimitDecision | RateLimitDeny> {
   const today = new Date().toISOString().slice(0, 10)
-  const ipLimit = isAuthed(req) ? RATE_AUTHED_PER_IP : RATE_ANON_PER_IP
+  const reset_at = nextResetIso()
+  const authed = isAuthed(req)
+  const ipLimit = authed ? RATE_AUTHED_PER_IP : RATE_ANON_PER_IP
 
   // 1. IP cap — always
   const ip = await bumpAndCheck(admin, ipKey(req), ipLimit, today)
   if (!ip.ok) {
+    const urlPeek    = willCostClaude ? await peekCount(admin, urlKey(slug), today) : 0
+    const globalPeek = willCostClaude ? await peekCount(admin, 'global', today)      : 0
     return {
       ok: false, reason: 'ip_cap', limit: ip.limit, count: ip.count,
-      message: `Daily limit hit (${ip.limit} audits/day per IP). Try again tomorrow${isAuthed(req) ? '' : ' or sign in for a higher cap'}.`,
+      message: `Daily limit hit (${ip.limit} audits/day per IP).`,
+      quota: {
+        reset_at,
+        ip:     { count: ip.count, limit: ip.limit, remaining: 0, tier: authed ? 'authed' : 'anon' },
+        url:    { count: urlPeek,    limit: RATE_PER_URL_GLOBAL, remaining: Math.max(0, RATE_PER_URL_GLOBAL - urlPeek) },
+        global: { count: globalPeek, limit: RATE_GLOBAL_DAILY,   remaining: Math.max(0, RATE_GLOBAL_DAILY   - globalPeek) },
+      },
     }
   }
 
-  if (!willCostClaude) return { ok: true }
+  if (!willCostClaude) {
+    // Cache hit — only IP was bumped. Peek other counters so the client can
+    // still show full quota state.
+    const urlPeek    = await peekCount(admin, urlKey(slug), today)
+    const globalPeek = await peekCount(admin, 'global', today)
+    return {
+      ok: true,
+      quota: {
+        reset_at,
+        ip:     { count: ip.count, limit: ip.limit, remaining: Math.max(0, ip.limit - ip.count), tier: authed ? 'authed' : 'anon' },
+        url:    { count: urlPeek,    limit: RATE_PER_URL_GLOBAL, remaining: Math.max(0, RATE_PER_URL_GLOBAL - urlPeek) },
+        global: { count: globalPeek, limit: RATE_GLOBAL_DAILY,   remaining: Math.max(0, RATE_GLOBAL_DAILY   - globalPeek) },
+      },
+    }
+  }
 
   // 2. Per-URL global cap — only when about to spend
   const url = await bumpAndCheck(admin, urlKey(slug), RATE_PER_URL_GLOBAL, today)
   if (!url.ok) {
+    const globalPeek = await peekCount(admin, 'global', today)
     return {
       ok: false, reason: 'url_cap', limit: url.limit, count: url.count,
-      message: `This repo has been audited ${url.count} times today (cap ${url.limit}). The cached result is still valid for 7 days · try again tomorrow if you want a fresh re-audit.`,
+      message: `This repo has been audited ${url.count} times today (cap ${url.limit}). Cached results stay valid for 7 days.`,
+      quota: {
+        reset_at,
+        ip:     { count: ip.count, limit: ip.limit, remaining: Math.max(0, ip.limit - ip.count), tier: authed ? 'authed' : 'anon' },
+        url:    { count: url.count, limit: url.limit, remaining: 0 },
+        global: { count: globalPeek, limit: RATE_GLOBAL_DAILY, remaining: Math.max(0, RATE_GLOBAL_DAILY - globalPeek) },
+      },
     }
   }
 
@@ -163,11 +223,25 @@ async function enforceRateLimit(
   if (!global.ok) {
     return {
       ok: false, reason: 'global_cap', limit: global.limit, count: global.count,
-      message: `commit.show has hit its daily audit cap. Cached results still work · fresh audits resume in a few hours.`,
+      message: `commit.show has hit its daily audit cap. Cached results still work · fresh audits resume after reset.`,
+      quota: {
+        reset_at,
+        ip:     { count: ip.count, limit: ip.limit, remaining: Math.max(0, ip.limit - ip.count), tier: authed ? 'authed' : 'anon' },
+        url:    { count: url.count, limit: url.limit, remaining: Math.max(0, url.limit - url.count) },
+        global: { count: global.count, limit: global.limit, remaining: 0 },
+      },
     }
   }
 
-  return { ok: true }
+  return {
+    ok: true,
+    quota: {
+      reset_at,
+      ip:     { count: ip.count,     limit: ip.limit,     remaining: Math.max(0, ip.limit     - ip.count),     tier: authed ? 'authed' : 'anon' },
+      url:    { count: url.count,    limit: url.limit,    remaining: Math.max(0, url.limit    - url.count) },
+      global: { count: global.count, limit: global.limit, remaining: Math.max(0, global.limit - global.count) },
+    },
+  }
 }
 
 Deno.serve(async (req) => {
@@ -213,11 +287,19 @@ Deno.serve(async (req) => {
 
   // Rate limit · IP always counted, URL+global only on cache miss
   const rl = await enforceRateLimit(admin, req, canon.slug, /*willCostClaude*/ !isCacheHit)
-  if (!rl.ok) return json({ error: 'rate_limited', reason: rl.reason, message: rl.message, limit: rl.limit, count: rl.count }, 429)
+  if (!rl.ok) return json({
+    error:   'rate_limited',
+    reason:  rl.reason,
+    message: rl.message,
+    limit:   rl.limit,
+    count:   rl.count,
+    quota:   rl.quota,
+  }, 429)
 
   // Cache hit — return immediately
   if (isCacheHit && projectId) {
-    return json(await buildEnvelope(admin, projectId, true))
+    const env = await buildEnvelope(admin, projectId, true)
+    return json({ ...env, quota: rl.quota })
   }
 
   // Cache miss — create shadow row if needed
@@ -255,6 +337,7 @@ Deno.serve(async (req) => {
     is_preview:    !existing,
     cache_hit:     false,
     poll_after_ms: 5000,
+    quota:         rl.quota,
   }), {
     status: 202,
     headers: { ...CORS, 'Content-Type': 'application/json' },

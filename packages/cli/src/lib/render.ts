@@ -340,6 +340,111 @@ export function renderJson(view: AuditView): string {
 // unlocks. Intentionally NOT shown for registered projects — they already
 // have access to everything listed here.
 
+// ── Quota footer (success path) ────────────────────────────────
+// Compact one-liner shown after a successful audit so users see how many
+// audits they have left today and when the bucket resets.
+
+export interface QuotaTierInput { count: number; limit: number; remaining: number }
+export interface QuotaInput {
+  reset_at: string
+  ip:     QuotaTierInput & { tier: 'anon' | 'authed' }
+  url:    QuotaTierInput
+  global: QuotaTierInput
+}
+
+function timeUntil(isoTarget: string): string {
+  const ms = Math.max(0, new Date(isoTarget).getTime() - Date.now())
+  const h  = Math.floor(ms / 3_600_000)
+  const m  = Math.floor((ms % 3_600_000) / 60_000)
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`
+  if (h >  0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+export function renderQuotaFooter(q: QuotaInput): string {
+  // Pick the tier closest to its cap so the user sees the most relevant pressure.
+  const tiers = [
+    { name: 'IP',     count: q.ip.count,     limit: q.ip.limit,     remaining: q.ip.remaining },
+    { name: 'repo',   count: q.url.count,    limit: q.url.limit,    remaining: q.url.remaining },
+    { name: 'global', count: q.global.count, limit: q.global.limit, remaining: q.global.remaining },
+  ]
+  const tightest = tiers.slice().sort((a, b) => a.remaining - b.remaining)[0]
+  const tone =
+    tightest.remaining === 0 ? c.scarlet :
+    tightest.remaining <= 1 ? c.gold    :
+    c.muted
+
+  const reset = timeUntil(q.reset_at)
+  const ipPart   = `IP ${q.ip.remaining}/${q.ip.limit}`
+  const urlPart  = `repo ${q.url.remaining}/${q.url.limit}`
+  return '  ' + c.muted('quota: ') +
+    tone(ipPart) + c.muted(' · ') +
+    tone(urlPart) + c.muted(' · ') +
+    c.dim(`resets in ${reset}`)
+}
+
+// ── Rate-limit panel (deny path) ────────────────────────────────
+// Replaces the bare error line. Shows which tier was hit, count vs cap,
+// time until reset, and what to do next.
+
+const REASON_LABEL: Record<string, string> = {
+  ip_cap:     'Daily limit hit · per IP',
+  url_cap:    'This repo audited too many times today',
+  global_cap: 'commit.show daily audit cap reached',
+}
+
+function bar(filled: number, total: number, width = 20): string {
+  const f = Math.max(0, Math.min(width, Math.round((filled / Math.max(1, total)) * width)))
+  return c.scarlet('▰'.repeat(f)) + c.muted('▱'.repeat(width - f))
+}
+
+export function renderRateLimitDeny(opts: {
+  reason:  'ip_cap' | 'url_cap' | 'global_cap'
+  message: string
+  limit:   number
+  count:   number
+  quota?:  QuotaInput
+}): string {
+  const lines: string[] = []
+  const horiz = '─'.repeat(58)
+  lines.push('  ' + c.muted('┌' + horiz + '┐'))
+  lines.push('  ' + c.muted('│ ') + c.bold(c.scarlet('Rate limit')) + c.muted(' · ') + c.cream(REASON_LABEL[opts.reason] ?? opts.reason) + ' '.repeat(Math.max(0, 58 - 14 - (REASON_LABEL[opts.reason]?.length ?? opts.reason.length))) + c.muted('│'))
+  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+  lines.push('  ' + c.muted('│ ') + c.cream(`${opts.count}/${opts.limit}  `) + bar(opts.count, opts.limit) + ' '.repeat(58 - 28) + c.muted('│'))
+  if (opts.quota) {
+    const reset = timeUntil(opts.quota.reset_at)
+    lines.push('  ' + c.muted('│ ') + c.dim(`resets in ${reset}`) + ' '.repeat(58 - 12 - reset.length - 9 - 2) + c.muted('│'))
+  }
+  // Wrap the message into ~54-char lines.
+  for (const w of wrapText(opts.message, 54)) {
+    lines.push('  ' + c.muted('│ ') + c.cream(w) + ' '.repeat(56 - w.length) + c.muted('│'))
+  }
+  if (opts.reason === 'url_cap') {
+    lines.push('  ' + c.muted('│ ') + c.dim('Tip: cached audit (< 7d) is free — `commitshow status <repo>`.') + c.muted(' │'))
+  }
+  if (opts.reason === 'ip_cap' && opts.quota?.ip.tier === 'anon') {
+    lines.push('  ' + c.muted('│ ') + c.dim('Sign in (commit.show) for a higher daily cap.') + ' '.repeat(58 - 49) + c.muted('│'))
+  }
+  lines.push('  ' + c.muted('└' + horiz + '┘'))
+  return lines.join('\n')
+}
+
+function wrapText(s: string, width: number): string[] {
+  const words = s.split(/\s+/)
+  const out: string[] = []
+  let line = ''
+  for (const w of words) {
+    if ((line + ' ' + w).trim().length > width) {
+      if (line) out.push(line.trim())
+      line = w
+    } else {
+      line += ' ' + w
+    }
+  }
+  if (line.trim()) out.push(line.trim())
+  return out
+}
+
 export function renderUpsell(): string {
   const lines: string[] = []
   const bar = '─'.repeat(58)

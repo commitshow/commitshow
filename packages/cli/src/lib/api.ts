@@ -132,12 +132,25 @@ export async function fetchStanding(projectId: string): Promise<StandingRow | nu
 // is that preview rows don't compete in a season, don't earn applauds, and
 // don't show up on the leaderboard.
 
+export interface QuotaTier {
+  count:     number
+  limit:     number
+  remaining: number
+}
+export interface QuotaSnapshot {
+  reset_at: string                                          // ISO 8601 · next reset
+  ip:       QuotaTier & { tier: 'anon' | 'authed' }
+  url:      QuotaTier
+  global:   QuotaTier
+}
+
 export interface PreviewEnvelope {
   project:    ProjectRow
   snapshot:   SnapshotRow | null
   standing:   null
   is_preview: boolean
   cache_hit:  boolean
+  quota?:     QuotaSnapshot
 }
 
 export interface PreviewPending {
@@ -146,13 +159,16 @@ export interface PreviewPending {
   is_preview:    boolean
   cache_hit:     boolean
   poll_after_ms: number
+  quota?:        QuotaSnapshot
 }
 
 export interface PreviewError {
-  error:   string
+  error:    string
+  reason?:  'ip_cap' | 'url_cap' | 'global_cap'
   message?: string
-  limit?:  number
-  count?:  number
+  limit?:   number
+  count?:   number
+  quota?:   QuotaSnapshot
 }
 
 /** Kicks off (or returns cached) a preview audit. 202 → poll; 200 → done. */

@@ -6,6 +6,7 @@ import {
 } from '../lib/api.js'
 import {
   renderAudit, renderMarkdown, renderJson, renderUpsell,
+  renderQuotaFooter, renderRateLimitDeny,
   writeAuditMarkdown, writeAuditJson,
 } from '../lib/render.js'
 import { c } from '../lib/colors.js'
@@ -69,7 +70,27 @@ export async function audit(args: string[]): Promise<number> {
   if ('error' in result) {
     const err = result as PreviewError
     if (err.error === 'rate_limited') {
-      emitError(asJson, 'rate_limited', err.message ?? 'Rate limit hit. Try again tomorrow or sign in.', target.github_url)
+      if (asJson) {
+        process.stdout.write(JSON.stringify({
+          error: 'rate_limited',
+          reason: err.reason,
+          message: err.message,
+          limit: err.limit,
+          count: err.count,
+          quota: err.quota,
+          target: target.github_url,
+        }) + '\n')
+      } else {
+        console.error('')
+        console.error(renderRateLimitDeny({
+          reason:  err.reason ?? 'ip_cap',
+          message: err.message ?? 'Rate limit hit. Try again later.',
+          limit:   err.limit ?? 0,
+          count:   err.count ?? 0,
+          quota:   err.quota,
+        }))
+        console.error('')
+      }
       return 1
     }
     emitError(asJson, err.error, err.message ?? 'Preview audit failed.', target.github_url)
@@ -86,18 +107,28 @@ export async function audit(args: string[]): Promise<number> {
       emitError(asJson, 'timeout', 'Preview audit is taking longer than expected. Try `commitshow status <repo>` in a minute.', target.github_url)
       return 1
     }
-    envelope = waited
+    // Carry the original quota from the first response — server doesn't re-issue
+    // one when we poll for the snapshot.
+    envelope = { ...waited, quota: pending.quota }
   } else {
     envelope = result as PreviewEnvelope
   }
 
   const view = { project: envelope.project, snapshot: envelope.snapshot, standing: null }
   if (asJson) {
-    process.stdout.write(renderJson(view) + '\n')
+    // Inject quota into the v1 schema as an additive field — schema_version
+    // unchanged because additive-only fields don't bump it.
+    const shape = JSON.parse(renderJson(view))
+    if (envelope.quota) shape.quota = envelope.quota
+    process.stdout.write(JSON.stringify(shape, null, 2) + '\n')
   } else {
     console.log('')
     console.log(renderAudit(view))
     console.log('')
+    if (envelope.quota) {
+      console.log(renderQuotaFooter(envelope.quota))
+      console.log('')
+    }
     console.log(renderUpsell())
     console.log('')
   }
