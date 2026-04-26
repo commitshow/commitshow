@@ -16,6 +16,7 @@ import {
   FREE_REGISTRATIONS_PER_MEMBER,
   type RegistrationEligibility,
 } from '../lib/pricing'
+import { resolvePreviewClaim } from '../lib/projectQueries'
 
 type Step = 1 | 2 | 3 | 4
 
@@ -123,35 +124,69 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
 
     setStep(3)
 
-    // Step 1 — Insert project
+    // Step 1 — Resolve claim: this URL might already exist as a CLI preview.
+    // If so, we UPDATE that row (preserving snapshot history) instead of
+    // INSERTing a duplicate.
     setLoaderIndex(0)
-    const { data: inserted, error: projectErr } = await supabase.from('projects').insert([{
-      project_name: form.name,
-      creator_id: user?.id ?? null,
-      creator_name: member?.display_name ?? null,
-      creator_email: form.email,
-      github_url: form.github,
-      live_url: form.url,
-      description: form.desc,
-      images,  // DB BEFORE trigger mirrors images[0] into thumbnail_url / thumbnail_path
-      status: 'active',
-      season: 'season_zero',
-    }]).select('id').single()
+    const verdict = await resolvePreviewClaim(form.github, user?.id ?? null)
 
-    if (projectErr || !inserted?.id) {
-      setError(`Failed to save project: ${projectErr?.message ?? 'unknown'}`)
+    if (verdict.kind === 'lookup_failed') {
+      setError(verdict.message); setStep(2); return
+    }
+    if (verdict.kind === 'taken_by_other') {
+      setError('This GitHub repo is already auditioning under another creator. If this is your repo, contact support.')
+      setStep(2); return
+    }
+    if (verdict.kind === 'already_yours') {
+      setError(`You're already auditioning this repo. View it at /projects/${verdict.projectId}.`)
       setStep(2); return
     }
 
-    // Step 2 — Persist full brief (Phase 1 fields + Phase 2 structured JSONs)
+    const projectFields = {
+      project_name: form.name,
+      creator_id:   user?.id ?? null,
+      creator_name: member?.display_name ?? null,
+      creator_email: form.email,
+      github_url:   form.github,
+      live_url:     form.url,
+      description:  form.desc,
+      images,
+      status:       'active' as const,
+      season:       'season_zero' as const,
+    }
+
+    let insertedId: string
+    if (verdict.kind === 'claim') {
+      // CLAIM — upgrade the CLI preview row. Snapshot history stays intact.
+      const { data: updated, error: updErr } = await supabase
+        .from('projects').update(projectFields).eq('id', verdict.projectId)
+        .select('id').single()
+      if (updErr || !updated?.id) {
+        setError(`Failed to claim preview project: ${updErr?.message ?? 'unknown'}`)
+        setStep(2); return
+      }
+      insertedId = updated.id
+    } else {
+      // FRESH — no prior row for this URL.
+      const { data: inserted, error: projectErr } = await supabase
+        .from('projects').insert([projectFields]).select('id').single()
+      if (projectErr || !inserted?.id) {
+        setError(`Failed to save project: ${projectErr?.message ?? 'unknown'}`)
+        setStep(2); return
+      }
+      insertedId = inserted.id
+    }
+    const inserted = { id: insertedId }
+
+    // Step 2 — Persist full brief (Phase 1 + Phase 2). Use upsert so a
+    // claim flow doesn't collide with whatever brief the CLI/preview path
+    // wrote earlier (and a fresh insert still works).
     setLoaderIndex(1)
-    await supabase.from('build_briefs').insert([{
+    await supabase.from('build_briefs').upsert([{
       project_id: inserted.id,
-      // Phase 1 (public during season)
       problem:     finalBrief.core_intent.problem,
       features:    finalBrief.core_intent.features,
       target_user: finalBrief.core_intent.target_user,
-      // Phase 2 (structured — extracted from user's AI)
       stack_fingerprint:    finalBrief.stack_fingerprint,
       failure_log:          finalBrief.failure_log,
       decision_archaeology: finalBrief.decision_archaeology,
@@ -159,7 +194,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       live_proof:           finalBrief.live_proof,
       next_blocker:         `${finalBrief.next_blocker.current_blocker}\n\nFirst AI task: ${finalBrief.next_blocker.first_ai_task}`,
       integrity_score:      integrityScore(finalBrief),
-    }])
+    }], { onConflict: 'project_id' })
 
     // Step 3 — Edge Function deep analysis (initial snapshot)
     setLoaderIndex(2)

@@ -7,6 +7,84 @@ import { supabase, PUBLIC_PROJECT_COLUMNS, type Project } from './supabase'
 export const LANE_LIMIT = 6
 export const GRID_PAGE_SIZE = 12
 
+// ── Canonical github URL matching ─────────────────────────────
+// Mirrors audit-preview/index.ts:canonicalGithub so /submit can find
+// the preview row that the CLI created — even when one side has `.git`,
+// trailing slash, or differs in case.
+
+export interface CanonicalGithub {
+  canonical: string                                    // https://github.com/owner/repo
+  slug:      string                                    // owner/repo (lowercased)
+}
+
+export function canonicalizeGithubUrl(url: string): CanonicalGithub | null {
+  const m = url.trim().match(/github\.com[:/]([^/\s]+)\/([^/\s?#]+?)(?:\.git)?\/?(?:[?#].*)?$/i)
+  if (!m) return null
+  const owner = m[1]
+  const repo  = m[2].replace(/\.git$/i, '')
+  return {
+    canonical: `https://github.com/${owner}/${repo}`,
+    slug:      `${owner}/${repo}`.toLowerCase(),
+  }
+}
+
+// ── Preview claim resolution ──────────────────────────────────
+// Returns the existing project row (if any) that the user's submission
+// would land on, plus a verdict the SubmitForm uses to decide between
+// claim, reject, or fresh insert.
+
+export type ClaimVerdict =
+  | { kind: 'fresh' }                                   // no existing row → INSERT
+  | { kind: 'claim', projectId: string }                // preview row, claimable → UPDATE
+  | { kind: 'already_yours', projectId: string }        // user already auditioning this URL
+  | { kind: 'taken_by_other', creatorId: string | null } // someone else owns the active audition
+  | { kind: 'lookup_failed', message: string }
+
+export async function resolvePreviewClaim(
+  githubUrl: string,
+  userId: string | null,
+): Promise<ClaimVerdict> {
+  const canon = canonicalizeGithubUrl(githubUrl)
+  if (!canon) return { kind: 'lookup_failed', message: 'Not a recognisable GitHub URL.' }
+
+  // ilike with both `https://github.com/owner/repo` and `https://github.com/owner/repo.git`
+  // covered by trailing wildcard. Case-insensitive.
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, status, creator_id, github_url')
+    .ilike('github_url', `${canon.canonical}%`)
+    .order('created_at', { ascending: true })
+
+  if (error) return { kind: 'lookup_failed', message: error.message }
+
+  // Filter strictly to canonical owner/repo (ilike could over-match if owner is a prefix).
+  const exact = (data ?? []).filter(r => {
+    const c = canonicalizeGithubUrl(r.github_url ?? '')
+    return c?.slug === canon.slug
+  })
+
+  if (exact.length === 0) return { kind: 'fresh' }
+
+  // Active audition by current user → block (one audition per repo per creator).
+  const ownActive = exact.find(r => r.status === 'active' && r.creator_id === userId && userId)
+  if (ownActive) return { kind: 'already_yours', projectId: ownActive.id }
+
+  // Active audition by someone else → block (the league assumes one creator per repo).
+  const otherActive = exact.find(r => r.status === 'active' && r.creator_id && r.creator_id !== userId)
+  if (otherActive) return { kind: 'taken_by_other', creatorId: otherActive.creator_id }
+
+  // Preview shadow with no creator → claim.
+  const claimable = exact.find(r => r.status === 'preview' && r.creator_id === null)
+  if (claimable) return { kind: 'claim', projectId: claimable.id }
+
+  // Edge case: preview row that already has a creator (shouldn't happen normally).
+  // Treat as taken_by_other to be safe.
+  const claimedPreview = exact.find(r => r.status === 'preview' && r.creator_id)
+  if (claimedPreview) return { kind: 'taken_by_other', creatorId: claimedPreview.creator_id }
+
+  return { kind: 'fresh' }
+}
+
 // 1) Just registered — Week 1 blind stage.
 // Backed by `projects.created_at` within the last 7 days on the active season.
 export async function fetchJustRegistered(): Promise<Project[]> {
