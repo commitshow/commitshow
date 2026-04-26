@@ -2,22 +2,36 @@
 //
 // Flow:
 //   1. Normalize github_url → canonical owner/repo
-//   2. Rate limit per IP (preview_rate_limits table · 5/day anon, 20/day authed)
-//   3. Look up existing project row by github_url
-//      · exists + fresh snapshot (< 7d) → return cached (no cost)
-//      · exists + stale → trigger analyze-project (1 Claude call)
-//      · not found → create preview row + trigger analyze-project
-//   4. Return the snapshot JSON the CLI already consumes
+//   2. Look up existing project row by github_url
+//      · exists + fresh snapshot (< 7d) → return cached (free, lightweight rate-limit)
+//      · cache miss → 3-tier rate limit · then trigger analyze-project · respond 202
+//   3. CLI polls projects.last_analysis_at until snapshot lands.
+//
+// Rate-limit tiers (preview_rate_limits table · all keyed by `key text, day date`)
+//
+//   · IP cap           ip:<hash>        anon 5/day · authed 20/day
+//                                       Defends against single-source scraping.
+//                                       Counted on EVERY request (cache hit too)
+//                                       so a bot can't scrape cached data unbounded.
+//
+//   · URL cap          url:<hash>       global 5/day per github_url
+//                                       Defends against the same URL being audited
+//                                       hundreds of times via IP rotation.
+//                                       Counted only on cache miss (real Claude cost).
+//
+//   · Global cap       global           total 800 cache-miss audits/day platform-wide
+//                                       Hard ceiling on Claude spend
+//                                       (≈ $40-80/day worst case at $0.05-0.10/audit).
+//                                       Counted only on cache miss.
+//
+// Login is intentionally NOT required — the anonymous-friendly CLI is the
+// viral wedge. All defences here are economic / per-resource, not identity.
 //
 // Design contract:
 //   · Preview rows use status='preview' + season_id=null · all public feeds
-//     already filter these out (projectQueries uses explicit status lists ·
-//     season_standings requires season_id is not null).
-//   · Preview rows can be "upgraded" to full audition by /submit if the same
-//     github_url is re-submitted by its owner (logic lives in /submit, not here).
-//   · Full Claude depth — expert_panel + scout_brief 5+3 + axis_scores — is
-//     preserved. The only things preview projects DON'T get are Scout forecasts,
-//     season ranking, Hall of Fame, and applauds (all gated by real audition).
+//     already filter these out.
+//   · Full Claude depth — expert_panel + scout_brief 5+3 + axis_scores —
+//     is preserved for previews.
 
 // deno-lint-ignore-file no-explicit-any
 // @ts-nocheck — Deno runtime
@@ -37,9 +51,11 @@ function json(body: unknown, status = 200) {
   })
 }
 
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000   // 7 days per-URL cache
-const RATE_ANON    = 5                          // preview calls per day
-const RATE_AUTHED  = 20
+const CACHE_TTL_MS         = 7 * 24 * 60 * 60 * 1000   // 7 days per-URL cache
+const RATE_ANON_PER_IP     = 5                          // anon IP cap
+const RATE_AUTHED_PER_IP   = 20                         // authed IP cap
+const RATE_PER_URL_GLOBAL  = 5                          // per github_url cap (any IP)
+const RATE_GLOBAL_DAILY    = 800                        // platform-wide cache-miss cap
 
 // Canonicalize `https://github.com/Owner/repo.git/` → `https://github.com/owner/repo`
 function canonicalGithub(url: string): { canonical: string; slug: string } | null {
@@ -53,36 +69,104 @@ function canonicalGithub(url: string): { canonical: string; slug: string } | nul
   }
 }
 
-function ipHash(req: Request): string {
+function djb2(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
+function ipKey(req: Request): string {
   const ip =
     req.headers.get('cf-connecting-ip') ??
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     'unknown'
-  // Simple non-crypto hash · bucket-level attribution is enough for rate limiting.
-  let h = 5381
-  for (let i = 0; i < ip.length; i++) h = ((h << 5) + h + ip.charCodeAt(i)) | 0
-  return `ip_${(h >>> 0).toString(36)}`
+  return `ip:${djb2(ip)}`
 }
 
-async function enforceRateLimit(admin: any, req: Request): Promise<{ ok: true } | { ok: false; message: string; limit: number; count: number }> {
-  const auth = req.headers.get('authorization')
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-  const isAuthed = !!auth && auth !== `Bearer ${anonKey}` && auth !== 'Bearer '
-  const limit = isAuthed ? RATE_AUTHED : RATE_ANON
-  const key = ipHash(req)
-  const today = new Date().toISOString().slice(0, 10)
+function urlKey(slug: string): string {
+  return `url:${djb2(slug.toLowerCase())}`
+}
 
-  // Single atomic increment via RPC · returns post-increment count.
-  const { data, error } = await admin.rpc('increment_preview_rate_limit', { p_ip_hash: key, p_day: today })
+function isAuthed(req: Request): boolean {
+  const auth = req.headers.get('authorization') ?? ''
+  const anon = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  return !!auth && auth !== `Bearer ${anon}` && auth !== 'Bearer '
+}
+
+// Single bump+read against preview_rate_limits via the existing RPC.
+// Returns { count, limit, ok } so callers can decide what to do.
+async function bumpAndCheck(
+  admin: any,
+  bucketKey: string,
+  limit: number,
+  today: string,
+): Promise<{ ok: boolean; count: number; limit: number }> {
+  const { data, error } = await admin.rpc('increment_preview_rate_limit', {
+    p_ip_hash: bucketKey,   // RPC's column is named ip_hash but stores arbitrary key
+    p_day:     today,
+  })
   if (error) {
-    console.error('rate_limit rpc failed', error.message)
-    return { ok: true }  // fail open · don't block users on our own infra hiccup
+    // Fail open — never block legitimate users on our own infra hiccup.
+    console.error('rate_limit rpc failed', bucketKey, error.message)
+    return { ok: true, count: 0, limit }
   }
   const count = typeof data === 'number' ? data : 1
+  return { ok: count <= limit, count, limit }
+}
 
-  if (count > limit) {
-    return { ok: false, message: `Rate limit exceeded (${limit}/day). Try tomorrow or sign in for a higher cap.`, limit, count }
+interface RateLimitDecision {
+  ok:     true
+}
+
+interface RateLimitDeny {
+  ok:     false
+  reason: 'ip_cap' | 'url_cap' | 'global_cap'
+  message: string
+  limit:   number
+  count:   number
+}
+
+// 3-tier rate limit. The IP cap is enforced on every request (cheap defence
+// against scraping cached data). URL + global caps are enforced only when
+// the request will actually cost a Claude call (cache miss).
+async function enforceRateLimit(
+  admin: any,
+  req: Request,
+  slug: string,
+  willCostClaude: boolean,
+): Promise<RateLimitDecision | RateLimitDeny> {
+  const today = new Date().toISOString().slice(0, 10)
+  const ipLimit = isAuthed(req) ? RATE_AUTHED_PER_IP : RATE_ANON_PER_IP
+
+  // 1. IP cap — always
+  const ip = await bumpAndCheck(admin, ipKey(req), ipLimit, today)
+  if (!ip.ok) {
+    return {
+      ok: false, reason: 'ip_cap', limit: ip.limit, count: ip.count,
+      message: `Daily limit hit (${ip.limit} audits/day per IP). Try again tomorrow${isAuthed(req) ? '' : ' or sign in for a higher cap'}.`,
+    }
   }
+
+  if (!willCostClaude) return { ok: true }
+
+  // 2. Per-URL global cap — only when about to spend
+  const url = await bumpAndCheck(admin, urlKey(slug), RATE_PER_URL_GLOBAL, today)
+  if (!url.ok) {
+    return {
+      ok: false, reason: 'url_cap', limit: url.limit, count: url.count,
+      message: `This repo has been audited ${url.count} times today (cap ${url.limit}). The cached result is still valid for 7 days · try again tomorrow if you want a fresh re-audit.`,
+    }
+  }
+
+  // 3. Global daily cap — last line of defence on Claude spend
+  const global = await bumpAndCheck(admin, 'global', RATE_GLOBAL_DAILY, today)
+  if (!global.ok) {
+    return {
+      ok: false, reason: 'global_cap', limit: global.limit, count: global.count,
+      message: `commit.show has hit its daily audit cap. Cached results still work · fresh audits resume in a few hours.`,
+    }
+  }
+
   return { ok: true }
 }
 
@@ -101,11 +185,8 @@ Deno.serve(async (req) => {
   const canon = canonicalGithub(body.github_url)
   if (!canon) return json({ error: 'Not a GitHub URL', input: body.github_url }, 400)
 
-  // Rate limit
-  const rl = await enforceRateLimit(admin, req)
-  if (!rl.ok) return json({ error: 'rate_limited', message: rl.message, limit: rl.limit, count: rl.count }, 429)
-
-  // 1. Look up existing project by canonical github_url
+  // Look up existing project + last snapshot to decide cache hit before we
+  // spend any rate-limit budget on URL/global caps.
   const { data: existing } = await admin
     .from('projects')
     .select('id, project_name, github_url, live_url, score_total, score_auto, score_forecast, score_community, status, creator_id, creator_name, creator_grade, last_analysis_at, season_id')
@@ -113,16 +194,14 @@ Deno.serve(async (req) => {
     .limit(1)
     .maybeSingle()
 
-  let projectId: string
+  let projectId: string | null = existing?.id ?? null
   let isCacheHit = false
 
   if (existing) {
-    projectId = existing.id
-    // Cache hit if a snapshot exists and is younger than CACHE_TTL_MS
     const { data: lastSnap } = await admin
       .from('analysis_snapshots')
       .select('created_at')
-      .eq('project_id', projectId)
+      .eq('project_id', existing.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -130,8 +209,19 @@ Deno.serve(async (req) => {
       const age = Date.now() - new Date(lastSnap.created_at).getTime()
       if (age < CACHE_TTL_MS) isCacheHit = true
     }
-  } else {
-    // 2. Create a preview shadow project row
+  }
+
+  // Rate limit · IP always counted, URL+global only on cache miss
+  const rl = await enforceRateLimit(admin, req, canon.slug, /*willCostClaude*/ !isCacheHit)
+  if (!rl.ok) return json({ error: 'rate_limited', reason: rl.reason, message: rl.message, limit: rl.limit, count: rl.count }, 429)
+
+  // Cache hit — return immediately
+  if (isCacheHit && projectId) {
+    return json(await buildEnvelope(admin, projectId, true))
+  }
+
+  // Cache miss — create shadow row if needed
+  if (!projectId) {
     const { data: created, error: createErr } = await admin
       .from('projects')
       .insert({
@@ -148,14 +238,7 @@ Deno.serve(async (req) => {
     projectId = created.id
   }
 
-  // 3. Cache hit — return the cached envelope immediately.
-  if (isCacheHit) {
-    return json(await buildEnvelope(admin, projectId, true))
-  }
-
-  // 3b. Cache miss — fire analyze-project in the background via
-  // EdgeRuntime.waitUntil and respond with 202 + project_id so the CLI
-  // can poll. Chained fetch would hit the 60s edge wall for Claude runs.
+  // Fire analyze-project in the background — chained fetch would hit edge wall
   const analyzeUrl = `${SUPABASE_URL}/functions/v1/analyze-project`
   const analyzePromise = fetch(analyzeUrl, {
     method: 'POST',
@@ -167,10 +250,10 @@ Deno.serve(async (req) => {
   if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(analyzePromise)
 
   return new Response(JSON.stringify({
-    project_id:  projectId,
-    status:      'running',
-    is_preview:  !existing,
-    cache_hit:   false,
+    project_id:    projectId,
+    status:        'running',
+    is_preview:    !existing,
+    cache_hit:     false,
     poll_after_ms: 5000,
   }), {
     status: 202,
