@@ -2,16 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="commit.show — Commit your work. Show to the world. The vibe coding league where every commit is evidence." />
-    <title>commit.show — Commit your work. Show to the world.</title>
+    <title>commit.show — Every commit, on stage.</title>
+    <meta name="description" content="The vibe coding league. Audited by the engine, auditioned for Scouts. Run npx commitshow audit on any GitHub repo." />
+    <link rel="canonical" href="https://commit.show/" />
+
+    <!-- Icons & PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#060C1A" />
+
+    <!-- Open Graph · social previews (X, Discord, Slack, LinkedIn, iMessage) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="commit.show" />
+    <meta property="og:title" content="commit.show — Every commit, on stage." />
+    <meta property="og:description" content="The vibe coding league. Audited by the engine, auditioned for Scouts. Run npx commitshow audit on any GitHub repo." />
+    <meta property="og:url" content="https://commit.show/" />
+    <meta property="og:image" content="https://commit.show/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="commit.show — score 82 / 100 · npx commitshow audit" />
+
+    <!-- Twitter / X cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="commit.show — Every commit, on stage." />
+    <meta name="twitter:description" content="The vibe coding league. Audited by the engine, auditioned for Scouts." />
+    <meta name="twitter:image" content="https://commit.show/og-image.png" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-    <!-- Preload the hero poster so it's the LCP candidate (12KB static WebP).
-         The animated 5.6MB variant loads on idle after first paint. -->
+    <!-- Hero poster · LCP candidate (12 KB static WebP). The 30 fps video
+         loads on idle after first paint. -->
     <link rel="preload" as="image" href="/hero-poster.webp" fetchpriority="high" />
   </head>
   <body>

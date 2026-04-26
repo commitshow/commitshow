@@ -1,0 +1,31 @@
+{
+  "name": "commit.show",
+  "short_name": "commit.show",
+  "description": "The vibe coding league. Audited by the engine, auditioned for Scouts. Every commit, on stage.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#060C1A",
+  "theme_color": "#F0C040",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180",
+      "purpose": "maskable"
+    }
+  ]
+}
