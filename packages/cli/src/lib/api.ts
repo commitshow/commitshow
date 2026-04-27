@@ -193,15 +193,18 @@ export interface PreviewError {
   quota?:   QuotaSnapshot
 }
 
-/** Kicks off (or returns cached) a preview audit. 202 → poll; 200 → done. */
+/** Kicks off (or returns cached) a preview audit. 202 → poll; 200 → done.
+ *  force=true skips the 7-day cache and forces a fresh analyze-project run.
+ *  Counts against IP + URL + global rate limits (real Claude spend). */
 export async function runPreviewAudit(
   githubUrl: string,
   liveUrl?: string,
+  opts: { force?: boolean } = {},
 ): Promise<PreviewEnvelope | PreviewPending | PreviewError> {
   const res = await fetch(`${baseUrl()}/functions/v1/audit-preview`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ github_url: githubUrl, live_url: liveUrl }),
+    body: JSON.stringify({ github_url: githubUrl, live_url: liveUrl, force: opts.force === true }),
   })
   const body = await res.json().catch(() => ({ error: 'invalid_json' }))
   if (res.status === 202) return body as PreviewPending

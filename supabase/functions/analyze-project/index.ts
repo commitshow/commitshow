@@ -91,6 +91,7 @@ interface GitHubInfo {
   repo?: string
   description?: string | null
   default_branch?: string
+  homepage?: string | null             // GitHub homepage field (used for live_url inference)
   languages: Record<string, number>
   language_pct: Record<string, number>
   stars: number
@@ -101,6 +102,16 @@ interface GitHubInfo {
   file_count_estimate: number
   last_commit_at: string | null
   created_at: string | null
+  contributors_count: number           // ecosystem signal · approx (capped at 100)
+  // Form factor — determines weight emphasis (apps weight Lighthouse, libraries
+  // weight ecosystem + tests, scaffolds weight reproducibility).
+  form_factor: 'app' | 'library' | 'scaffold' | 'unknown'
+  // npm registry signals · libraries only (null elsewhere)
+  npm: {
+    package_name:        string | null   // resolved from package.json `name`
+    weekly_downloads:    number | null   // last-week downloads
+    has_published:       boolean         // do we even see this on npm
+  }
   // Deep signals that inform scoring / Claude reasoning
   signals: {
     solidity_files: number               // .sol count → smart contracts
@@ -119,6 +130,19 @@ interface GitHubInfo {
     uses_ai_libs: string[]               // ['@anthropic-ai/sdk', 'openai', ...]
     uses_mcp_libs: string[]              // ['@modelcontextprotocol/*', ...]
     package_deps_count: number
+    // ── Production maturity signals (NEW · v2 scoring) ──
+    ci_workflows: number                 // .github/workflows/*.yml count
+    has_ci_config: boolean               // any of: GH actions, gitlab-ci, circleci, vercel.json
+    has_lockfile: boolean
+    lockfile_kind: 'npm' | 'yarn' | 'pnpm' | 'bun' | null
+    observability_libs: string[]         // sentry, datadog, pino, winston, otel, etc.
+    has_typescript_strict: boolean       // tsconfig.json compilerOptions.strict === true
+    typescript_pct: number               // % bytes that are TS (from language_pct)
+    has_license: boolean
+    has_contributing: boolean
+    has_changelog: boolean
+    has_code_of_conduct: boolean
+    is_monorepo: boolean                 // workspaces / turbo.json / pnpm-workspace.yaml
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
   debut_brief: {
@@ -137,18 +161,103 @@ const WEB3_LIBS = ['viem', 'ethers', 'wagmi', 'web3', '@rainbow-me/rainbowkit', 
 const AI_LIBS   = ['@anthropic-ai/sdk', 'openai', '@google/generative-ai', 'ai', 'langchain', '@langchain/core', 'cohere-ai']
 const MCP_LIBS  = ['@modelcontextprotocol/sdk', '@modelcontextprotocol/server-everything']
 
+// Production-maturity signals — error tracking, structured logging, OTel.
+// Prefix-match (e.g. '@sentry/' catches @sentry/node + @sentry/react).
+const OBSERVABILITY_LIBS = [
+  '@sentry/', 'sentry-', 'datadog-', '@datadog/', 'dd-trace',
+  'pino', 'winston', 'bunyan', 'log4js',
+  '@opentelemetry/', 'honeybadger', 'rollbar', 'bugsnag',
+  '@logtail/', '@axiomhq/', 'newrelic', '@logdna/',
+]
+
+// Form factor — picks scoring emphasis. Apps are scored on live deployment
+// (Lighthouse heavy); libraries on tests + ecosystem reach; scaffolds on
+// reproducibility (clear setup, env templates, runnable). Detection is
+// conservative — when ambiguous we return 'unknown' so Claude reasons it out
+// from context rather than us forcing a wrong frame.
+function detectFormFactor(
+  pkg: Record<string, unknown> | null,
+  paths: string[],
+  readme: string | null,
+): 'app' | 'library' | 'scaffold' | 'unknown' {
+  const pathSet = new Set(paths)
+  const readmeHead = (readme ?? '').toLowerCase().slice(0, 3000)
+  const name = typeof pkg?.name === 'string' ? (pkg.name as string) : ''
+  const isPrivate = pkg?.private === true
+  const hasMain    = !!(pkg && (pkg as { main?: unknown }).main)
+  const hasModule  = !!(pkg && (pkg as { module?: unknown }).module)
+  const hasExports = !!(pkg && (pkg as { exports?: unknown }).exports)
+  const hasBin     = !!(pkg && (pkg as { bin?: unknown }).bin)
+  const scripts = (pkg?.scripts ?? {}) as Record<string, string>
+  const hasDevStart = !!(scripts.dev || scripts.start)
+
+  // Scaffold indicators (highest priority — they often look like libraries)
+  const scaffoldName = /^(create-|@.+\/create-)/.test(name) || /\b(starter|template|boilerplate|scaffold|kit)\b/i.test(name)
+  const scaffoldReadme = /(use this template|getting started.+(fork|clone|copy this)|click .?use this template)/i.test(readmeHead)
+  if (scaffoldName || scaffoldReadme) return 'scaffold'
+
+  // Library indicators · publishable + monorepo + npm-install-style README
+  const monorepo = pathSet.has('turbo.json') || pathSet.has('pnpm-workspace.yaml') ||
+    !!(pkg && (pkg as { workspaces?: unknown }).workspaces) ||
+    paths.some(p => /^packages\/[^/]+\/package\.json$/.test(p))
+  const npmInstallExample = /\b(npm i\s+|yarn add\s+|pnpm add\s+|bun add\s+)\S/.test(readmeHead)
+  const libIndicators = [
+    !isPrivate && (hasMain || hasModule || hasExports),
+    monorepo && paths.some(p => /^packages\//.test(p)),
+    npmInstallExample,
+    hasBin && npmInstallExample,
+  ].filter(Boolean).length
+  if (libIndicators >= 2) return 'library'
+
+  // App indicators · runnable + deployment configs
+  const deployConfig =
+    pathSet.has('vercel.json') || pathSet.has('netlify.toml') ||
+    pathSet.has('wrangler.toml') || pathSet.has('wrangler.jsonc') ||
+    pathSet.has('railway.json') || pathSet.has('fly.toml') ||
+    paths.some(p => /^next\.config\.(js|mjs|ts|cjs)$/.test(p)) ||
+    paths.some(p => /^vite\.config\.(js|mjs|ts|cjs)$/.test(p))
+  if (hasDevStart || deployConfig) return 'app'
+
+  return 'unknown'
+}
+
+// npm registry download lookup — last-week count. Returns null if package
+// isn't published / API failed.
+async function fetchNpmWeeklyDownloads(pkg: string | null): Promise<number | null> {
+  if (!pkg) return null
+  try {
+    const safeName = encodeURIComponent(pkg)
+    const res = await fetch(`https://api.npmjs.org/downloads/point/last-week/${safeName}`)
+    if (!res.ok) return null
+    const j = await res.json()
+    return typeof j.downloads === 'number' ? j.downloads : null
+  } catch {
+    return null
+  }
+}
+
 async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const empty: GitHubInfo = {
     accessible: false, languages: {}, language_pct: {},
     stars: 0, forks: 0, open_issues: 0, commit_count_recent: 0,
     head_commit_sha: null,
     file_count_estimate: 0, last_commit_at: null, created_at: null,
+    homepage: null,
+    contributors_count: 0,
+    form_factor: 'unknown',
+    npm: { package_name: null, weekly_downloads: null, has_published: false },
     signals: {
       solidity_files: 0, edge_functions: 0, sql_files: 0, create_table_count: 0,
       react_components: 0, page_files: 0, mcp_server_files: 0,
       has_claude_md: false, has_prd_docs: false, has_rls_policies: false, rls_policy_count: 0,
       test_files: 0, uses_web3_libs: [], uses_ai_libs: [], uses_mcp_libs: [],
       package_deps_count: 0,
+      ci_workflows: 0, has_ci_config: false,
+      has_lockfile: false, lockfile_kind: null,
+      observability_libs: [],
+      has_typescript_strict: false, typescript_pct: 0,
+      has_license: false, has_contributing: false, has_changelog: false, has_code_of_conduct: false,
+      is_monorepo: false,
     },
     readme_excerpt: null,
     debut_brief: { found: false, path: null, raw: null, last_commit_at: null, sha: null },
@@ -277,23 +386,99 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     rlsPolicyCount += (text.match(/create\s+policy\b/gi) || []).length
   }
 
-  // Parse package.json for deps
+  // Parse package.json for deps + production-maturity signals
   let web3Libs: string[] = [], aiLibs: string[] = [], mcpLibs: string[] = [], depsCount = 0
+  let observabilityLibs: string[] = []
+  let pkgParsed: Record<string, unknown> | null = null
+  let pkgName: string | null = null
   const pkgText = await ghText(`/contents/package.json?ref=${defBranch}`)
   if (pkgText) {
     try {
       const pkg = JSON.parse(pkgText)
+      pkgParsed = pkg
+      pkgName = typeof pkg.name === 'string' ? pkg.name : null
       const all = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) } as Record<string, string>
       depsCount = Object.keys(all).length
       web3Libs = WEB3_LIBS.filter(l => l in all || Object.keys(all).some(k => k.startsWith(l)))
       aiLibs   = AI_LIBS.filter(l => l in all || Object.keys(all).some(k => k.startsWith(l)))
       mcpLibs  = MCP_LIBS.filter(l => Object.keys(all).some(k => k === l || k.startsWith('@modelcontextprotocol/')))
+      // Observability — error tracking / structured logging / OTel.
+      observabilityLibs = OBSERVABILITY_LIBS.filter(prefix =>
+        Object.keys(all).some(k => k === prefix || k.startsWith(prefix))
+      )
     } catch { /* ignore */ }
   }
 
-  // README excerpt for Claude context
+  // CI / lockfile / governance signals (root-file presence checks · free)
+  const pathSet = new Set(paths)
+  const ciWorkflowFiles = paths.filter(p => /^\.github\/workflows\/[^/]+\.ya?ml$/i.test(p))
+  const ci_workflows = ciWorkflowFiles.length
+  const has_ci_config = ci_workflows > 0
+    || pathSet.has('.gitlab-ci.yml')
+    || paths.some(p => /^\.circleci\/config\.ya?ml$/.test(p))
+    || pathSet.has('vercel.json')           // Vercel auto-checks count as CI signal
+    || pathSet.has('netlify.toml')
+
+  const LOCKFILE_MAP: Record<string, 'npm' | 'yarn' | 'pnpm' | 'bun'> = {
+    'package-lock.json': 'npm',
+    'yarn.lock':         'yarn',
+    'pnpm-lock.yaml':    'pnpm',
+    'bun.lockb':         'bun',
+    'bun.lock':          'bun',
+  }
+  let lockfile_kind: 'npm' | 'yarn' | 'pnpm' | 'bun' | null = null
+  for (const [file, kind] of Object.entries(LOCKFILE_MAP)) {
+    if (pathSet.has(file)) { lockfile_kind = kind; break }
+  }
+  const has_lockfile = !!lockfile_kind
+
+  const has_license          = paths.some(p => /^LICENSE(\.[a-zA-Z0-9]+)?$/i.test(p))
+  const has_contributing     = paths.some(p => /^CONTRIBUTING\.md$/i.test(p))
+  const has_changelog        = paths.some(p => /^CHANGELOG\.md$/i.test(p))
+  const has_code_of_conduct  = paths.some(p => /^CODE_OF_CONDUCT\.md$/i.test(p))
+
+  // Monorepo signal — workspaces declared OR turbo/pnpm workspace files OR
+  // packages/* presence with a /package.json under it.
+  const is_monorepo =
+    !!(pkgParsed && (pkgParsed as { workspaces?: unknown }).workspaces) ||
+    pathSet.has('turbo.json') ||
+    pathSet.has('pnpm-workspace.yaml') ||
+    paths.some(p => /^packages\/[^/]+\/package\.json$/.test(p)) ||
+    paths.some(p => /^apps\/[^/]+\/package\.json$/.test(p))
+
+  // TypeScript strict mode (strip line/block comments before JSON.parse —
+  // tsconfig.json officially supports comments).
+  let has_typescript_strict = false
+  const tsconfigText = await ghText(`/contents/tsconfig.json?ref=${defBranch}`)
+  if (tsconfigText) {
+    try {
+      const stripped = tsconfigText
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, (m, p1) => p1)
+      const cfg = JSON.parse(stripped)
+      has_typescript_strict = cfg?.compilerOptions?.strict === true
+    } catch { /* tolerate non-standard tsconfig */ }
+  }
+  const typescript_pct = (language_pct['TypeScript'] as number | undefined) ?? 0
+
+  // README excerpt for Claude context (loaded BEFORE form_factor detection
+  // so the README-based heuristics like "Use this template" can fire).
   const readmeRaw = await ghText(`/readme`)
   const readme_excerpt = readmeRaw ? readmeRaw.slice(0, 2000) : null
+
+  // Form factor — drives Claude's commentary weight (apps care about
+  // Lighthouse, libraries care about ecosystem + reach, scaffolds care
+  // about reproducibility).
+  const form_factor = detectFormFactor(pkgParsed, paths, readmeRaw)
+
+  // Ecosystem signals · contributors count + npm weekly downloads. Both
+  // are extra fetches; we run them in parallel so they don't dominate
+  // total inspection time. Both fail gracefully (return 0/null).
+  const [contributorsResp, weeklyDownloads] = await Promise.all([
+    gh('/contributors?per_page=100&anon=1'),
+    fetchNpmWeeklyDownloads(pkgName),
+  ])
+  const contributors_count = Array.isArray(contributorsResp) ? contributorsResp.length : 0
 
   // ── commit.show Build Brief: canonical file search + fuzzy fallback ──
   // Priority: exact paths → fuzzy patterns. Legacy `.debut/` paths still
@@ -362,6 +547,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     owner, repo,
     description: repoData.description ?? null,
     default_branch: defBranch,
+    homepage: typeof repoData.homepage === 'string' && repoData.homepage.length > 0 ? repoData.homepage : null,
     languages,
     language_pct,
     stars: repoData.stargazers_count ?? 0,
@@ -372,6 +558,13 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     file_count_estimate: blobs.length,
     last_commit_at: repoData.pushed_at ?? null,
     created_at: repoData.created_at ?? null,
+    contributors_count,
+    form_factor,
+    npm: {
+      package_name:     pkgName,
+      weekly_downloads: weeklyDownloads,
+      has_published:    weeklyDownloads !== null && weeklyDownloads > 0,
+    },
     signals: {
       solidity_files: sol.length,
       edge_functions: edgeFnDirs.size,
@@ -389,6 +582,18 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       uses_ai_libs: aiLibs,
       uses_mcp_libs: mcpLibs,
       package_deps_count: depsCount,
+      ci_workflows,
+      has_ci_config,
+      has_lockfile,
+      lockfile_kind,
+      observability_libs: observabilityLibs,
+      has_typescript_strict,
+      typescript_pct,
+      has_license,
+      has_contributing,
+      has_changelog,
+      has_code_of_conduct,
+      is_monorepo,
     },
     readme_excerpt,
     debut_brief,
@@ -516,24 +721,118 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
   }
 }
 
-// ── Scoring (PRD v1.2 §5.2) ───────────────────────────────────
+// ── Scoring (v2 · 2026-04-27) ─────────────────────────────────
+//
+// 50-point Audit pillar redistribution:
+//   Lighthouse              20 (was 30) · Performance 8 · A11y 5 · BP 4 · SEO 3
+//   Production Maturity     10 (NEW)    · tests · CI · observability · TS strict · lockfile
+//   Source Hygiene           5 (was 5)  · GitHub accessible · LICENSE · monorepo discipline
+//   Live URL Health          5 (was 5)  · 200+SSL · response time · real content
+//   Completeness Signals     2 (NEW slot · was hidden in Best Practices)
+//   Tech Layer Diversity     3 (was 5)
+//   Build Brief Integrity    5 (unchanged · 0 for walk-on · effective ceiling 45)
+//   ────────────────────────
+//   Total                   50
+//
+// Soft bonuses (cap 50 + 5):
+//   Ecosystem Signal         +3 max     · stars / contributors / npm downloads
+//   Activity Recency         +2 max     · recent commits / triage active
+//
+// Walk-on note: Brief Integrity slot (5) is structurally inaccessible. CLI
+// renders walk-on score normalized against 45 (50 - 5). See render.ts.
 function scoreLighthouse(lh: LighthouseScores) {
   // -1 "not assessed" → neutral midpoint (no bonus, no penalty).
   // Legit 0 still takes the harshest bucket (bad signal).
-  const p = lh.performance   === LH_NOT_ASSESSED ? 5
-           : lh.performance   >= 90 ? 10
-           : lh.performance   >= 70 ? 7
-           : lh.performance   >= 50 ? 4 : 0
-  const a = lh.accessibility === LH_NOT_ASSESSED ? 4
-           : lh.accessibility >= 90 ? 8
-           : lh.accessibility >= 70 ? 5 : 2
-  const b = lh.bestPractices === LH_NOT_ASSESSED ? 4
-           : lh.bestPractices >= 90 ? 8
-           : lh.bestPractices >= 70 ? 5 : 1
+  const p = lh.performance   === LH_NOT_ASSESSED ? 4
+           : lh.performance   >= 90 ? 8
+           : lh.performance   >= 70 ? 6
+           : lh.performance   >= 50 ? 3 : 0
+  const a = lh.accessibility === LH_NOT_ASSESSED ? 3
+           : lh.accessibility >= 90 ? 5
+           : lh.accessibility >= 70 ? 3 : 1
+  const b = lh.bestPractices === LH_NOT_ASSESSED ? 2
+           : lh.bestPractices >= 90 ? 4
+           : lh.bestPractices >= 70 ? 2 : 0
   const s = lh.seo           === LH_NOT_ASSESSED ? 2
-           : lh.seo           >= 90 ? 4
+           : lh.seo           >= 90 ? 3
            : lh.seo           >= 70 ? 2 : 0
   return { performance: p, accessibility: a, bestPractices: b, seo: s, total: p + a + b + s }
+}
+
+// Production-maturity slot · max 10 pts. The single biggest calibration
+// lever for separating greenfield-polish (vibe-style) from production-
+// shipping (shadcn / cal.com style). A project with zero tests + zero CI
+// + zero observability cannot exceed ~3 pts here, which appropriately
+// limits its overall walk-on ceiling.
+function scoreProductionMaturity(s: GitHubInfo['signals']): {
+  pts: number
+  breakdown: { tests: number; ci: number; observability: number; ts_strict: number; lockfile: number; license: number }
+} {
+  // Tests · 0=0, 1-9=1, 10-49=2, 50+=3
+  const tests = s.test_files >= 50 ? 3 : s.test_files >= 10 ? 2 : s.test_files >= 1 ? 1 : 0
+  // CI · GH Actions / GitLab / CircleCI / Vercel · binary 2pt
+  const ci = s.has_ci_config ? 2 : 0
+  // Observability · 1+ libs in package.json earns 2 pts (binary signal)
+  const observability = s.observability_libs.length >= 1 ? 2 : 0
+  // TS strict · half point
+  const ts_strict = s.has_typescript_strict ? 1 : 0
+  // Lockfile · binary 1 pt (signal of dependency hygiene)
+  const lockfile = s.has_lockfile ? 1 : 0
+  // LICENSE · binary 1 pt (legal hygiene)
+  const license = s.has_license ? 1 : 0
+  const pts = Math.min(10, tests + ci + observability + ts_strict + lockfile + license)
+  return { pts, breakdown: { tests, ci, observability, ts_strict, lockfile, license } }
+}
+
+// Source Hygiene · max 5 pts. GitHub accessible (3) + monorepo discipline
+// or clear src/ layout (1) + governance docs (1).
+function scoreSourceHygiene(gh: GitHubInfo): { pts: number; breakdown: { github: number; structure: number; governance: number } } {
+  const github = gh.accessible ? 3 : 0
+  const structure = gh.signals.is_monorepo ? 1 : 0
+  // Governance: ANY two of (CONTRIBUTING, CHANGELOG, CODE_OF_CONDUCT) → 1 pt
+  const governanceCount = [
+    gh.signals.has_contributing,
+    gh.signals.has_changelog,
+    gh.signals.has_code_of_conduct,
+  ].filter(Boolean).length
+  const governance = governanceCount >= 2 ? 1 : 0
+  return { pts: Math.min(5, github + structure + governance), breakdown: { github, structure, governance } }
+}
+
+// Completeness slot · max 2 pts (renormalized from 0-5 score).
+function scoreCompleteness(c: { score: number }): number {
+  // c.score is 0-5 from inspectCompleteness · clamp + scale to 0-2.
+  return Math.min(2, Math.round((Math.max(0, Math.min(5, c.score)) / 5) * 2))
+}
+
+// Ecosystem signal — soft bonus capped +3, library reach signal.
+// Stars are log-scale: each 10× lifts +1 (cap at 10K+ stars = +3).
+function scoreEcosystem(gh: GitHubInfo): {
+  pts: number
+  breakdown: { stars: number; contributors: number; downloads: number }
+} {
+  const stars = gh.stars >= 10000 ? 2 : gh.stars >= 1000 ? 2 : gh.stars >= 100 ? 1 : 0
+  const contributors = gh.contributors_count >= 50 ? 1 : 0
+  const dl = gh.npm.weekly_downloads ?? 0
+  // Library only: weekly downloads 1K+ +1, 100K+ already implied by stars
+  const downloads = dl >= 1000 ? 1 : 0
+  const pts = Math.min(3, stars + contributors + downloads)
+  return { pts, breakdown: { stars, contributors, downloads } }
+}
+
+// Activity recency — soft bonus capped +2.
+function scoreActivity(gh: GitHubInfo): {
+  pts: number
+  breakdown: { recent_commit: number; momentum: number }
+} {
+  const last = gh.last_commit_at ? new Date(gh.last_commit_at).getTime() : 0
+  const ageDays = last > 0 ? (Date.now() - last) / (1000 * 60 * 60 * 24) : Infinity
+  // Recent commit (≤ 30d) +1
+  const recent_commit = ageDays <= 30 ? 1 : 0
+  // Momentum — ≥ 20 commits in last 100 (i.e. > 1 commit/wk on default branch)
+  const momentum = gh.commit_count_recent >= 20 ? 1 : 0
+  const pts = Math.min(2, recent_commit + momentum)
+  return { pts, breakdown: { recent_commit, momentum } }
 }
 
 function scoreTechLayers(langs: Record<string, number>, stack: string[]): { pts: number; layers: string[] } {
@@ -547,12 +846,12 @@ function scoreTechLayers(langs: Record<string, number>, stack: string[]): { pts:
   if (/postgres|supabase|mongodb|mysql|redis|d1|neon/.test(s)) L.add('database')
   if (/claude|openai|gpt|gemini|llm|anthropic|cursor|lovable|v0|replit/.test(s)) L.add('ai')
   if (/ethereum|solana|base|chain|wallet|web3|nft|mcp/.test(s)) L.add('chain')
-  // PRD: Frontend+Backend+DB = 3, +AI = +1, +Chain/MCP = +1  (cap 5)
+  // v2 weights: Frontend+Backend+DB = 2, +AI = +0.5 (rounded), +Chain/MCP = +0.5 (cap 3)
   let pts = 0
-  if (L.has('frontend') && L.has('backend') && L.has('database')) pts += 3
+  if (L.has('frontend') && L.has('backend') && L.has('database')) pts += 2
   if (L.has('ai')) pts += 1
   if (L.has('chain')) pts += 1
-  return { pts: Math.min(pts, 5), layers: [...L] }
+  return { pts: Math.min(pts, 3), layers: [...L] }
 }
 
 function scoreBriefIntegrity(brief: Record<string, unknown>) {
@@ -750,17 +1049,58 @@ OUTPUT RULES
 - role_title.reasoning: short justification. For re-analysis, explain what changed.
 - score.current: final score 0-100 based on today's evidence.
 
-  SCORE FORMATION — anti-anchoring discipline (critical, v1.7):
-  1) START from auto_baseline = scoring_so_far.auto_50_breakdown.total * 2 (so auto 33 → baseline 66).
-  2) Apply deductions:
+  SCORE FORMATION — anti-anchoring discipline (critical, v2 · 2026-04-27):
+  1) START from auto_baseline = scoring_so_far.auto_50_breakdown.total * 2.
+     The new 50-pt pillar redistribution explicitly rewards production maturity:
+        Lighthouse           20  (was 30 — Performance 8 · A11y 5 · BP 4 · SEO 3)
+        Production Maturity  10  NEW · tests · CI · observability · TS strict · lockfile · LICENSE
+        Source Hygiene        5  (github accessible · monorepo · governance docs)
+        Live URL Health       5
+        Completeness          2  (renormalized from polish 0-5)
+        Tech Diversity        3
+        Brief Integrity       5  (0 for walk-on · ceiling effectively 45)
+        ─────────────────────
+        Total cap            50
+     Soft bonus (NOT in 50, stacks on top, capped +5):
+        Ecosystem            +0-3  (stars / contributors / npm weekly downloads)
+        Activity             +0-2  (recent commit / momentum)
+     This means a polished tiny app with no tests / no CI / no observability
+     gets ≤3 in the Maturity slot, capping its baseline naturally — old rubric
+     let such projects climb to 88. The new rubric pulls them back to ~70.
+     Conversely a 100K-star library with tests + CI + lockfile + governance
+     earns the full 10 Maturity + 3 Ecosystem soft, lifting it correctly.
+  2) Apply deductions (in addition to baseline):
        · Each tampering_signal: high -10 to -20 · medium -5 · low -2
-       · Lighthouse Performance  <50 and not NA: -5
-       · Lighthouse BestPractices <50 and not NA: -5
+       · Lighthouse Performance  <50 and not NA: -3 (lighter than v1 since slot is now 8 not 10)
+       · Lighthouse BestPractices <50 and not NA: -3
        · Thin GitHub (<50 commits or <3 months active): -3
-       · No tests in repo: -3
-       · No observability / telemetry: -2
        · Polish gap (completeness_signals.score < 1.5 AND live_url is web): -3
          "no og:image, no manifest, no apple-touch — looks half-shipped"
+
+  ★ ABSOLUTE ANTI-DOUBLE-COUNTING RULE (critical · v2):
+     DO NOT add a "minus" entry for any signal already priced into one of the
+     scoring_so_far.auto_50_breakdown slots. Specifically NEVER deduct for:
+       · "no tests"           — already in production_maturity.tests
+       · "no CI"              — already in production_maturity.ci
+       · "no observability"   — already in production_maturity.observability
+       · "no TS strict"       — already in production_maturity.ts_strict
+       · "no lockfile"        — already in production_maturity.lockfile
+       · "no LICENSE"         — already in production_maturity.license
+       · "no monorepo"        — already in source_hygiene.structure
+       · "no governance docs" — already in source_hygiene.governance
+       · "low completeness"   — already in completeness_pts (capped 0-2)
+       · "no GitHub stars"    — already in soft.ecosystem.stars
+       · "no contributors"    — already in soft.ecosystem.contributors
+       · "stale repo"         — already in soft.activity.recent_commit
+     If a project earned 2/10 in production_maturity, that 8-point gap from
+     the ceiling IS the deduction. Adding a "−5 no tests" line on top
+     punishes the same fact twice. The new rubric explicitly relocated those
+     signals into the additive baseline so that high-maturity projects rise
+     and low-maturity projects fall NATURALLY without ad-hoc minus rows.
+     If you find yourself writing such a deduction, instead ADD a positive
+     comment in delta_reasoning ("production maturity slot landed 2/10
+     because of zero tests / no CI") — that surfaces the gap without
+     double-deducting.
   3) Apply ADDITIVE evidence bonuses — each concrete, independently verifiable bullet
      is worth ~+3 to +5. No bundled "infrastructure depth" lift. Examples of +3/+5:
        · Real smart contract deployed on mainnet (with explorer link): +5
@@ -771,13 +1111,27 @@ OUTPUT RULES
        · Multi-platform surface (web + mobile binary, not just responsive): +3
        · Polish full house (completeness_signals.score >= 4.0): +3
          "shipped: og:image + twitter:card + manifest + apple-touch — production polish"
-     Cap total positive bonuses at +25 from baseline unless there is truly
-     exceptional evidence (rare — document explicitly in delta_reasoning).
+     Cap total positive bonuses at +20 from baseline (was +25; tightened to
+     match the Production Maturity slot already capturing major maturity gains).
   4) Resulting score.current must be REPRODUCIBLE from the evidence list above.
      Two different projects with different strength profiles must NOT land on
      the same score by default — avoid the 75-80 "pretty good" anchor.
   5) If the math lands you in 75-85 for a solid-but-not-outstanding project,
      push DOWN. The rookie bar is 75 and it should be hard to cross.
+
+  FORM FACTOR (scoring_so_far.form_factor) — adjust commentary, not numbers:
+     The pillar weights above already self-correct across form factors via the
+     Production Maturity + Ecosystem slots. But your prose should reflect what
+     KIND of project this is so the Creator gets actionable feedback:
+       · 'app'       — Lighthouse / live UX / completeness signals are first-class concerns
+       · 'library'   — tests / TS strict / docs / npm reach are first-class; Lighthouse perf
+                       on a docs site is secondary (don't dwell on perf 56 if a11y 100)
+       · 'scaffold'  — reproducibility (env templates, clear setup, demos) is first-class
+       · 'unknown'   — reason from context; default to 'app' framing
+     Calibration anchor: a polished 3-month-old greenfield app with no tests /
+     no CI / no observability should NOT outscore a 100K-star library shipping
+     to millions weekly. If your math suggests it does, your bonuses are
+     overweight — pull them back.
   CLI-PREVIEW MODE (input.is_cli_preview === true):
      This run was triggered by an anonymous \`npx commitshow audit\` call —
      the creator never reached the /submit form, so the build_brief is empty
@@ -785,7 +1139,16 @@ OUTPUT RULES
        · DO NOT emit a tampering_signal for missing Phase 2 brief sections
          (failure_log, decision_archaeology, ai_delegation_map, etc.). The
          creator never had the chance to fill them.
-       · DO NOT apply the integrity_score = 0 penalty.
+       · DO NOT apply the integrity_score = 0 penalty under ANY framing
+         (not as "tampering_signal", not as "missing brief integrity",
+         not as "no Phase 2 self-check"). Walk-ons literally cannot fill
+         the brief — penalizing them is unfair and a frequent regression.
+       · DO NOT deduct for the +5 "Build Brief integrity" slot inside the
+         Audit pillar being empty. That slot is structurally inaccessible
+         to walk-ons — treat the Audit pillar effective ceiling as 45/50,
+         not 50/50, and renormalize bonuses/penalties accordingly. The
+         CLI display normalizes Audit to /100 separately; your job is just
+         to score what's evaluable on the 45-point base.
        · You MAY note in delta_reasoning that "Phase 2 brief not yet
          provided · audition (commit.show/submit) unlocks +15 to +20 typical."
        · Score what you can verify objectively (Lighthouse, GitHub signals,
@@ -793,7 +1156,18 @@ OUTPUT RULES
          missing brief sections are framed as "not yet provided" not as
          dishonesty.
        · Phase 1 self-claims are also absent in CLI mode — that's expected,
-         not suspicious.
+         not suspicious. DO NOT deduct for empty problem/features/target_user.
+       · LIBRARY-SHAPED REPOS: when a repo has no live URL even after the
+         server tried to infer one (no GitHub homepage field set, or the
+         homepage points to a docs/source URL with no Lighthouse-able
+         deployment), Lighthouse + completeness signals will be absent.
+         That removes ~30 pts of Audit pillar real estate. Score on what
+         remains (GitHub accessibility, tech-layer diversity, code-quality
+         signals) and renormalize: a polished library with no deployment
+         should land in the 30-40/50 range, not 5-10/50. Specifically credit:
+         test files present (+evidence), TypeScript ratio > 80% (+evidence),
+         monorepo discipline (+evidence), CI workflows (+evidence). Don't
+         score a 113K-star library as 8/50 just because it has no homepage.
      The intent: a CLI preview should land at a fair, evidence-only score
      that Creator can clearly improve by auditioning. Don't punish for the
      flow they haven't seen yet.
@@ -1008,7 +1382,7 @@ OUTPUT SHAPE
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: includeExpertPanel ? 5600 : 4500,
         system: systemPrompt,
         tools: [analysisTool],
@@ -1201,7 +1575,7 @@ Return ONE tool call containing an "items" array with ONE object per input file.
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 3000,
         system,
         tools: [tool],
@@ -1320,18 +1694,40 @@ Deno.serve(async (req) => {
     }),
   ])
 
-  // Score components
-  const lhScore = scoreLighthouse(lh)
-  const ghPts = gh.accessible ? 5 : 0
+  // Score components · v2 (50pt cap with optional +5 soft bonus).
+  // See scoring section above for slot allocation.
+  const lhScore = scoreLighthouse(lh)                                          //  0-20
   const stackHints = [
     brief?.features ?? '',
     project.description ?? '',
   ].filter(Boolean) as string[]
-  const tech = scoreTechLayers(gh.languages || {}, stackHints)
-  const briefScore = scoreBriefIntegrity(brief ?? {})
-  const healthPts = health.ok && health.elapsed_ms < 3000 ? 5 : 0
+  const tech       = scoreTechLayers(gh.languages || {}, stackHints)           //  0-3
+  const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on)
+  const healthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0             //  0-5
+  const maturity   = scoreProductionMaturity(gh.signals)                       //  0-10
+  const hygiene    = scoreSourceHygiene(gh)                                    //  0-5
+  const completenessPts = scoreCompleteness(completeness)                      //  0-2
+  const ecosystem  = scoreEcosystem(gh)                                        //  0-3 soft
+  const activity   = scoreActivity(gh)                                         //  0-2 soft
 
-  const score_auto = lhScore.total + ghPts + tech.pts + briefScore.pts + healthPts
+  // Polish + Maturity coupling — a polished greenfield app with no tests /
+  // no CI / no observability shouldn't outscore a real production library.
+  // We scale the "polish" slots (Lighthouse · Live · Completeness · Tech)
+  // by a maturity confidence factor: 0/10 maturity → 60% polish credit,
+  // 10/10 maturity → 100% polish credit. Maturity, Hygiene, Brief, and
+  // Soft bonuses are NOT scaled — they're the maturity evidence itself.
+  // This is the structural fix for the vibe-88 / shadcn-68 inversion.
+  const maturityRatio  = maturity.pts / 10                               // 0.0 - 1.0
+  const maturityFactor = 0.6 + 0.4 * maturityRatio                       // 0.6 - 1.0
+  const polishSubtotal = lhScore.total + healthPts + completenessPts + tech.pts
+  const scaledPolish   = Math.round(polishSubtotal * maturityFactor)
+
+  // Hard 50-cap pillar — Lighthouse + Maturity + Hygiene + Completeness +
+  // TechDiv + Live + Brief = 20 + 10 + 5 + 2 + 3 + 5 + 5 = 50 (before scaling).
+  const auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefScore.pts
+  // Soft bonus stacks ON TOP, capped so total stays ≤ 55.
+  const auto_soft = ecosystem.pts + activity.pts
+  const score_auto = Math.min(55, auto_hard + auto_soft)
 
   // Fetch parent snapshot BEFORE Claude call — for re-analysis we want Claude
   // to frame deltas against the prior snapshot, not against the brief.
@@ -1386,15 +1782,24 @@ Deno.serve(async (req) => {
     github: gh,
     scoring_so_far: {
       auto_50_breakdown: {
-        lighthouse: lhScore,
-        github_pts: ghPts,
-        tech_pts: tech.pts,
+        lighthouse:           lhScore,                 //  0-20 (Performance 8 · A11y 5 · BP 4 · SEO 3)
+        production_maturity:  maturity,                //  0-10 (tests · CI · observability · TS strict · lockfile · LICENSE)
+        source_hygiene:       hygiene,                 //  0-5  (github accessible · monorepo · governance docs)
+        completeness_pts:     completenessPts,         //  0-2  (renormalized from 0-5 polish score)
+        tech_pts:             tech.pts,                //  0-3
         tech_layers_detected: tech.layers,
-        brief_pts: briefScore.pts,
-        health_pts: healthPts,
-        total: score_auto,
+        brief_pts:            briefScore.pts,          //  0-5  (0 for walk-on)
+        health_pts:           healthPts,               //  0-5
+        hard_subtotal:        auto_hard,               //  cap 50
+        soft: {
+          ecosystem:          ecosystem,               //  +0-3 stars · contributors · npm dl
+          activity:           activity,                //  +0-2 recent commit · momentum
+          subtotal:           auto_soft,               //  +0-5
+        },
+        total:                score_auto,              //  cap 55
       },
       polish_signals_0_to_5: completeness.score,
+      form_factor:           gh.form_factor,
     },
     // True when the project was created via `npx commitshow audit` and the
     // creator hasn't run through the /submit brief flow. Claude must NOT
@@ -1415,9 +1820,18 @@ Deno.serve(async (req) => {
   }
 
   // Prefer Claude's current score (evidence-weighted) but keep auto-50 as floor signal.
-  const scoreTotal = claude.score?.current && claude.score.current > 0
-    ? Math.round(claude.score.current)
-    : score_auto
+  // Walk-on (CLI preview) bypasses Claude's qualitative score because
+  // Claude reliably double-counts deductions for signals already priced
+  // into the auto_50 slots (production_maturity, source_hygiene,
+  // ecosystem). The deterministic score_auto is the source of truth.
+  // For walk-on display, the CLI normalizes score_auto / 45 * 100.
+  // For league projects (auditioned), Claude's calibration matters
+  // because it considers Brief integrity + Phase 1/2 cross-checks.
+  const scoreTotal = isCliPreview
+    ? Math.min(100, Math.round((score_auto / 45) * 100))    // walk-on: deterministic /45 normalize
+    : (claude.score?.current && claude.score.current > 0
+        ? Math.round(claude.score.current)
+        : score_auto)
 
   // Axis-level delta
   const currentAxisMap: Record<string, number> = {}
@@ -1454,7 +1868,7 @@ Deno.serve(async (req) => {
     score_total_delta:  scoreTotalDelta,
     commit_sha:         gh.head_commit_sha,
     brief_sha:          gh.debut_brief?.sha ?? null,
-    model_version:      'claude-sonnet-4-5',
+    model_version:      'claude-sonnet-4-6',
   }]).select('id').single()
   if (snapErr) console.error('snapshot insert failed', snapErr)
 
@@ -1491,11 +1905,18 @@ Deno.serve(async (req) => {
     score_total_delta: scoreTotalDelta,
     delta_from_parent: Object.keys(deltaFromParent).length ? deltaFromParent : null,
     breakdown: {
-      lighthouse: lhScore,
-      github_pts: ghPts,
-      tech: { pts: tech.pts, layers: tech.layers },
-      brief: briefScore,
-      health_pts: healthPts,
+      lighthouse:          lhScore,
+      production_maturity: maturity,
+      source_hygiene:      hygiene,
+      completeness_pts:    completenessPts,
+      tech:                { pts: tech.pts, layers: tech.layers },
+      brief:               briefScore,
+      health_pts:          healthPts,
+      ecosystem:           ecosystem,
+      activity:            activity,
+      hard_subtotal:       auto_hard,
+      soft_subtotal:       auto_soft,
+      form_factor:         gh.form_factor,
     },
     lh,
     github: gh,

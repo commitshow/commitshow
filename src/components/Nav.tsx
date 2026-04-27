@@ -241,6 +241,7 @@ export function Nav() {
                   </NavLink>
                   <DropdownLink to="/me" onSelect={() => setMenuOpen(false)}>My profile</DropdownLink>
                   <DropdownLink to="/projects" onSelect={() => setMenuOpen(false)}>Browse projects</DropdownLink>
+                  <DropdownLink to="/backstage" onSelect={() => setMenuOpen(false)}>Backstage</DropdownLink>
                   <DropdownLink to="/rulebook" onSelect={() => setMenuOpen(false)}>Judging rulebook</DropdownLink>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false) }}
@@ -392,6 +393,13 @@ export function Nav() {
                   style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
                 >
                   MY PROFILE
+                </NavLink>
+                <NavLink
+                  to="/backstage"
+                  className="py-3 font-mono text-xs tracking-widest"
+                  style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  BACKSTAGE
                 </NavLink>
                 <NavLink
                   to="/rulebook"

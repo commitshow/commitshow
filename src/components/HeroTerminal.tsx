@@ -1,0 +1,320 @@
+// HeroTerminal — code-rendered terminal animation that replaces the hero
+// background video. Same visual goal (atmospheric depth behind the
+// headline) but at zero asset cost, no codec/CDN/autoplay headaches, and
+// it doubles as a live demo of the product itself.
+//
+// Behavior:
+//   - 14-stage state machine cycling every ~12s
+//   - Types the `commitshow audit` command, then reveals the audit
+//     output stage-by-stage (score → bars → strengths/concerns)
+//   - Loops with a soft fade
+//   - Honors prefers-reduced-motion (jumps to final state, no looping)
+//   - Mobile: terminal stays visible but font scales down + content
+//     content fits the narrower viewport
+//
+// Sits behind the headline (z-index 0) with the existing hero vignette
+// keeping the middle area legible. Headline + CTAs render above (z-10).
+
+import { useEffect, useRef, useState } from 'react'
+
+// 5×5 ASCII font for the big score · same shapes as packages/cli/src/lib/render.ts
+// so the visual is the SAME mark a user gets in their terminal.
+const BIG_DIGITS: Record<string, string[]> = {
+  '0': ['█▀▀▀█', '█   █', '█   █', '█   █', '█▄▄▄█'],
+  '1': ['  ▄█ ', '   █ ', '   █ ', '   █ ', '  ▄█▄'],
+  '2': ['█▀▀▀█', '    █', '▄▀▀▀▘', '█    ', '█▄▄▄▄'],
+  '3': ['█▀▀▀█', '    █', ' ▀▀▀█', '    █', '█▄▄▄█'],
+  '4': ['█   █', '█   █', '█▀▀▀█', '    █', '    █'],
+  '5': ['█▀▀▀▀', '█    ', '▀▀▀▀█', '    █', '█▄▄▄█'],
+  '6': ['█▀▀▀▀', '█    ', '█▀▀▀█', '█   █', '█▄▄▄█'],
+  '7': ['▀▀▀▀█', '   █ ', '  █  ', ' █   ', '█    '],
+  '8': ['█▀▀▀█', '█   █', '█▀▀▀█', '█   █', '█▄▄▄█'],
+  '9': ['█▀▀▀█', '█   █', '█▀▀▀█', '    █', '    █'],
+}
+
+function bigDigits(n: string): string[] {
+  const cols = n.split('').map(d => BIG_DIGITS[d] ?? BIG_DIGITS['0'])
+  return Array.from({ length: 5 }, (_, row) => cols.map(c => c[row]).join(' '))
+}
+
+// One line of terminal output. `pre` colors the line; `cursor` shows a
+// blinking caret at the end of the most recent line being typed.
+type Line =
+  | { kind: 'prompt'; text: string }                // $ command
+  | { kind: 'note';   text: string }                // dim status text
+  | { kind: 'big';    score: string }               // 5-row ASCII number
+  | { kind: 'caption'; pre: string; mid: string; mid_color: string; post: string }
+  | { kind: 'bar';    label: string; value: string; bar: string; color: string }
+  | { kind: 'lockedBar'; label: string; value: string }
+  | { kind: 'arrow';  dir: 'up' | 'down'; text: string }
+  | { kind: 'spacer' }
+
+// The full sequence (steady-state · what you see at the end of one cycle)
+const FULL_SEQUENCE: Line[] = [
+  { kind: 'prompt',  text: 'npx commitshow audit github.com/shadcn-ui/ui' },
+  { kind: 'spacer' },
+  { kind: 'note',    text: 'Refreshing audit for shadcn-ui/ui…' },
+  { kind: 'spacer' },
+  { kind: 'big',     score: '82' },
+  { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: ' · strong' },
+  { kind: 'spacer' },
+  { kind: 'bar',       label: 'Audit', value: '37/45', bar: '▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱', color: '#00D4AA' },
+  { kind: 'lockedBar', label: 'Scout', value: '—/30' },
+  { kind: 'lockedBar', label: 'Comm.', value: '—/20' },
+  { kind: 'spacer' },
+  { kind: 'arrow', dir: 'up',   text: '90.5% TypeScript with strict mode' },
+  { kind: 'arrow', dir: 'up',   text: '7 CI workflows + 79 test files' },
+  { kind: 'arrow', dir: 'up',   text: 'Lighthouse Accessibility 100, BP 100' },
+  { kind: 'arrow', dir: 'down', text: 'Lighthouse perf 56 on docs site' },
+  { kind: 'arrow', dir: 'down', text: 'Zero observability libs detected' },
+]
+
+// Stage timeline · ms after cycle start where each line should APPEAR.
+// Tuned so the big score lands around 2.5s (early enough to be the hook).
+// Total cycle ≈ 12s including a 4s "hold" at the end.
+const STAGE_REVEAL_AT: number[] = [
+  300,    // 0  prompt (typed in over its own duration · see TYPING_MS)
+  1700,   // 1  spacer
+  1750,   // 2  note "Refreshing…"
+  2400,   // 3  spacer
+  2700,   // 4  big score
+  3100,   // 5  caption
+  3500,   // 6  spacer
+  3700,   // 7  Audit bar
+  4000,   // 8  Scout locked
+  4250,   // 9  Comm locked
+  4600,   // 10 spacer
+  4800,   // 11 ↑ TS strict
+  5100,   // 12 ↑ CI + tests
+  5400,   // 13 ↑ Lighthouse a11y
+  5750,   // 14 ↓ perf 56
+  6100,   // 15 ↓ no observability
+]
+
+const CYCLE_MS  = 12_000   // total before fade-restart
+const FADE_MS   = 800      // fade out → in
+const TYPING_MS = 1300     // duration of the prompt typing animation
+
+interface Props {
+  /** Force final-state render with no animation · for prefers-reduced-motion. */
+  reduceMotion?: boolean
+}
+
+export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
+  const [tick, setTick] = useState(0)            // ms elapsed in current cycle
+  const [cycleId, setCycleId] = useState(0)
+  const [reducedMotion, setReducedMotion] = useState(forceReduce ?? false)
+  const rafRef = useRef<number | null>(null)
+  const startRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (forceReduce) { setReducedMotion(true); return }
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = () => setReducedMotion(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [forceReduce])
+
+  useEffect(() => {
+    if (reducedMotion) return
+    startRef.current = performance.now()
+    const loop = (now: number) => {
+      const elapsed = now - startRef.current
+      if (elapsed >= CYCLE_MS) {
+        // restart cycle · fade is handled in CSS via cycleId key
+        startRef.current = now
+        setTick(0)
+        setCycleId(c => c + 1)
+      } else {
+        setTick(elapsed)
+      }
+      rafRef.current = requestAnimationFrame(loop)
+    }
+    rafRef.current = requestAnimationFrame(loop)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [reducedMotion])
+
+  // How many lines (and chars within the typing prompt) are visible right now.
+  // In reduced-motion mode, everything is at final state.
+  const visibleLines = reducedMotion ? FULL_SEQUENCE.length : STAGE_REVEAL_AT.filter(t => tick >= t).length
+  const promptCharProgress = reducedMotion
+    ? 1
+    : Math.max(0, Math.min(1, (tick - STAGE_REVEAL_AT[0]) / TYPING_MS))
+
+  // Cycle fade · briefly drop opacity right before/after restart so the loop
+  // doesn't feel jarring. Computed off the same tick.
+  const fadeOpacity = reducedMotion ? 1
+    : tick > CYCLE_MS - FADE_MS ? Math.max(0.15, 1 - (tick - (CYCLE_MS - FADE_MS)) / FADE_MS)
+    : tick < FADE_MS              ? Math.min(1, 0.15 + (tick / FADE_MS) * 0.85)
+    : 1
+
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 pointer-events-none flex items-center justify-center"
+      style={{ zIndex: -1 }}
+    >
+      <div
+        key={cycleId}
+        className="font-mono"
+        style={{
+          opacity: fadeOpacity,
+          transition: 'opacity 200ms ease-out',
+          width: 'min(720px, 92vw)',
+          fontSize: 'clamp(11px, 1.05vw, 13px)',
+          lineHeight: 1.55,
+          color: 'rgba(248,245,238,0.55)',
+          // The terminal content sits behind the headline. The hero's
+          // vignette gradient (in Hero.tsx) layers on top to keep the
+          // middle dark enough for the headline to read.
+          textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+        }}
+      >
+        <TerminalChrome />
+        <div className="px-4 md:px-5 py-3 md:py-4">
+          {FULL_SEQUENCE.slice(0, visibleLines).map((line, i) => (
+            <LineRow
+              key={i}
+              line={line}
+              index={i}
+              isLastLine={i === visibleLines - 1}
+              promptProgress={i === 0 ? promptCharProgress : 1}
+              showCursor={!reducedMotion && (
+                (i === 0 && promptCharProgress < 1) ||
+                (i === visibleLines - 1 && i > 0 && tick < CYCLE_MS - FADE_MS)
+              )}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TerminalChrome() {
+  return (
+    <div
+      className="flex items-center gap-1.5 px-3 py-2"
+      style={{
+        background: 'rgba(15, 32, 64, 0.55)',
+        borderTopLeftRadius: 4,
+        borderTopRightRadius: 4,
+        borderBottom: '1px solid rgba(240,192,64,0.08)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
+      }}
+    >
+      <Dot color="rgba(255,95,86,0.7)" />
+      <Dot color="rgba(255,189,46,0.7)" />
+      <Dot color="rgba(39,201,63,0.7)" />
+      <span
+        className="ml-3 tracking-widest"
+        style={{ color: 'rgba(248,245,238,0.45)', fontSize: '10px' }}
+      >
+        commit.show — npx commitshow audit
+      </span>
+    </div>
+  )
+}
+
+function Dot({ color }: { color: string }) {
+  return <span className="inline-block rounded-full" style={{ width: 9, height: 9, background: color }} />
+}
+
+function LineRow({
+  line, index, isLastLine, promptProgress, showCursor,
+}: {
+  line:           Line
+  index:          number
+  isLastLine:     boolean
+  promptProgress: number
+  showCursor:     boolean
+}) {
+  const cursor = showCursor ? <span className="terminal-cursor" aria-hidden="true" /> : null
+  const _ = isLastLine // marker so future fade-in-last logic has a hook
+
+  if (line.kind === 'spacer') {
+    return <div style={{ height: '0.6em' }} />
+  }
+
+  if (line.kind === 'prompt') {
+    const visibleChars = Math.floor(line.text.length * promptProgress)
+    const shown = line.text.slice(0, visibleChars)
+    return (
+      <div>
+        <span style={{ color: 'rgba(240,192,64,0.7)' }}>$ </span>
+        <span style={{ color: 'rgba(248,245,238,0.85)' }}>{shown}</span>
+        {cursor}
+      </div>
+    )
+  }
+
+  if (line.kind === 'note') {
+    return <div style={{ color: 'rgba(248,245,238,0.45)' }}>{line.text}{cursor}</div>
+  }
+
+  if (line.kind === 'big') {
+    const rows = bigDigits(line.score)
+    return (
+      <div className="my-1.5">
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            style={{
+              color: '#D4A838',                   // brand goldDeep · matches CLI big digit
+              letterSpacing: '0.05em',
+              textShadow: '0 0 8px rgba(212,168,56,0.25), 0 1px 2px rgba(0,0,0,0.6)',
+              paddingLeft: '6.5em',                // visually center beside ascii art
+            }}
+          >
+            {row}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (line.kind === 'caption') {
+    return (
+      <div style={{ color: 'rgba(248,245,238,0.45)', paddingLeft: '5.5em' }}>
+        {line.pre}
+        <span style={{ color: line.mid_color }}>{line.mid}</span>
+        {line.post}
+      </div>
+    )
+  }
+
+  if (line.kind === 'bar') {
+    return (
+      <div className="flex items-baseline" style={{ paddingLeft: '2em' }}>
+        <span style={{ color: 'rgba(248,245,238,0.7)', minWidth: '5em' }}>{line.label}</span>
+        <span style={{ color: 'rgba(248,245,238,0.5)', minWidth: '4.5em' }}>{line.value}</span>
+        <span style={{ color: line.color, fontFamily: 'DM Mono, monospace', letterSpacing: '0.04em' }}>{line.bar}</span>
+      </div>
+    )
+  }
+
+  if (line.kind === 'lockedBar') {
+    return (
+      <div className="flex items-baseline" style={{ paddingLeft: '2em' }}>
+        <span style={{ color: 'rgba(248,245,238,0.55)', minWidth: '5em' }}>{line.label}</span>
+        <span style={{ color: 'rgba(248,245,238,0.4)', minWidth: '4.5em' }}>{line.value}</span>
+        <span style={{ color: 'rgba(248,245,238,0.3)', letterSpacing: '0.04em' }}>─ audition unlocks ─</span>
+      </div>
+    )
+  }
+
+  if (line.kind === 'arrow') {
+    const arrowChar = line.dir === 'up' ? '↑' : '↓'
+    const arrowColor = line.dir === 'up' ? '#00D4AA' : 'rgba(200,16,46,0.85)'
+    return (
+      <div style={{ paddingLeft: '2em' }}>
+        <span style={{ color: arrowColor, marginRight: '0.5em' }}>{arrowChar}</span>
+        <span style={{ color: 'rgba(248,245,238,0.6)' }}>{line.text}</span>
+      </div>
+    )
+  }
+
+  return null
+}

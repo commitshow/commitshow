@@ -75,6 +75,36 @@ function djb2(s: string): string {
   return (h >>> 0).toString(36)
 }
 
+// Fetch a repo's GitHub-side `homepage` field — that's where most maintainers
+// declare the deployed URL (shadcn-ui/ui → ui.shadcn.com · etc). Without
+// this, walk-on previews lose Lighthouse + completeness + Live URL bonuses
+// (≈ 30/50 of the Audit pillar) and score wildly low for polished projects.
+//
+// GitHub anonymous limit is 60/hr/IP; if GITHUB_TOKEN is set we use it for
+// 5,000/hr. Failures are silent — no live_url just means we proceed without
+// Lighthouse, same as before this fix.
+async function inferLiveUrlFromGithub(slug: string): Promise<string | null> {
+  const token = Deno.env.get('GITHUB_TOKEN')
+  try {
+    const res = await fetch(`https://api.github.com/repos/${slug}`, {
+      headers: {
+        'User-Agent': 'commit.show-audit-preview/1',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) return null
+    const j = await res.json()
+    const raw = typeof j.homepage === 'string' ? j.homepage.trim() : ''
+    if (!raw) return null
+    // Accept https://… and http://…; reject mailto:/javascript:/empty.
+    if (!/^https?:\/\//i.test(raw)) return null
+    return raw
+  } catch (e) {
+    console.error('infer_live_url failed', slug, (e as Error)?.message ?? e)
+    return null
+  }
+}
+
 function ipKey(req: Request): string {
   const ip =
     req.headers.get('cf-connecting-ip') ??
@@ -252,9 +282,10 @@ Deno.serve(async (req) => {
   const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  let body: { github_url?: string; live_url?: string }
+  let body: { github_url?: string; live_url?: string; force?: boolean }
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
   if (!body.github_url) return json({ error: 'github_url required' }, 400)
+  const force = body.force === true
 
   const canon = canonicalGithub(body.github_url)
   if (!canon) return json({ error: 'Not a GitHub URL', input: body.github_url }, 400)
@@ -268,10 +299,18 @@ Deno.serve(async (req) => {
     .limit(1)
     .maybeSingle()
 
+  // Resolve final live_url: explicit > existing row > GitHub homepage fetch.
+  // Without this, walk-ons of polished libraries (e.g. shadcn-ui/ui) lose
+  // ~30 pts they could've earned on Lighthouse + completeness + Live URL.
+  let liveUrlEffective: string | null = body.live_url ?? existing?.live_url ?? null
+  if (!liveUrlEffective) {
+    liveUrlEffective = await inferLiveUrlFromGithub(canon.slug)
+  }
+
   let projectId: string | null = existing?.id ?? null
   let isCacheHit = false
 
-  if (existing) {
+  if (existing && !force) {
     const { data: lastSnap } = await admin
       .from('analysis_snapshots')
       .select('created_at')
@@ -285,7 +324,8 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Rate limit · IP always counted, URL+global only on cache miss
+  // Rate limit · IP always counted, URL+global only on cache miss (force=true
+  // bypasses the cache check above, so we count it as a real Claude spend).
   const rl = await enforceRateLimit(admin, req, canon.slug, /*willCostClaude*/ !isCacheHit)
   if (!rl.ok) return json({
     error:   'rate_limited',
@@ -308,7 +348,7 @@ Deno.serve(async (req) => {
       .from('projects')
       .insert({
         github_url:   canon.canonical,
-        live_url:     body.live_url ?? null,
+        live_url:     liveUrlEffective,
         project_name: canon.slug.split('/')[1],
         status:       'preview',
         season_id:    null,
@@ -318,6 +358,10 @@ Deno.serve(async (req) => {
       .single()
     if (createErr || !created) return json({ error: 'Failed to create preview project', detail: createErr?.message }, 500)
     projectId = created.id
+  } else if (liveUrlEffective && !existing?.live_url) {
+    // Existing row · backfill live_url so analyze-project picks it up. No
+    // delta-tracking needed — the next snapshot will reflect the change.
+    await admin.from('projects').update({ live_url: liveUrlEffective }).eq('id', projectId)
   }
 
   // Fire analyze-project in the background — chained fetch would hit edge wall

@@ -1,12 +1,17 @@
 # commit.show CLI
 
-> Audit any vibe-coded project from your terminal.
+> Audit any vibe-coded project from your terminal — the **walk-on** lane.
 
-The official CLI for **[commit.show](https://commit.show)** — pulls the latest
-audit report for a project and renders it inline. Score breakdown
-(Audit / Scout / Community), 3 strengths + 2 concerns, current season rank,
-delta since the last snapshot. Local runs also save a `.commitshow/audit.md`
-file so your AI coding agent can read the report in the next turn and iterate.
+The official CLI for **[commit.show](https://commit.show)**. A walk-on
+drops in, gets scored, and leaves — no signup, no audition fee, no league
+entry. You get the same Claude-grade analysis used in the full season
+(Audit / Scout / Community breakdown, 3 strengths + 2 concerns, rank,
+delta since the last snapshot). Local runs also save `.commitshow/audit.md`
+so your AI coding agent can read the report in the next turn and iterate.
+
+When a walk-on is ready to enter the season for real — Scout forecasts,
+season ranking, Backstage prompt-extraction, Hall of Fame — they audition
+at <https://commit.show/submit>.
 
 The npm package + command is `commitshow` (no dot — npm doesn't allow it in
 package names). Everything else uses the brand `commit.show`.

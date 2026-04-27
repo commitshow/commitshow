@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { HeroStats } from '../lib/heroStats'
+import { HeroTerminal } from './HeroTerminal'
 
 const HEADLINE_LINE_1 = 'Show your'
 const HEADLINE_LINE_2 = 'Commit'
@@ -107,11 +108,13 @@ export function Hero({ stats }: HeroProps) {
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-4 md:px-6 pt-20 pb-16 overflow-hidden">
 
-      {/* ── Background · static poster paints instantly, animated WebP
-          swaps in once it's fully decoded. Poster is ~100KB; animated is
-          ~multi-MB so we never block LCP on it. Poster stays behind the
-          animation as a fallback if the big file never downloads. ── */}
-      <HeroBackground />
+      {/* ── Background · code-rendered terminal animation (v3 · 2026-04-27).
+          Replaces the prior MP4/WebM video for: zero asset cost, no codec
+          gotchas, no CDN cache drama, full responsiveness, AND it doubles
+          as a live demo of `commitshow audit` itself. The original
+          <HeroBackground /> video implementation is kept below for rollback. */}
+      <HeroTerminal />
+      {/* <HeroBackground /> */}
 
 
       {/* Subtle vertical vignette so text stays legible while the conductor

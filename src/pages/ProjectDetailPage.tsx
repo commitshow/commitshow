@@ -23,6 +23,7 @@ import { ProjectActionFooter } from '../components/ProjectActionFooter'
 import { fetchAuditionStreak } from '../lib/auditionStreak'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
+import { BackstagePanel } from '../components/BackstagePanel'
 import { GraduationStanding } from '../components/GraduationStanding'
 import { BadgeSnippet } from '../components/BadgeSnippet'
 import { useAuth } from '../lib/auth'
@@ -124,7 +125,7 @@ export function ProjectDetailPage() {
   // Scroll-spy · highlight the section nav chip that matches the viewport
   useEffect(() => {
     if (loading) return
-    const ids = ['overview', 'analysis', 'activity', 'brief']
+    const ids = ['overview', 'analysis', 'activity', 'backstage', 'brief']
     const observer = new IntersectionObserver(
       entries => {
         // Pick the most-visible intersecting section; fall back to first hit
@@ -174,9 +175,10 @@ export function ProjectDetailPage() {
 
   // ── Section nav config (order = scroll order) ───────────────
   const sections: Array<{ id: string; label: string; ownerOnly?: boolean }> = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'analysis', label: 'Analysis' },
-    { id: 'activity', label: 'Activity' },
+    { id: 'overview',  label: 'Overview' },
+    { id: 'analysis',  label: 'Analysis' },
+    { id: 'activity',  label: 'Activity' },
+    { id: 'backstage', label: 'Backstage' },
   ]
   if (isOwner) sections.push({ id: 'brief', label: 'Private brief', ownerOnly: true })
 
@@ -456,6 +458,15 @@ export function ProjectDetailPage() {
                 ))}
               </ActivityList>
             </div>
+          </section>
+
+          {/* BACKSTAGE · public · locked until graduation per CLAUDE.md §12 */}
+          <section id="backstage" className="scroll-mt-28">
+            <SectionHeader
+              label="BACKSTAGE"
+              hint="Failures · decisions · delegation · the data nobody else captures. Sealed until graduation."
+            />
+            <BackstagePanel project={project} />
           </section>
 
           {/* BRIEF · owner only */}

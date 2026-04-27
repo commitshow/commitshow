@@ -118,6 +118,25 @@ function asStringArray(raw: unknown, take: number): string[] {
 
 export function renderAudit(view: AuditView): string {
   const { project: p, snapshot, standing } = view
+
+  // Walk-on vs league. Walk-on = preview status (anonymous CLI · not in
+  // a season). For walk-ons, Scout (0/30) and Community (low/20) are
+  // structurally absent — not evaluated zeros.
+  //
+  // We display Claude's calibrated score_total directly for walk-ons. The
+  // server prompt (rule 7 in analyze-project) tells Claude to score
+  // walk-ons assuming Scout+Comm absent, so score_total IS the walk-on
+  // score. This lets ecosystem signals (stars, npm reach), Production
+  // Maturity gaps (no tests / no CI), and double-counting safeguards
+  // shape the final number — none of which a deterministic /45
+  // normalization could capture.
+  //
+  // The /45 normalization (audit pillar excluding Brief slot) is still
+  // computed and exposed in JSON as `walk_on_audit_normalized` for agents
+  // that want a deterministic floor, but the user-facing big-digit uses
+  // the calibrated total.
+  const WALK_ON_AUDIT_MAX = 45
+  const isWalkOn   = p.status === 'preview'
   const total = p.score_total ?? 0
 
   // Header
@@ -147,21 +166,38 @@ export function renderAudit(view: AuditView): string {
     lines.push('  ' + ' '.repeat(leftPad) + c.goldDeep(row))
   }
   // Caption · small "/ 100 · band" · band tinted so the signal lives there.
+  // Walk-on track gets an extra middle segment so the score is read in the
+  // right context (88 walk-on ≠ 88 league).
   const band     = total >= 75 ? 'strong' : total >= 50 ? 'mid' : 'weak'
   const bandTone = scoreTone(total)
-  const caption  = `/ 100 · ${band}`
-  // Center the caption (visible chars only — color codes don't take width).
-  const capPad   = Math.floor((58 - caption.length) / 2)
-  lines.push('  ' + ' '.repeat(capPad) + c.muted('/ 100 · ') + bandTone(band))
+  const captionVisible = isWalkOn
+    ? `/ 100 · walk-on · ${band}`
+    : `/ 100 · ${band}`
+  const capPad   = Math.floor((58 - captionVisible.length) / 2)
+  if (isWalkOn) {
+    lines.push('  ' + ' '.repeat(capPad)
+      + c.muted('/ 100 · ') + c.gold('walk-on') + c.muted(' · ') + bandTone(band))
+  } else {
+    lines.push('  ' + ' '.repeat(capPad) + c.muted('/ 100 · ') + bandTone(band))
+  }
   lines.push('')
 
-  // 3-axis bars
-  const auditLine     = `  Audit  ${pad(`${p.score_auto}/50`, 7)}  ${scoreBar(p.score_auto, 50)}`
-  const scoutLine     = `  Scout  ${pad(`${p.score_forecast}/30`, 7)}  ${scoreBar(p.score_forecast, 30)}`
-  const communityLine = `  Comm.  ${pad(`${p.score_community}/20`, 7)}  ${scoreBar(p.score_community, 20)}`
+  // Axis bars · league shows all three; walk-on shows Audit only and
+  // surfaces Scout + Community as locked-with-unlock-hint rows.
+  // Walk-on Audit denominator is 45 (Brief slot excluded) so the math is
+  // visibly consistent with the big-digit normalization above.
+  const lockedBar     = '─ audition unlocks ─'   // exactly 20 cells · matches scoreBar width
+  const auditDen      = isWalkOn ? WALK_ON_AUDIT_MAX : 50
+  const auditScoreClamp = Math.min(p.score_auto ?? 0, auditDen)
+  const auditLine     = `  Audit  ${pad(`${auditScoreClamp}/${auditDen}`, 7)}  ${scoreBar(auditScoreClamp, auditDen)}`
   lines.push('  ' + auditLine)
-  lines.push('  ' + scoutLine)
-  lines.push('  ' + communityLine)
+  if (isWalkOn) {
+    lines.push('  ' + `  Scout  ${pad('—/30', 7)}  ` + c.muted(lockedBar))
+    lines.push('  ' + `  Comm.  ${pad('—/20', 7)}  ` + c.muted(lockedBar))
+  } else {
+    lines.push('  ' + `  Scout  ${pad(`${p.score_forecast}/30`, 7)}  ${scoreBar(p.score_forecast, 30)}`)
+    lines.push('  ' + `  Comm.  ${pad(`${p.score_community}/20`, 7)}  ${scoreBar(p.score_community, 20)}`)
+  }
   lines.push('')
 
   // 3 strengths + 2 concerns from scout_brief · §15-C.2 content contract.
@@ -305,6 +341,15 @@ export interface AgentJsonShape {
     url: string
   }
   score: {
+    /** "walk_on" = preview / CLI-only · scored on Audit pillar normalized
+     *   to /100. Scout + Community are structurally absent (not zero by
+     *   evaluation) so agents should prefer `walk_on_total` for display.
+     *  "league" = auditioned project · Audit + Scout + Community sum to
+     *   `total`. */
+    track:            'walk_on' | 'league'
+    /** Raw league total (Audit + Scout + Community + bonuses). Always
+     *   present. For walk-ons this is the un-normalized DB value — agents
+     *   that want the user-facing walk-on score should use `walk_on_total`. */
     total:            number
     total_max:        100
     audit:            number
@@ -315,8 +360,18 @@ export interface AgentJsonShape {
     community_max:    20
     /** +/- since parent snapshot, null if first audit or no change tracked. */
     delta_since_last: number | null
-    /** Pass band on 0-100 scale: "strong" ≥75 · "mid" 50-74 · "weak" <50 */
+    /** Pass band on 0-100 scale based on `total`: "strong" ≥75 · "mid" 50-74 · "weak" <50 */
     band: 'strong' | 'mid' | 'weak'
+    /** Walk-on score · Claude's calibrated total. Identical to `total`
+     *  when track === "walk_on"; null in league mode. */
+    walk_on_total:    number | null
+    /** Pass band derived from `walk_on_total`. Null in league mode. */
+    walk_on_band:     'strong' | 'mid' | 'weak' | null
+    /** Deterministic audit-pillar-only normalized score (Brief slot excluded
+     *  · base /45). Provided as a sanity-check floor for agents that want
+     *  pure algorithmic scoring without Claude's qualitative adjustments.
+     *  Null in league mode. */
+    walk_on_audit_normalized: number | null
   }
   standing: {
     rank:             number
@@ -359,6 +414,15 @@ function asObjectArray(raw: unknown, take: number): Array<{ axis: string | null;
 
 export function toAgentShape(view: AuditView): AgentJsonShape {
   const { project: p, snapshot, standing } = view
+  // Walk-on context fields. The user-facing score is Claude's calibrated
+  // total (score_total). `walk_on_audit_normalized` is the deterministic
+  // pillar-only fallback (Brief slot excluded · base /45).
+  const WALK_ON_AUDIT_MAX = 45
+  const isWalkOn    = p.status === 'preview'
+  const walkOnTotal = isWalkOn ? (p.score_total ?? 0) : null
+  const walkOnAuditNormalized = isWalkOn
+    ? Math.min(100, Math.round(((p.score_auto ?? 0) / WALK_ON_AUDIT_MAX) * 100))
+    : null
   return {
     schema_version: '1',
     generated_at:   new Date().toISOString(),
@@ -372,6 +436,7 @@ export function toAgentShape(view: AuditView): AgentJsonShape {
       url:        `https://commit.show/projects/${p.id}`,
     },
     score: {
+      track:            isWalkOn ? 'walk_on' : 'league',
       total:            p.score_total,
       total_max:        100,
       audit:            p.score_auto,
@@ -382,6 +447,9 @@ export function toAgentShape(view: AuditView): AgentJsonShape {
       community_max:    20,
       delta_since_last: snapshot?.score_total_delta ?? null,
       band:             bandFor(p.score_total),
+      walk_on_total:            walkOnTotal,
+      walk_on_band:             walkOnTotal != null ? bandFor(walkOnTotal) : null,
+      walk_on_audit_normalized: walkOnAuditNormalized,
     },
     standing: standing
       ? {
@@ -620,14 +688,18 @@ function wrapText(s: string, width: number): string[] {
 
 export function renderUpsell(): string {
   const lines: string[] = []
-  const titleVisible = 'Preview · not entered in the season'
+  // "Walk-on" — anyone running CLI without auditioning. Theatre-coherent
+  // (Audition / Audit / Stage / Backstage / Walk-on) · friendlier than
+  // "preview" (which doubles as our DB status) · positions audition as the
+  // upgrade path without making the walk-on tier feel lesser.
+  const titleVisible = 'Walk-on · drop-in audit, no audition yet'
   const headVisible  = 'Audition to unlock:'
   const ctaVisible   = '→ https://commit.show/submit'
 
   lines.push('  ' + boxTop())
   lines.push('  ' + boxRow(
     titleVisible.length,
-    c.bold(c.gold('Preview')) + c.muted(' · ') + c.cream('not entered in the season'),
+    c.bold(c.gold('Walk-on')) + c.muted(' · ') + c.cream('drop-in audit, no audition yet'),
   ))
   lines.push('  ' + boxBlank())
   lines.push('  ' + boxRow(headVisible.length, c.cream(headVisible)))

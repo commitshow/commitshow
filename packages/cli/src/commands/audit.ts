@@ -13,6 +13,7 @@ import { c } from '../lib/colors.js'
 
 export async function audit(args: string[]): Promise<number> {
   const asJson = args.includes('--json')
+  const force  = args.includes('--refresh') || args.includes('--force')
   const positional = args.find(a => !a.startsWith('--'))
 
   let target
@@ -26,11 +27,16 @@ export async function audit(args: string[]): Promise<number> {
     throw err
   }
 
-  if (!asJson) console.log(c.dim(`Auditing ${target.slug}…`))
+  if (!asJson) {
+    if (force) console.log(c.dim(`Refreshing audit for ${target.slug}…`))
+    else       console.log(c.dim(`Auditing ${target.slug}…`))
+  }
 
   // 1. Try cached/registered flow first — avoid re-running Claude if we
   // already have the snapshot. Covers all full-audition projects.
-  const project = await findProjectByGithubUrl(target.github_url)
+  // --refresh / --force skips this entirely and goes straight to audit-preview
+  // with force=true (counts against IP + URL + global rate limits).
+  const project = force ? null : await findProjectByGithubUrl(target.github_url)
 
   if (project) {
     const [snapshot, standing] = await Promise.all([
@@ -91,9 +97,12 @@ export async function audit(args: string[]): Promise<number> {
 
   // 2. Unregistered repo — kick off a preview audit. Full Claude depth,
   // no season entry. Rate-limited server-side.
-  if (!asJson) console.log(c.dim('First time on commit.show for this repo — running a preview audit…'))
+  if (!asJson) {
+    if (force) console.log(c.dim('Forcing a fresh audit · counts against your daily IP cap…'))
+    else       console.log(c.dim('First time on commit.show for this repo — running a preview audit…'))
+  }
 
-  const result = await runPreviewAudit(target.github_url)
+  const result = await runPreviewAudit(target.github_url, undefined, { force })
 
   // Error envelope
   if ('error' in result) {
