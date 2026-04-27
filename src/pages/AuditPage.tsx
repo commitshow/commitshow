@@ -1,11 +1,50 @@
-// AuditPage — public technical reference of the 50-pt Audit pillar.
-// Sister to /rulebook (which covers league judging philosophy);
-// /audit goes DEEP into the scoring mechanics so any user can predict
-// their own score from the rubric. Transparency = trust.
+// AuditPage — internal technical reference of the 50-pt Audit pillar.
+// Currently INTERNAL — gated to logged-in members only (not just admins,
+// any team member can view). Public-safe slim version may be carved out
+// later. Sister to /rulebook (public · judging philosophy).
 
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 
 export function AuditPage() {
+  const { user, loading } = useAuth()
+  const navigate = useNavigate()
+
+  if (loading) {
+    return (
+      <section className="relative z-10 pt-32 pb-16 px-4 min-h-screen text-center">
+        <div className="font-mono text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+      </section>
+    )
+  }
+  if (!user) {
+    return (
+      <section className="relative z-10 pt-32 pb-16 px-4 min-h-screen text-center">
+        <div className="max-w-md mx-auto">
+          <div className="font-display font-black text-2xl mb-2" style={{ color: 'var(--cream)' }}>
+            Internal documentation
+          </div>
+          <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
+            The audit mechanics page is for the commit.show team and signed-in
+            members. Sign in to access it, or read{' '}
+            <Link to="/rulebook" className="underline" style={{ color: 'var(--gold-500)' }}>the public Rulebook</Link>
+            {' '}for league judging philosophy.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="font-mono text-xs px-5 py-2.5"
+            style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: 'pointer' }}
+          >
+            Back home
+          </button>
+        </div>
+      </section>
+    )
+  }
+  return <AuditPageContent />
+}
+
+function AuditPageContent() {
   return (
     <section className="relative z-10 pt-20 pb-20 px-4 md:px-6 min-h-screen">
       <div className="max-w-3xl mx-auto">

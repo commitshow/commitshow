@@ -54,7 +54,8 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
       onMouseEnter={e => { e.currentTarget.style.borderColor = `${tone}66` }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
     >
-      {/* Large image — the hero of the card */}
+      {/* Image region — pure visual, no text overlay or gradient.
+          Badges (grade + accent) sit on top with their own backdrop chip. */}
       <div className="relative overflow-hidden" style={{ aspectRatio: '16 / 10', background: 'var(--navy-800)' }}>
         {p.thumbnail_url ? (
           <img
@@ -69,13 +70,6 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
             NO IMAGE
           </div>
         )}
-
-        {/* Bottom gradient so text on the image reads clearly */}
-        <div className="absolute inset-x-0 bottom-0" style={{
-          height: '55%',
-          background: 'linear-gradient(to top, rgba(6,12,26,0.92) 0%, rgba(6,12,26,0.55) 45%, transparent 100%)',
-          pointerEvents: 'none',
-        }} />
 
         {/* Accent badge — top right */}
         {accent.rightBadge && (
@@ -106,32 +100,37 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
         >
           {p.creator_grade}
         </span>
-
-        {/* Title + score row — inside the image at bottom */}
-        <div className="absolute inset-x-0 bottom-0 px-3 py-2.5 flex items-end justify-between gap-2">
-          <h4
-            className="font-display font-bold text-base leading-tight truncate flex-1"
-            style={{ color: 'var(--cream)', textShadow: '0 1px 10px rgba(0,0,0,0.6)' }}
-          >
-            {p.project_name}
-          </h4>
-          <span
-            className="font-mono text-xs tabular-nums font-medium px-2 py-0.5 flex-shrink-0"
-            style={{
-              background: hideScore ? 'rgba(255,255,255,0.06)' : 'rgba(6,12,26,0.7)',
-              color: hideScore ? 'rgba(248,245,238,0.5)' : 'var(--cream)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '2px',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            {hideScore ? '— pts' : `${p.score_total} pts`}
-          </span>
-        </div>
       </div>
 
-      {/* Footer — creator + description + meta */}
-      <div className="px-3 py-2.5 flex items-center gap-2">
+      {/* Title + score region — its own clean band below the image */}
+      <div
+        className="px-3 py-2.5 flex items-center justify-between gap-2"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <h4
+          className="font-display font-bold text-base leading-tight truncate flex-1"
+          style={{ color: 'var(--cream)' }}
+        >
+          {p.project_name}
+        </h4>
+        <span
+          className="font-mono text-xs tabular-nums font-medium px-2 py-0.5 flex-shrink-0"
+          style={{
+            background: hideScore ? 'rgba(255,255,255,0.04)' : 'rgba(240,192,64,0.1)',
+            color:      hideScore ? 'var(--text-secondary)' : 'var(--gold-500)',
+            border:     `1px solid ${hideScore ? 'rgba(255,255,255,0.08)' : 'rgba(240,192,64,0.3)'}`,
+            borderRadius: '2px',
+          }}
+        >
+          {hideScore ? '— pts' : `${p.score_total} pts`}
+        </span>
+      </div>
+
+      {/* Creator region — own band at the bottom with subtle separator */}
+      <div
+        className="px-3 py-2.5 flex items-center gap-2"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+      >
         <div
           className="flex items-center justify-center font-mono text-[10px] font-bold overflow-hidden flex-shrink-0"
           style={{
@@ -146,7 +145,7 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
             ? <img src={creator.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
             : creatorInitial}
         </div>
-        <span className="font-mono text-[11px] truncate flex-1" style={{ color: 'var(--cream)' }}>
+        <span className="font-mono text-[11px] truncate flex-1" style={{ color: 'var(--text-primary)' }}>
           {creatorName}
         </span>
         {accent.leftBadge && (

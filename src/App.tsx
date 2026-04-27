@@ -90,8 +90,6 @@ export default function App() {
           <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
           <a href="/backstage" style={{ color: 'inherit', textDecoration: 'none' }}>Backstage</a>
           <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
-          <a href="/audit"     style={{ color: 'inherit', textDecoration: 'none' }}>Audit</a>
-          <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
           <a href="/rulebook"  style={{ color: 'inherit', textDecoration: 'none' }}>Rulebook</a>
         </div>
         <p className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>

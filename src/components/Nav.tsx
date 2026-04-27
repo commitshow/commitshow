@@ -242,7 +242,6 @@ export function Nav() {
                   <DropdownLink to="/me" onSelect={() => setMenuOpen(false)}>My profile</DropdownLink>
                   <DropdownLink to="/projects" onSelect={() => setMenuOpen(false)}>Browse projects</DropdownLink>
                   <DropdownLink to="/backstage" onSelect={() => setMenuOpen(false)}>Backstage</DropdownLink>
-                  <DropdownLink to="/audit" onSelect={() => setMenuOpen(false)}>Audit mechanics</DropdownLink>
                   <DropdownLink to="/rulebook" onSelect={() => setMenuOpen(false)}>Judging rulebook</DropdownLink>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false) }}
@@ -401,13 +400,6 @@ export function Nav() {
                   style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
                 >
                   BACKSTAGE
-                </NavLink>
-                <NavLink
-                  to="/audit"
-                  className="py-3 font-mono text-xs tracking-widest"
-                  style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  AUDIT MECHANICS
                 </NavLink>
                 <NavLink
                   to="/rulebook"

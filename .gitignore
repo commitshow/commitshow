@@ -13,6 +13,11 @@ dist-ssr/
 .env.local
 .env.*.local
 
+# Internal team docs · sensitive (pricing · legal · anti-abuse · calibration ·
+# admin internals). NEVER commit. See CLAUDE.md §0 for index.
+INTERNAL.md
+INTERNAL_*.md
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
