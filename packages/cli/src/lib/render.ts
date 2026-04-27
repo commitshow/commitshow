@@ -135,7 +135,7 @@ export function renderAudit(view: AuditView): string {
   // computed and exposed in JSON as `walk_on_audit_normalized` for agents
   // that want a deterministic floor, but the user-facing big-digit uses
   // the calibrated total.
-  const WALK_ON_AUDIT_MAX = 45
+  const WALK_ON_AUDIT_MAX = 47
   const isWalkOn   = p.status === 'preview'
   const total = p.score_total ?? 0
 
@@ -417,7 +417,7 @@ export function toAgentShape(view: AuditView): AgentJsonShape {
   // Walk-on context fields. The user-facing score is Claude's calibrated
   // total (score_total). `walk_on_audit_normalized` is the deterministic
   // pillar-only fallback (Brief slot excluded · base /45).
-  const WALK_ON_AUDIT_MAX = 45
+  const WALK_ON_AUDIT_MAX = 47
   const isWalkOn    = p.status === 'preview'
   const walkOnTotal = isWalkOn ? (p.score_total ?? 0) : null
   const walkOnAuditNormalized = isWalkOn

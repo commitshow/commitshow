@@ -49,12 +49,12 @@ function lhScoreOrNA(raw: number | null | undefined): number {
   return Math.round(raw * 100)
 }
 
-async function runLighthouse(url: string): Promise<LighthouseScores> {
+async function runLighthouse(url: string, strategy: 'mobile' | 'desktop' = 'mobile'): Promise<LighthouseScores> {
   const key = Deno.env.get('PAGESPEED_API_KEY')
   // PageSpeed Insights v5 runs ONLY the Performance category unless each other
   // category is explicitly requested. Without these params the other three
   // scores come back as null and render as 0.
-  const params = new URLSearchParams({ url, strategy: 'mobile' })
+  const params = new URLSearchParams({ url, strategy })
   params.append('category', 'performance')
   params.append('category', 'accessibility')
   params.append('category', 'best-practices')
@@ -143,6 +143,13 @@ interface GitHubInfo {
     has_changelog: boolean
     has_code_of_conduct: boolean
     is_monorepo: boolean                 // workspaces / turbo.json / pnpm-workspace.yaml
+    // ── Responsive design signals (NEW · v3 mobile audit) ──
+    tailwind_responsive_count: number    // count of `sm:` `md:` `lg:` `xl:` `2xl:` prefixes
+    tailwind_class_total:      number    // total class occurrences sampled (denominator)
+    css_media_query_count:     number    // @media in scanned .css files
+    has_overflow_x_hidden:     boolean   // body { overflow-x: hidden } in any .css
+    has_prefers_dark:          boolean   // @media (prefers-color-scheme: dark) anywhere
+    has_prefers_reduced_motion: boolean  // @media (prefers-reduced-motion) anywhere
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
   debut_brief: {
@@ -258,6 +265,11 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_typescript_strict: false, typescript_pct: 0,
       has_license: false, has_contributing: false, has_changelog: false, has_code_of_conduct: false,
       is_monorepo: false,
+      tailwind_responsive_count: 0, tailwind_class_total: 0,
+      css_media_query_count: 0,
+      has_overflow_x_hidden: false,
+      has_prefers_dark: false,
+      has_prefers_reduced_motion: false,
     },
     readme_excerpt: null,
     debut_brief: { found: false, path: null, raw: null, last_commit_at: null, sha: null },
@@ -471,6 +483,51 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   // about reproducibility).
   const form_factor = detectFormFactor(pkgParsed, paths, readmeRaw)
 
+  // Responsive design signals — sample CSS + TSX files for mobile-aware
+  // patterns. We don't load every file (budget), just the most likely
+  // ones (root index.css, tailwind.config, plus 3-5 random component
+  // files for class-name density).
+  let css_media_query_count = 0
+  let has_overflow_x_hidden = false
+  let has_prefers_dark = false
+  let has_prefers_reduced_motion = false
+  let tailwind_responsive_count = 0
+  let tailwind_class_total = 0
+
+  const cssCandidates = paths.filter(p =>
+    /\.(css|scss|sass|less)$/i.test(p) && !p.includes('node_modules') && !p.startsWith('dist/')
+  ).slice(0, 6)
+  for (const cssPath of cssCandidates) {
+    const text = await ghText(`/contents/${encodeURI(cssPath)}?ref=${defBranch}`)
+    if (!text) continue
+    const mediaMatches = text.match(/@media\s*[^{]+\{/gi) || []
+    css_media_query_count += mediaMatches.length
+    if (/overflow[-:]?x\s*:\s*hidden/i.test(text)) has_overflow_x_hidden = true
+    if (/prefers-color-scheme\s*:\s*dark/i.test(text)) has_prefers_dark = true
+    if (/prefers-reduced-motion/i.test(text)) has_prefers_reduced_motion = true
+  }
+
+  // Tailwind responsive prefix density · sample first 5 TSX/JSX files in
+  // src/components or app/. Cheap signal — we only want a ratio, not all.
+  const componentCandidates = paths.filter(p =>
+    /\.(tsx|jsx)$/i.test(p) &&
+    /^(src\/components|src\/pages|app|components|pages)\//.test(p) &&
+    !p.includes('node_modules')
+  ).slice(0, 5)
+  for (const cmpPath of componentCandidates) {
+    const text = await ghText(`/contents/${encodeURI(cmpPath)}?ref=${defBranch}`)
+    if (!text) continue
+    // Count any `sm:`, `md:`, `lg:`, `xl:`, `2xl:` Tailwind responsive prefix.
+    // Match in className attributes (rough — we don't AST parse here).
+    const responsiveMatches = text.match(/\b(sm|md|lg|xl|2xl):[a-z][a-z0-9-]/gi) || []
+    tailwind_responsive_count += responsiveMatches.length
+    // Total class-attribute occurrences as denominator (very rough).
+    const allMatches = text.match(/className\s*=\s*[`"'{][^`"'}]+/g) || []
+    let totalTokens = 0
+    for (const block of allMatches) totalTokens += (block.match(/\S+/g)?.length ?? 0)
+    tailwind_class_total += totalTokens
+  }
+
   // Ecosystem signals · contributors count + npm weekly downloads. Both
   // are extra fetches; we run them in parallel so they don't dominate
   // total inspection time. Both fail gracefully (return 0/null).
@@ -594,6 +651,12 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_changelog,
       has_code_of_conduct,
       is_monorepo,
+      tailwind_responsive_count,
+      tailwind_class_total,
+      css_media_query_count,
+      has_overflow_x_hidden,
+      has_prefers_dark,
+      has_prefers_reduced_motion,
     },
     readme_excerpt,
     debut_brief,
@@ -759,14 +822,18 @@ function scoreLighthouse(lh: LighthouseScores) {
   return { performance: p, accessibility: a, bestPractices: b, seo: s, total: p + a + b + s }
 }
 
-// Production-maturity slot · max 10 pts. The single biggest calibration
-// lever for separating greenfield-polish (vibe-style) from production-
-// shipping (shadcn / cal.com style). A project with zero tests + zero CI
-// + zero observability cannot exceed ~3 pts here, which appropriately
-// limits its overall walk-on ceiling.
-function scoreProductionMaturity(s: GitHubInfo['signals']): {
+// Production-maturity slot · max 12 pts (was 10 before responsive add).
+// The single biggest calibration lever for separating greenfield-polish
+// (vibe-style) from production-shipping (shadcn / cal.com style). A
+// project with zero tests + zero CI + zero observability cannot exceed
+// ~3 pts here, which appropriately limits its overall walk-on ceiling.
+function scoreProductionMaturity(
+  s: GitHubInfo['signals'],
+  lhMobile: LighthouseScores,
+  lhDesktop: LighthouseScores,
+): {
   pts: number
-  breakdown: { tests: number; ci: number; observability: number; ts_strict: number; lockfile: number; license: number }
+  breakdown: { tests: number; ci: number; observability: number; ts_strict: number; lockfile: number; license: number; responsive: number }
 } {
   // Tests · 0=0, 1-9=1, 10-49=2, 50+=3
   const tests = s.test_files >= 50 ? 3 : s.test_files >= 10 ? 2 : s.test_files >= 1 ? 1 : 0
@@ -780,8 +847,22 @@ function scoreProductionMaturity(s: GitHubInfo['signals']): {
   const lockfile = s.has_lockfile ? 1 : 0
   // LICENSE · binary 1 pt (legal hygiene)
   const license = s.has_license ? 1 : 0
-  const pts = Math.min(10, tests + ci + observability + ts_strict + lockfile + license)
-  return { pts, breakdown: { tests, ci, observability, ts_strict, lockfile, license } }
+  // Responsive design · NEW · max 2 pts.
+  //   +1: project shows responsive intent — Tailwind responsive prefixes
+  //       used substantially (≥10% of class tokens) OR ≥5 CSS media queries.
+  //   +1: mobile Lighthouse perf doesn't tank vs desktop. Either the
+  //       mobile perf is decent on its own (≥70) OR the gap to desktop
+  //       is small (<15 points). Pure greenfield desktop-first projects
+  //       fail this; mobile-aware ones pass.
+  const responsiveStrategy =
+    (s.tailwind_class_total > 0 && s.tailwind_responsive_count / s.tailwind_class_total >= 0.10) ||
+    s.css_media_query_count >= 5
+  const lhM = lhMobile.performance
+  const lhD = lhDesktop.performance
+  const mobilePerfHealthy = lhM >= 70 || (lhM >= 0 && lhD >= 0 && Math.abs(lhD - lhM) < 15)
+  const responsive = (responsiveStrategy ? 1 : 0) + (mobilePerfHealthy ? 1 : 0)
+  const pts = Math.min(12, tests + ci + observability + ts_strict + lockfile + license + responsive)
+  return { pts, breakdown: { tests, ci, observability, ts_strict, lockfile, license, responsive } }
 }
 
 // Source Hygiene · max 5 pts. GitHub accessible (3) + monorepo discipline
@@ -1051,16 +1132,26 @@ OUTPUT RULES
 
   SCORE FORMATION — anti-anchoring discipline (critical, v2 · 2026-04-27):
   1) START from auto_baseline = scoring_so_far.auto_50_breakdown.total * 2.
-     The new 50-pt pillar redistribution explicitly rewards production maturity:
-        Lighthouse           20  (was 30 — Performance 8 · A11y 5 · BP 4 · SEO 3)
-        Production Maturity  10  NEW · tests · CI · observability · TS strict · lockfile · LICENSE
+     The 52-pt pillar redistribution explicitly rewards production maturity
+     AND mobile responsiveness:
+        Lighthouse (mobile)  20  (Performance 8 · A11y 5 · BP 4 · SEO 3)
+        Production Maturity  12  tests 3 · CI 2 · observability 2 · TS strict 1
+                                 · lockfile 1 · LICENSE 1 · responsive 2 (NEW)
         Source Hygiene        5  (github accessible · monorepo · governance docs)
         Live URL Health       5
         Completeness          2  (renormalized from polish 0-5)
         Tech Diversity        3
-        Brief Integrity       5  (0 for walk-on · ceiling effectively 45)
+        Brief Integrity       5  (0 for walk-on · ceiling effectively 47)
         ─────────────────────
-        Total cap            50
+        Total cap            52
+     Walk-on track normalizes against /47 (52 minus the 5 brief slot
+     that's structurally inaccessible). Responsive slot details:
+       +1 if Tailwind responsive prefix density (sm/md/lg/xl/2xl) ≥10%
+          of class tokens OR ≥5 CSS @media queries
+       +1 if mobile Lighthouse perf ≥70 OR mobile/desktop perf gap <15
+     The intent: a desktop-pretty product that horizontally scrolls on
+     mobile gets a clear penalty here. Vibe coders shipping with Cursor
+     defaults frequently miss this.
      Soft bonus (NOT in 50, stacks on top, capped +5):
         Ecosystem            +0-3  (stars / contributors / npm weekly downloads)
         Activity             +0-2  (recent commit / momentum)
@@ -1679,9 +1770,12 @@ Deno.serve(async (req) => {
   // sections as "not yet provided · audition to add" instead.
   const isCliPreview = project.status === 'preview' && !project.creator_id && !brief
 
-  // Parallel external probes
-  const [lh, gh, health, completeness] = await Promise.all([
-    project.live_url ? runLighthouse(project.live_url) : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
+  // Parallel external probes · Lighthouse runs TWICE (mobile + desktop) so
+  // we can measure mobile-vs-desktop perf deltas — a polished-on-desktop
+  // app that tanks on mobile gets caught here.
+  const [lh, lhDesktop, gh, health, completeness] = await Promise.all([
+    project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
+    project.live_url ? runLighthouse(project.live_url, 'desktop') : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
     project.github_url ? inspectGitHub(project.github_url) : Promise.resolve({ accessible: false, languages: {}, language_pct: {}, stars: 0, forks: 0, file_count_estimate: 0, last_commit_at: null }),
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
     project.live_url ? inspectCompleteness(project.live_url) : Promise.resolve({
@@ -1704,7 +1798,7 @@ Deno.serve(async (req) => {
   const tech       = scoreTechLayers(gh.languages || {}, stackHints)           //  0-3
   const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on)
   const healthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0             //  0-5
-  const maturity   = scoreProductionMaturity(gh.signals)                       //  0-10
+  const maturity   = scoreProductionMaturity(gh.signals, lh, lhDesktop)        //  0-12
   const hygiene    = scoreSourceHygiene(gh)                                    //  0-5
   const completenessPts = scoreCompleteness(completeness)                      //  0-2
   const ecosystem  = scoreEcosystem(gh)                                        //  0-3 soft
@@ -1777,6 +1871,9 @@ Deno.serve(async (req) => {
       integrity_score:      brief?.integrity_score ?? 0,
     },
     lighthouse: lh,
+    lighthouse_desktop: lhDesktop,
+    lighthouse_mobile_desktop_perf_gap: (lh.performance >= 0 && lhDesktop.performance >= 0)
+      ? Math.abs(lhDesktop.performance - lh.performance) : null,
     live_url_health: health,
     completeness_signals: completeness,
     github: gh,
@@ -1828,7 +1925,7 @@ Deno.serve(async (req) => {
   // For league projects (auditioned), Claude's calibration matters
   // because it considers Brief integrity + Phase 1/2 cross-checks.
   const scoreTotal = isCliPreview
-    ? Math.min(100, Math.round((score_auto / 45) * 100))    // walk-on: deterministic /45 normalize
+    ? Math.min(100, Math.round((score_auto / 47) * 100))    // walk-on: deterministic /47 normalize (52 hard - 5 brief inaccessible)
     : (claude.score?.current && claude.score.current > 0
         ? Math.round(claude.score.current)
         : score_auto)
