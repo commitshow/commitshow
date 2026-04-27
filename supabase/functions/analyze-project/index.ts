@@ -936,23 +936,25 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
 // Walk-on note: Brief Integrity slot (5) is structurally inaccessible. CLI
 // renders walk-on score normalized against 45 (50 - 5). See render.ts.
 function scoreLighthouse(lh: LighthouseScores) {
-  // Linear interpolation (v4 · 2026-04-27) instead of step buckets — a
-  // perf score of 87→91 used to flip a 2pt boundary (6→8) and made the
-  // walk-on score wobble ±4pt between PageSpeed runs. Linear scaling
-  // absorbs Lighthouse's natural ±5pt measurement noise.
-  //
-  // Below 50 (the "fail" band per Lighthouse) we still floor to 0 so
-  // genuinely broken sites get penalized hard. Above 50 we scale linearly
-  // up to the slot max. -1 ("not assessed") → neutral midpoint.
-  function linearOrNA(raw: number, max: number, naDefault: number): number {
-    if (raw === LH_NOT_ASSESSED) return naDefault
-    if (raw < 50) return 0
-    return Math.round((raw / 100) * max)
-  }
-  const p = linearOrNA(lh.performance,   8, 4)   // 0-8
-  const a = linearOrNA(lh.accessibility, 5, 3)   // 0-5
-  const b = linearOrNA(lh.bestPractices, 4, 2)   // 0-4
-  const s = linearOrNA(lh.seo,           3, 2)   // 0-3
+  // Step buckets (v3 calibration · 2026-04-27 restored). Linear interpolation
+  // tried in v4 to absorb PageSpeed ±5pt measurement noise but caused
+  // overall deflation across all projects (perf 91 dropped 8→7 etc).
+  // Stepwise calibration was already field-validated on the v3 set.
+  // -1 "not assessed" → neutral midpoint (no bonus, no penalty).
+  // Legit 0 still takes the harshest bucket (bad signal).
+  const p = lh.performance   === LH_NOT_ASSESSED ? 4
+           : lh.performance   >= 90 ? 8
+           : lh.performance   >= 70 ? 6
+           : lh.performance   >= 50 ? 3 : 0
+  const a = lh.accessibility === LH_NOT_ASSESSED ? 3
+           : lh.accessibility >= 90 ? 5
+           : lh.accessibility >= 70 ? 3 : 1
+  const b = lh.bestPractices === LH_NOT_ASSESSED ? 2
+           : lh.bestPractices >= 90 ? 4
+           : lh.bestPractices >= 70 ? 2 : 0
+  const s = lh.seo           === LH_NOT_ASSESSED ? 2
+           : lh.seo           >= 90 ? 3
+           : lh.seo           >= 70 ? 2 : 0
   return { performance: p, accessibility: a, bestPractices: b, seo: s, total: p + a + b + s }
 }
 
@@ -999,45 +1001,25 @@ function scoreProductionMaturity(
   return { pts, breakdown: { tests, ci, observability, ts_strict, lockfile, license, responsive } }
 }
 
-// Source Hygiene · max 7 pts (was 5 before Tier-1 completeness).
-// GitHub accessible (2) + monorepo discipline (1) + governance docs (1)
-// + security headers (1) + legal pages (1) + README depth (1).
-function scoreSourceHygiene(
-  gh: GitHubInfo,
-  security: { filled: number; of: number },
-  legal:    { has_privacy: boolean; has_terms: boolean },
-): {
+// Source Hygiene · max 5 pts (v3 calibration · 2026-04-27 restored).
+// v4 expansion to 7pt with Tier-1 slots (security headers / legal pages /
+// README depth) over-penalized library-form-factor projects (supabase
+// −17, cal.com −11). Reverted to v3. The Tier-1 SIGNALS are still
+// collected (security_headers / legal_pages probes + readme_depth_score)
+// and surfaced to Claude as evidence, just not as hard-score sub-slots.
+function scoreSourceHygiene(gh: GitHubInfo): {
   pts: number
-  breakdown: {
-    github: number; structure: number; governance: number
-    security: number; legal: number; readme: number
-  }
+  breakdown: { github: number; structure: number; governance: number }
 } {
-  // GitHub accessible · base presence signal (2pt — was 3, slightly reduced
-  // to make room for Tier-1 completeness sub-slots).
-  const github = gh.accessible ? 2 : 0
+  const github = gh.accessible ? 3 : 0
   const structure = gh.signals.is_monorepo ? 1 : 0
-  // Governance: ANY two of (CONTRIBUTING, CHANGELOG, CODE_OF_CONDUCT) → 1 pt
   const governanceCount = [
     gh.signals.has_contributing,
     gh.signals.has_changelog,
     gh.signals.has_code_of_conduct,
   ].filter(Boolean).length
   const governance = governanceCount >= 2 ? 1 : 0
-  // Security headers · 3+ of 6 → +1 (CSP / HSTS / X-Frame / X-Content-Type /
-  // Referrer-Policy / Permissions-Policy). Threshold low so passing is
-  // achievable without enterprise-grade CSP — just baseline hygiene.
-  const securityPts = security.filled >= 3 ? 1 : 0
-  // Legal · BOTH privacy AND terms reachable on the live URL (or at least one
-  // for non-SaaS form factors — keep simple: at least one earns the point).
-  const legalPts = (legal.has_privacy || legal.has_terms) ? 1 : 0
-  // README depth · 0-2 from inspectGitHub → cap at 1 here (the second pt
-  // is naturally absorbed since governance + readme rarely both 0/2).
-  const readmePts = gh.signals.readme_depth_score >= 1 ? 1 : 0
-  return {
-    pts: Math.min(7, github + structure + governance + securityPts + legalPts + readmePts),
-    breakdown: { github, structure, governance, security: securityPts, legal: legalPts, readme: readmePts },
-  }
+  return { pts: Math.min(5, github + structure + governance), breakdown: { github, structure, governance } }
 }
 
 // Completeness slot · max 2 pts (renormalized from 0-5 score).
@@ -1295,34 +1277,37 @@ OUTPUT RULES
 
   SCORE FORMATION — anti-anchoring discipline (critical, v2 · 2026-04-27):
   1) START from auto_baseline = scoring_so_far.auto_50_breakdown.total * 2.
-     The 54-pt pillar redistribution rewards production maturity, mobile
-     responsiveness, AND Tier-1 completeness (security · legal · README):
+     v3 calibration restored — v4 Tier-1 slot expansion over-penalized
+     library form factors. Tier-1 SIGNALS still collected (security_headers
+     / legal_pages / readme_depth) and surface as evidence — they just
+     don't move slot scores.
         Lighthouse (mobile)  20  (Performance 8 · A11y 5 · BP 4 · SEO 3)
         Production Maturity  12  tests 3 · CI 2 · observability 2 · TS strict 1
                                  · lockfile 1 · LICENSE 1 · responsive 2
-        Source Hygiene        7  github 2 · monorepo 1 · governance docs 1
-                                 · security headers 1 · legal pages 1 · README depth 1
+        Source Hygiene        5  github 3 · monorepo 1 · governance docs 1
         Live URL Health       5
         Completeness          2
         Tech Diversity        3
-        Brief Integrity       5  (0 for walk-on · ceiling effectively 49)
+        Brief Integrity       5  (0 for walk-on · ceiling effectively 47)
         ─────────────────────
-        Total cap            54
-     Walk-on track normalizes against /49 (54 minus the 5 brief slot).
+        Total cap            52
+     Walk-on track normalizes against /47 (52 minus the 5 brief slot).
 
-     New v4 sub-slots:
-       Source Hygiene · security headers (+1):  3+ of 6 — CSP, HSTS,
-         X-Frame, X-Content-Type, Referrer-Policy, Permissions-Policy.
-       Source Hygiene · legal pages (+1): /privacy or /terms reachable.
-       Source Hygiene · README depth (+1): ≥80 lines + Install + Usage.
      Soft bonuses (capped +5):
-       Ecosystem +0-3: stars · contributors · npm dl · releases (NEW)
+       Ecosystem +0-3: stars · contributors · npm dl · releases
        Activity  +0-2: recent commit · momentum
 
      Hard penalty (deterministic, applied before cap):
        env_committed: -5 — committed \`.env\` file (security violation, no
          polish offsets it). Surface in delta_reasoning even though the
          deduction is already in score_auto.
+
+     Tier-1 EVIDENCE inputs (don't double-count as deductions, just inform):
+       security_headers  — CSP / HSTS / X-Frame / X-Content-Type / Referrer / Permissions
+       legal_pages       — /privacy and /terms reachability (SaaS-pattern signal)
+       readme_depth_score — README length + Install/Usage section presence
+     Mention these in delta_reasoning or strengths/concerns when relevant
+     but do NOT deduct points (the hard slots above already calibrate).
      Soft bonus (NOT in 50, stacks on top, capped +5):
         Ecosystem            +0-3  (stars / contributors / npm weekly downloads)
         Activity             +0-2  (recent commit / momentum)
@@ -1355,10 +1340,7 @@ OUTPUT RULES
        · "no contributors"    — already in soft.ecosystem.contributors
        · "no releases"        — already in soft.ecosystem.releases
        · "stale repo"         — already in soft.activity.recent_commit
-       · "no security headers"  — already in source_hygiene.security
-       · "no privacy policy"  — already in source_hygiene.legal
-       · "no terms of service" — already in source_hygiene.legal
-       · "thin README"        — already in source_hygiene.readme
+       · "thin README"        — README depth signal is informational only
        · "no responsive design" — already in production_maturity.responsive
        · "no mobile optimization" — already in production_maturity.responsive
        · "committed .env"     — already deducted -5 deterministically
@@ -1994,18 +1976,13 @@ Deno.serve(async (req) => {
   ].filter(Boolean) as string[]
   const tech       = scoreTechLayers(gh.languages || {}, stackHints)           //  0-3
   const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on)
-  // Live URL Health · v4 smoothed buckets (was binary 5/0 with cliff at
-  // 3000ms · a 2.9s→3.1s blip flipped 5pt = ±10 walk-on). Now graded:
-  //   <1500ms  → 5  (snappy)
-  //   <3000ms  → 4  (acceptable)
-  //   <5000ms  → 2  (slow but live)
-  //   ≥5000ms or fail → 0
-  const healthPts  = !health.ok ? 0
-                   : health.elapsed_ms < 1500 ? 5
-                   : health.elapsed_ms < 3000 ? 4
-                   : health.elapsed_ms < 5000 ? 2 : 0                          //  0-5
+  // Live URL Health · binary 5/0 (v3 calibration restored). v4 graded
+  // buckets (5/4/2/0) added complexity without proportional accuracy
+  // gain — the cliff at 3000ms wasn't actually causing variance in
+  // calibration set, just hypothetical concern.
+  const healthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0             //  0-5
   const maturity   = scoreProductionMaturity(gh.signals, lh, lhDesktop)        //  0-12
-  const hygiene    = scoreSourceHygiene(gh, securityHeaders, legalPages)       //  0-7  (was 0-5 · +security/legal/readme)
+  const hygiene    = scoreSourceHygiene(gh)                                    //  0-5  (v3 restored)
   const completenessPts = scoreCompleteness(completeness)                      //  0-2
   const ecosystem  = scoreEcosystem(gh)                                        //  0-3 soft
   const activity   = scoreActivity(gh)                                         //  0-2 soft
@@ -2140,7 +2117,7 @@ Deno.serve(async (req) => {
   // For league projects (auditioned), Claude's calibration matters
   // because it considers Brief integrity + Phase 1/2 cross-checks.
   const scoreTotal = isCliPreview
-    ? Math.min(100, Math.round((score_auto / 49) * 100))    // walk-on: deterministic /49 normalize (54 hard - 5 brief inaccessible)
+    ? Math.min(100, Math.round((score_auto / 47) * 100))    // walk-on: deterministic /47 normalize (52 hard - 5 brief inaccessible · v3)
     : (claude.score?.current && claude.score.current > 0
         ? Math.round(claude.score.current)
         : score_auto)

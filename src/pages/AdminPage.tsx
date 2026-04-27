@@ -20,6 +20,17 @@ interface UserStats {
   admins:     number
 }
 
+interface UserRow {
+  id:              string
+  display_name:    string | null
+  tier:            string
+  creator_grade:   string | null
+  activity_points: number
+  total_graduated: number
+  is_admin:        boolean
+  created_at:      string
+}
+
 interface AuditStats {
   todayCount:    number
   weekCount:     number
@@ -60,6 +71,7 @@ export function AdminPage() {
   const [auditStats, setAuditStats] = useState<AuditStats  | null>(null)
   const [cliUsage, setCliUsage]     = useState<CliUsage    | null>(null)
   const [recent, setRecent]         = useState<RecentAudit[]>([])
+  const [userList, setUserList]     = useState<UserRow[]>([])
   const [loadErr, setLoadErr]       = useState<string | null>(null)
 
   // 강제 재감사 폼
@@ -79,10 +91,19 @@ export function AdminPage() {
   async function loadAll() {
     setLoadErr(null)
     try {
-      await Promise.all([loadUserStats(), loadAuditStats(), loadCliUsage(), loadRecent()])
+      await Promise.all([loadUserStats(), loadAuditStats(), loadCliUsage(), loadRecent(), loadUserList()])
     } catch (e: any) {
       setLoadErr(String(e?.message ?? e))
     }
+  }
+
+  async function loadUserList() {
+    const { data } = await supabase
+      .from('members')
+      .select('id, display_name, tier, creator_grade, activity_points, total_graduated, is_admin, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    setUserList((data ?? []) as UserRow[])
   }
 
   async function loadUserStats() {
@@ -243,7 +264,7 @@ export function AdminPage() {
     return (
       <Centered>
         <div className="font-display text-xl mb-2" style={{ color: 'var(--cream)' }}>로그인 필요</div>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>관리자 콘솔은 로그인된 관리자 전용입니다.</p>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-primary)' }}>관리자 콘솔은 로그인된 관리자 전용입니다.</p>
         <button onClick={() => navigate('/')} className="font-mono text-xs px-4 py-2"
                 style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px' }}>
           홈으로
@@ -255,7 +276,7 @@ export function AdminPage() {
     return (
       <Centered>
         <div className="font-display text-xl mb-2" style={{ color: 'var(--cream)' }}>권한 없음</div>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>이 계정은 관리자 권한이 없습니다.</p>
+        <p className="text-sm mb-4" style={{ color: 'var(--text-primary)' }}>이 계정은 관리자 권한이 없습니다.</p>
         <button onClick={() => navigate('/')} className="font-mono text-xs px-4 py-2"
                 style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px' }}>
           홈으로
@@ -274,7 +295,7 @@ export function AdminPage() {
           <h1 className="font-display font-black text-3xl md:text-4xl" style={{ color: 'var(--cream)' }}>
             commit.show 운영 대시보드
           </h1>
-          <p className="font-light text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+          <p className="font-light text-sm mt-1" style={{ color: 'var(--text-primary)' }}>
             로그인 계정: {user.email} · is_admin: <span style={{ color: 'var(--gold-500)' }}>true</span>
           </p>
         </header>
@@ -294,7 +315,7 @@ export function AdminPage() {
               className="font-mono text-xs tracking-widest uppercase px-4 py-2 whitespace-nowrap"
               style={{
                 background:    tab === k ? 'rgba(240,192,64,0.14)' : 'transparent',
-                color:         tab === k ? 'var(--gold-500)'        : 'var(--text-secondary)',
+                color:         tab === k ? 'var(--gold-500)'        : 'var(--text-primary)',
                 borderBottom:  tab === k ? '2px solid var(--gold-500)' : '2px solid transparent',
                 cursor: 'pointer',
                 border: 'none',
@@ -312,7 +333,7 @@ export function AdminPage() {
         )}
 
         {tab === 'overview' && <Overview userStats={userStats} auditStats={auditStats} cliUsage={cliUsage} />}
-        {tab === 'users'    && <UsersTab stats={userStats} />}
+        {tab === 'users'    && <UsersTab stats={userStats} list={userList} />}
         {tab === 'audits'   && <AuditsTab stats={auditStats} recent={recent} onForceRefresh={handleForceRefresh} refreshing={refreshing} refreshOut={refreshOut} />}
         {tab === 'cli'      && <CliTab usage={cliUsage} />}
         {tab === 'tools'    && (
@@ -351,7 +372,7 @@ function Overview({ userStats, auditStats, cliUsage }: {
   )
 }
 
-function UsersTab({ stats }: { stats: UserStats | null }) {
+function UsersTab({ stats, list }: { stats: UserStats | null; list: UserRow[] }) {
   if (!stats) return <Loading />
   const tiers = Object.entries(stats.byTier).sort((a, b) => b[1] - a[1])
   return (
@@ -361,21 +382,64 @@ function UsersTab({ stats }: { stats: UserStats | null }) {
         <Stat label="신규 (7일)"     value={stats.newWeek}    sub="" />
         <Stat label="활성 (7일)"     value={stats.activeWeek} sub="" />
       </div>
+
       <div>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// SCOUT 티어 분포</div>
         <div className="space-y-2">
           {tiers.map(([tier, count]) => (
             <div key={tier} className="flex items-center gap-3">
-              <span className="font-mono text-xs uppercase" style={{ width: '6em', color: 'var(--text-secondary)' }}>{tier}</span>
-              <div className="flex-1 h-5" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}>
+              <span className="font-mono text-xs uppercase" style={{ width: '6em', color: 'var(--text-label)' }}>{tier}</span>
+              <div className="flex-1 h-5" style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '2px' }}>
                 <div style={{
                   width: `${Math.min(100, (count / stats.total) * 100)}%`,
                   height: '100%',
-                  background: 'rgba(240,192,64,0.4)',
+                  background: 'rgba(240,192,64,0.55)',
                   borderRadius: '2px',
                 }} />
               </div>
               <span className="font-mono text-xs tabular-nums" style={{ width: '4em', textAlign: 'right', color: 'var(--cream)' }}>{count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+          // 사용자 리스트 · 최근 가입 50명
+        </div>
+        <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+          <div className="grid grid-cols-[1fr_minmax(0,1fr)_80px_70px_70px_50px_90px] gap-3 px-3 py-2 font-mono text-[10px] tracking-widest uppercase"
+               style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-label)' }}>
+            <span>이름</span>
+            <span className="hidden sm:block">ID</span>
+            <span>티어</span>
+            <span>등급</span>
+            <span className="text-right">AP</span>
+            <span className="text-right">졸업</span>
+            <span>가입</span>
+          </div>
+          {list.length === 0 && (
+            <div className="px-3 py-4 font-mono text-xs text-center" style={{ color: 'var(--text-primary)' }}>(아직 사용자 없음)</div>
+          )}
+          {list.map((u, i) => (
+            <div key={u.id}
+                 className="grid grid-cols-[1fr_minmax(0,1fr)_80px_70px_70px_50px_90px] gap-3 px-3 py-2 items-center text-xs"
+                 style={{
+                   background:    u.is_admin ? 'rgba(240,192,64,0.08)' : i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
+                   borderTop:     '1px solid rgba(255,255,255,0.04)',
+                 }}>
+              <span className="font-mono truncate" style={{ color: 'var(--cream)' }}>
+                {u.display_name ?? '(미설정)'}
+                {u.is_admin && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(240,192,64,0.2)', color: 'var(--gold-500)', borderRadius: '2px', fontSize: '10px' }}>ADMIN</span>}
+              </span>
+              <span className="hidden sm:block font-mono text-[10px] truncate" style={{ color: 'var(--text-label)' }}>{u.id.slice(0, 8)}</span>
+              <span className="font-mono text-[11px]" style={{ color: 'var(--text-primary)' }}>{u.tier ?? '—'}</span>
+              <span className="font-mono text-[11px]" style={{ color: 'var(--text-primary)' }}>{u.creator_grade ?? '—'}</span>
+              <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: 'var(--cream)' }}>{u.activity_points ?? 0}</span>
+              <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: 'var(--cream)' }}>{u.total_graduated ?? 0}</span>
+              <span className="font-mono text-[10px]" style={{ color: 'var(--text-label)' }}>
+                {new Date(u.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+              </span>
             </div>
           ))}
         </div>
@@ -410,7 +474,7 @@ function AuditsTab({ stats, recent, onForceRefresh, refreshing, refreshOut }: {
       <div>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 최근 30 audit</div>
         <div className="space-y-1">
-          {recent.length === 0 && <div className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>(빈 결과)</div>}
+          {recent.length === 0 && <div className="font-mono text-xs" style={{ color: 'var(--text-label)' }}>(빈 결과)</div>}
           {recent.map(r => (
             <div key={r.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center px-3 py-2 text-xs" style={{
               background: r.has_error ? 'rgba(200,16,46,0.06)' : 'rgba(255,255,255,0.02)',
@@ -422,11 +486,11 @@ function AuditsTab({ stats, recent, onForceRefresh, refreshing, refreshOut }: {
                   {r.project_name}
                   {r.has_error && <span className="ml-2" style={{ color: 'var(--scarlet)' }}>· 에러: {r.error_msg}</span>}
                 </div>
-                <div className="font-mono text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{r.github_url ?? ''}</div>
+                <div className="font-mono text-[10px] truncate" style={{ color: 'var(--text-label)' }}>{r.github_url ?? ''}</div>
               </div>
               <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : 'var(--cream)' }}>{r.score_total}</span>
-              <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>{r.trigger_type}</span>
-              <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>{new Date(r.created_at).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}</span>
+              <span className="font-mono text-[10px]" style={{ color: 'var(--text-label)' }}>{r.trigger_type}</span>
+              <span className="font-mono text-[10px]" style={{ color: 'var(--text-label)' }}>{new Date(r.created_at).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}</span>
               <button
                 disabled={refreshing || !r.github_url}
                 onClick={() => r.github_url && onForceRefresh(r.github_url)}
@@ -460,19 +524,19 @@ function CliTab({ usage }: { usage: CliUsage | null }) {
       <div>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 가장 자주 audit 된 repo (오늘)</div>
         <div className="space-y-1">
-          {usage.topRepos.length === 0 && <div className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>(아직 없음)</div>}
+          {usage.topRepos.length === 0 && <div className="font-mono text-xs" style={{ color: 'var(--text-label)' }}>(아직 없음)</div>}
           {usage.topRepos.map((r, i) => (
             <div key={i} className="flex items-center gap-3 px-3 py-2 text-xs" style={{
               background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
               borderRadius: '2px',
             }}>
-              <span className="font-mono tabular-nums" style={{ color: 'var(--text-muted)', width: '3em' }}>#{i + 1}</span>
+              <span className="font-mono tabular-nums" style={{ color: 'var(--text-label)', width: '3em' }}>#{i + 1}</span>
               <span className="font-mono truncate flex-1" style={{ color: 'var(--cream)' }}>url 해시: {r.url}</span>
               <span className="font-mono tabular-nums" style={{ color: 'var(--gold-500)' }}>{r.count}회</span>
             </div>
           ))}
         </div>
-        <div className="font-mono text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+        <div className="font-mono text-[11px] mt-2" style={{ color: 'var(--text-label)' }}>
           ※ url 은 djb2 해시로 익명화 저장 (원본 URL 비노출)
         </div>
       </div>
@@ -492,7 +556,7 @@ function ToolsTab({
     <div className="space-y-8">
       <section>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 관리자 토큰</div>
-        <p className="font-light text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
+        <p className="font-light text-sm mb-3" style={{ color: 'var(--text-primary)' }}>
           ADMIN_TOKEN (Supabase secret 으로 설정된 값) — 강제 재감사·rate limit 우회용. 토큰은 localStorage 에 저장되며 이 브라우저에만 유지됩니다.
         </p>
         <div className="flex items-center gap-2">
@@ -509,14 +573,14 @@ function ToolsTab({
             저장
           </button>
         </div>
-        <div className="font-mono text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+        <div className="font-mono text-[11px] mt-2" style={{ color: 'var(--text-label)' }}>
           현재 상태: {token ? '✅ 저장됨' : '⚠ 미저장 — 강제 재감사 사용 불가'}
         </div>
       </section>
 
       <section>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 강제 재감사</div>
-        <p className="font-light text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
+        <p className="font-light text-sm mb-3" style={{ color: 'var(--text-primary)' }}>
           rate limit 을 우회하고 새 audit 을 트리거. URL cap / IP cap / global cap 모두 무시됩니다.
         </p>
         <div className="flex items-center gap-2">
@@ -558,15 +622,15 @@ function Stat({ label, value, sub, tone }: {
   const valColor = tone === 'warn' ? 'var(--scarlet)' : tone === 'ok' ? '#00D4AA' : 'var(--cream)'
   return (
     <div className="card-navy p-4" style={{ borderRadius: '2px' }}>
-      <div className="font-mono text-[10px] tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="font-mono text-[10px] tracking-widest uppercase" style={{ color: 'var(--text-label)' }}>{label}</div>
       <div className="font-display font-bold text-2xl mt-1" style={{ color: valColor }}>{value}</div>
-      {sub && <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-secondary)' }}>{sub}</div>}
+      {sub && <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-primary)' }}>{sub}</div>}
     </div>
   )
 }
 
 function Loading() {
-  return <div className="font-mono text-xs py-8 text-center" style={{ color: 'var(--text-muted)' }}>로딩 중…</div>
+  return <div className="font-mono text-xs py-8 text-center" style={{ color: 'var(--text-label)' }}>로딩 중…</div>
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
