@@ -221,7 +221,7 @@ export function Nav() {
                   >
                     <div className="flex items-center justify-between gap-2 mb-0.5">
                       <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
-                        FORECAST WALLET
+                        FORECAST BALANCE
                       </span>
                       <span className="font-mono text-[10px] tabular-nums" style={{ color: voteColor }}>
                         <IconForecast size={10} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: 3 }} />
@@ -374,7 +374,7 @@ export function Nav() {
                 }}>
                   <div className="flex justify-between mb-0.5">
                     <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
-                      FORECAST WALLET
+                      FORECAST BALANCE
                     </span>
                     <span className="font-mono text-[11px] tabular-nums" style={{ color: voteColor }}>
                       <IconForecast size={11} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: 4 }} />
