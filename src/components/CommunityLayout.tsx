@@ -43,9 +43,8 @@ export function CommunityLayout({ children }: Props) {
           <h1 className="font-display font-black text-3xl sm:text-4xl md:text-5xl leading-tight mb-2" style={{ color: 'var(--cream)' }}>
             Build it in public
           </h1>
-          <p className="font-light max-w-2xl" style={{ color: 'var(--text-secondary)', fontSize: '1rem', lineHeight: 1.65 }}>
-            The space between leagues. Share shipping logs, reusable stacks, lightweight asks, and drop
-            into Office Hours — this is where builders trade evidence without waiting for a season to open.
+          <p className="font-light max-w-md" style={{ color: 'var(--text-secondary)', fontSize: '1rem', lineHeight: 1.65 }}>
+            Between leagues. Builders trade evidence year-round.
           </p>
         </header>
 

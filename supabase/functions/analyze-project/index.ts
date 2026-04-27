@@ -936,21 +936,23 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
 // Walk-on note: Brief Integrity slot (5) is structurally inaccessible. CLI
 // renders walk-on score normalized against 45 (50 - 5). See render.ts.
 function scoreLighthouse(lh: LighthouseScores) {
-  // -1 "not assessed" → neutral midpoint (no bonus, no penalty).
-  // Legit 0 still takes the harshest bucket (bad signal).
-  const p = lh.performance   === LH_NOT_ASSESSED ? 4
-           : lh.performance   >= 90 ? 8
-           : lh.performance   >= 70 ? 6
-           : lh.performance   >= 50 ? 3 : 0
-  const a = lh.accessibility === LH_NOT_ASSESSED ? 3
-           : lh.accessibility >= 90 ? 5
-           : lh.accessibility >= 70 ? 3 : 1
-  const b = lh.bestPractices === LH_NOT_ASSESSED ? 2
-           : lh.bestPractices >= 90 ? 4
-           : lh.bestPractices >= 70 ? 2 : 0
-  const s = lh.seo           === LH_NOT_ASSESSED ? 2
-           : lh.seo           >= 90 ? 3
-           : lh.seo           >= 70 ? 2 : 0
+  // Linear interpolation (v4 · 2026-04-27) instead of step buckets — a
+  // perf score of 87→91 used to flip a 2pt boundary (6→8) and made the
+  // walk-on score wobble ±4pt between PageSpeed runs. Linear scaling
+  // absorbs Lighthouse's natural ±5pt measurement noise.
+  //
+  // Below 50 (the "fail" band per Lighthouse) we still floor to 0 so
+  // genuinely broken sites get penalized hard. Above 50 we scale linearly
+  // up to the slot max. -1 ("not assessed") → neutral midpoint.
+  function linearOrNA(raw: number, max: number, naDefault: number): number {
+    if (raw === LH_NOT_ASSESSED) return naDefault
+    if (raw < 50) return 0
+    return Math.round((raw / 100) * max)
+  }
+  const p = linearOrNA(lh.performance,   8, 4)   // 0-8
+  const a = linearOrNA(lh.accessibility, 5, 3)   // 0-5
+  const b = linearOrNA(lh.bestPractices, 4, 2)   // 0-4
+  const s = linearOrNA(lh.seo,           3, 2)   // 0-3
   return { performance: p, accessibility: a, bestPractices: b, seo: s, total: p + a + b + s }
 }
 
@@ -1947,13 +1949,17 @@ Deno.serve(async (req) => {
   // sections as "not yet provided · audition to add" instead.
   const isCliPreview = project.status === 'preview' && !project.creator_id && !brief
 
-  // Parallel external probes · Lighthouse runs TWICE (mobile + desktop) so
-  // we can measure mobile-vs-desktop perf deltas — a polished-on-desktop
-  // app that tanks on mobile gets caught here. Plus security headers and
-  // legal pages (Tier-1 completeness · v4).
-  const [lh, lhDesktop, gh, health, completeness, securityHeaders, legalPages] = await Promise.all([
+  // Parallel external probes · plus security headers + legal pages
+  // (Tier-1 completeness · v4).
+  //
+  // NOTE: dual mobile+desktop Lighthouse was tried in v4 but pushes
+  // total Edge Function wall time past the 150s timeout (each PageSpeed
+  // call is 30-60s + Claude call 60-90s + GH fetches). Reverted to
+  // mobile-only Lighthouse; responsive slot uses `mobile perf ≥70` as
+  // the sole positive signal (mobile/desktop gap comparison removed).
+  const lhDesktop: LighthouseScores = { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
+  const [lh, gh, health, completeness, securityHeaders, legalPages] = await Promise.all([
     project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
-    project.live_url ? runLighthouse(project.live_url, 'desktop') : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
     project.github_url ? inspectGitHub(project.github_url) : Promise.resolve({ accessible: false, languages: {}, language_pct: {}, stars: 0, forks: 0, file_count_estimate: 0, last_commit_at: null }),
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
     project.live_url ? inspectCompleteness(project.live_url) : Promise.resolve({
@@ -1983,7 +1989,16 @@ Deno.serve(async (req) => {
   ].filter(Boolean) as string[]
   const tech       = scoreTechLayers(gh.languages || {}, stackHints)           //  0-3
   const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on)
-  const healthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0             //  0-5
+  // Live URL Health · v4 smoothed buckets (was binary 5/0 with cliff at
+  // 3000ms · a 2.9s→3.1s blip flipped 5pt = ±10 walk-on). Now graded:
+  //   <1500ms  → 5  (snappy)
+  //   <3000ms  → 4  (acceptable)
+  //   <5000ms  → 2  (slow but live)
+  //   ≥5000ms or fail → 0
+  const healthPts  = !health.ok ? 0
+                   : health.elapsed_ms < 1500 ? 5
+                   : health.elapsed_ms < 3000 ? 4
+                   : health.elapsed_ms < 5000 ? 2 : 0                          //  0-5
   const maturity   = scoreProductionMaturity(gh.signals, lh, lhDesktop)        //  0-12
   const hygiene    = scoreSourceHygiene(gh, securityHeaders, legalPages)       //  0-7  (was 0-5 · +security/legal/readme)
   const completenessPts = scoreCompleteness(completeness)                      //  0-2

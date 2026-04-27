@@ -101,9 +101,7 @@ export function ScoutsPage() {
             Who calls the shots
           </h1>
           <p className="font-light text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Activity Points accumulate from Forecasts and Applauds.
-            Every Forecast counts the same — higher tier = more monthly votes
-            and earlier access to the analysis layers.
+            Forecast. Applaud. Climb tiers. Higher tier = more votes, earlier access.
           </p>
         </header>
 
