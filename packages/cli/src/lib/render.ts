@@ -73,6 +73,31 @@ function centerPad(s: string, w: number): string {
   return ' '.repeat(left) + s + ' '.repeat(total - left)
 }
 
+// ── Single source of truth for box drawing ─────────────────────
+// Every panel uses 58-char outer width (1 corner + 56 interior + 1 corner)
+// so screenshots line up. Helper takes the *visible* length so colored
+// content (multiple ANSI spans) renders at the right padding without
+// having to strip escape codes at runtime.
+
+const BOX_W      = 58              // outer width including both corners
+const INSIDE_W   = BOX_W - 2       // chars between │ and │
+const CONTENT_W  = INSIDE_W - 2    // chars between '│ ' and ' │'
+
+const boxTop    = ()    => c.muted('┌' + '─'.repeat(INSIDE_W) + '┐')
+const boxBottom = ()    => c.muted('└' + '─'.repeat(INSIDE_W) + '┘')
+const boxBlank  = ()    => c.muted('│' + ' '.repeat(INSIDE_W) + '│')
+
+/**
+ * Render a content row inside the box with proper padding.
+ * @param visibleLen  number of visible chars in `colored` (for padding math)
+ * @param colored     the rendered string (may contain ANSI escapes)
+ * @param leftMargin  extra spaces inside the box, after the leading `│ `
+ */
+function boxRow(visibleLen: number, colored: string, leftMargin = 0): string {
+  const padding = Math.max(0, CONTENT_W - leftMargin - visibleLen)
+  return c.muted('│ ') + ' '.repeat(leftMargin) + colored + ' '.repeat(padding) + c.muted(' │')
+}
+
 /** Strip ANSI for width math on colored strings. */
 function visibleLength(s: string): string {
   // eslint-disable-next-line no-control-regex
@@ -96,11 +121,13 @@ export function renderAudit(view: AuditView): string {
   const total = p.score_total ?? 0
 
   // Header
-  const bar = '─'.repeat(58)
   const lines: string[] = []
-  lines.push(c.muted('┌' + bar + '┐'))
-  lines.push(c.muted('│ ') + c.bold(c.gold('commit.show')) + c.muted(' · ') + c.cream('Audit report') + ' '.repeat(58 - 29) + c.muted('│'))
-  lines.push(c.muted('└' + bar + '┘'))
+  lines.push(boxTop())
+  lines.push(boxRow(
+    /* visibleLen */ 'commit.show · Audit report'.length,
+    c.bold(c.gold('commit.show')) + c.muted(' · ') + c.cream('Audit report'),
+  ))
+  lines.push(boxBottom())
   lines.push('')
 
   // Project title line
@@ -142,14 +169,20 @@ export function renderAudit(view: AuditView): string {
   const strengths = asStringArray(snapshot?.rich_analysis?.scout_brief?.strengths, 3)
   const concerns  = asStringArray(snapshot?.rich_analysis?.scout_brief?.weaknesses, 2)
   if (strengths.length > 0 || concerns.length > 0) {
-    lines.push('  ' + c.muted('┌' + '─'.repeat(56) + '┐'))
+    // strengths/concerns each render as `↑ ` (2 visible) + truncated line.
+    // Total visible-line budget inside the box is CONTENT_W chars; reserve
+    // 2 for the arrow + space, leaving CONTENT_W - 2 for the bullet text.
+    const bulletWidth = CONTENT_W - 2
+    lines.push('  ' + boxTop())
     for (const s of strengths) {
-      lines.push('  ' + c.muted('│ ') + c.teal('↑ ') + truncate(s, 52) + fill(s, 52) + c.muted(' │'))
+      const txt = truncate(s, bulletWidth)
+      lines.push('  ' + boxRow(2 + txt.length, c.teal('↑ ') + c.cream(txt)))
     }
     for (const s of concerns) {
-      lines.push('  ' + c.muted('│ ') + c.scarlet('↓ ') + truncate(s, 52) + fill(s, 52) + c.muted(' │'))
+      const txt = truncate(s, bulletWidth)
+      lines.push('  ' + boxRow(2 + txt.length, c.scarlet('↓ ') + c.cream(txt)))
     }
-    lines.push('  ' + c.muted('└' + '─'.repeat(56) + '┘'))
+    lines.push('  ' + boxBottom())
     lines.push('')
   }
 
@@ -426,29 +459,40 @@ export function renderAuditError(err: AuditErrorInput, projectName?: string, pro
   const label  = AUDIT_ERROR_LABEL[err.type]  ?? AUDIT_ERROR_LABEL.anthropic_other
   const detail = AUDIT_ERROR_DETAIL[err.type] ?? AUDIT_ERROR_DETAIL.anthropic_other
   const lines: string[] = []
-  const horiz = '─'.repeat(58)
-  lines.push('  ' + c.muted('┌' + horiz + '┐'))
-  lines.push('  ' + c.muted('│ ') + c.bold(c.gold('commit.show')) + c.muted(' · ') + c.scarlet(label) + ' '.repeat(Math.max(0, 58 - 14 - label.length)) + c.muted('│'))
-  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+  const titleVisible = `commit.show · ${label}`
+
+  lines.push('  ' + boxTop())
+  lines.push('  ' + boxRow(
+    titleVisible.length,
+    c.bold(c.gold('commit.show')) + c.muted(' · ') + c.scarlet(label),
+  ))
+  lines.push('  ' + boxBlank())
+
   if (projectName) {
-    lines.push('  ' + c.muted('│ ') + c.cream(`Repo: ${projectName}`) + ' '.repeat(Math.max(0, 56 - 6 - projectName.length)) + c.muted('│'))
-    lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+    const repoLine = `Repo: ${projectName}`
+    lines.push('  ' + boxRow(repoLine.length, c.cream(repoLine)))
+    lines.push('  ' + boxBlank())
   }
-  for (const w of wrapText(detail, 54)) {
-    lines.push('  ' + c.muted('│ ') + c.cream(w) + ' '.repeat(Math.max(0, 56 - w.length)) + c.muted('│'))
+  for (const w of wrapText(detail, CONTENT_W)) {
+    lines.push('  ' + boxRow(w.length, c.cream(w)))
   }
   if (err.retry_after_seconds && err.retry_after_seconds > 0) {
-    lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+    lines.push('  ' + boxBlank())
     const t = `Retry after ~${untilHuman(err.retry_after_seconds)}`
-    lines.push('  ' + c.muted('│ ') + c.dim(t) + ' '.repeat(Math.max(0, 56 - t.length)) + c.muted('│'))
+    lines.push('  ' + boxRow(t.length, c.dim(t)))
   }
-  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
+  lines.push('  ' + boxBlank())
   const statusLine = `Status check: commitshow status ${projectName ?? '<repo>'}`
-  lines.push('  ' + c.muted('│ ') + c.dim(statusLine) + ' '.repeat(Math.max(0, 56 - statusLine.length)) + c.muted('│'))
+  lines.push('  ' + boxRow(Math.min(statusLine.length, CONTENT_W), c.dim(statusLine.slice(0, CONTENT_W))))
   if (projectUrl) {
-    lines.push('  ' + c.muted('│ ') + c.dim('Web view: ') + c.cream(projectUrl.length > 44 ? projectUrl.slice(0, 41) + '…' : projectUrl) + ' '.repeat(Math.max(0, 46 - Math.min(44, projectUrl.length))) + c.muted('│'))
+    const urlMax = CONTENT_W - 'Web view: '.length
+    const urlText = projectUrl.length > urlMax ? projectUrl.slice(0, urlMax - 1) + '…' : projectUrl
+    lines.push('  ' + boxRow(
+      'Web view: '.length + urlText.length,
+      c.dim('Web view: ') + c.cream(urlText),
+    ))
   }
-  lines.push('  ' + c.muted('└' + horiz + '┘'))
+  lines.push('  ' + boxBottom())
   return lines.join('\n')
 }
 
@@ -523,26 +567,38 @@ export function renderRateLimitDeny(opts: {
   quota?:  QuotaInput
 }): string {
   const lines: string[] = []
-  const horiz = '─'.repeat(58)
-  lines.push('  ' + c.muted('┌' + horiz + '┐'))
-  lines.push('  ' + c.muted('│ ') + c.bold(c.scarlet('Rate limit')) + c.muted(' · ') + c.cream(REASON_LABEL[opts.reason] ?? opts.reason) + ' '.repeat(Math.max(0, 58 - 14 - (REASON_LABEL[opts.reason]?.length ?? opts.reason.length))) + c.muted('│'))
-  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
-  lines.push('  ' + c.muted('│ ') + c.cream(`${opts.count}/${opts.limit}  `) + bar(opts.count, opts.limit) + ' '.repeat(58 - 28) + c.muted('│'))
+  const reasonLabel = REASON_LABEL[opts.reason] ?? opts.reason
+  const titleVisible = `Rate limit · ${reasonLabel}`
+
+  lines.push('  ' + boxTop())
+  lines.push('  ' + boxRow(
+    titleVisible.length,
+    c.bold(c.scarlet('Rate limit')) + c.muted(' · ') + c.cream(reasonLabel),
+  ))
+  lines.push('  ' + boxBlank())
+
+  // Count + bar row · "5/5  " (5 chars) + 20-char bar = 25 visible
+  const counter = `${opts.count}/${opts.limit}  `
+  lines.push('  ' + boxRow(counter.length + 20, c.cream(counter) + bar(opts.count, opts.limit)))
+
   if (opts.quota) {
-    const reset = timeUntil(opts.quota.reset_at)
-    lines.push('  ' + c.muted('│ ') + c.dim(`resets in ${reset}`) + ' '.repeat(58 - 12 - reset.length - 9 - 2) + c.muted('│'))
+    const reset = `resets in ${timeUntil(opts.quota.reset_at)}`
+    lines.push('  ' + boxRow(reset.length, c.dim(reset)))
   }
-  // Wrap the message into ~54-char lines.
-  for (const w of wrapText(opts.message, 54)) {
-    lines.push('  ' + c.muted('│ ') + c.cream(w) + ' '.repeat(56 - w.length) + c.muted('│'))
+
+  for (const w of wrapText(opts.message, CONTENT_W)) {
+    lines.push('  ' + boxRow(w.length, c.cream(w)))
   }
+
   if (opts.reason === 'url_cap') {
-    lines.push('  ' + c.muted('│ ') + c.dim('Tip: cached audit (< 7d) is free — `commitshow status <repo>`.') + c.muted(' │'))
+    const tip = 'Tip: cached audit (< 7d) is free — commitshow status <repo>'
+    lines.push('  ' + boxRow(tip.length, c.dim(tip)))
   }
   if (opts.reason === 'ip_cap' && opts.quota?.ip.tier === 'anon') {
-    lines.push('  ' + c.muted('│ ') + c.dim('Sign in (commit.show) for a higher daily cap.') + ' '.repeat(58 - 49) + c.muted('│'))
+    const tip = 'Sign in (commit.show) for a higher daily cap.'
+    lines.push('  ' + boxRow(tip.length, c.dim(tip)))
   }
-  lines.push('  ' + c.muted('└' + horiz + '┘'))
+  lines.push('  ' + boxBottom())
   return lines.join('\n')
 }
 
@@ -564,24 +620,41 @@ function wrapText(s: string, width: number): string[] {
 
 export function renderUpsell(): string {
   const lines: string[] = []
-  const bar = '─'.repeat(58)
-  lines.push('  ' + c.muted('┌' + bar + '┐'))
-  lines.push('  ' + c.muted('│ ') + c.bold(c.gold('Preview')) + c.muted(' · ') + c.cream('not entered in the season') + ' '.repeat(58 - 35) + c.muted('│'))
-  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
-  lines.push('  ' + c.muted('│ ') + c.cream('Audition to unlock:') + ' '.repeat(58 - 20) + c.muted('│'))
-  const items = [
-    'Scout forecasts · human verdicts (30% of score)',
-    'Season ranking  · top 20% graduate each 3-week cycle',
-    'Hall of Fame    · permanent archive + public badge',
-    'Live applauds   · notifications when reviewers react',
-    'Recommit loop   · weekly delta + trajectory share card',
+  const titleVisible = 'Preview · not entered in the season'
+  const headVisible  = 'Audition to unlock:'
+  const ctaVisible   = '→ https://commit.show/submit'
+
+  lines.push('  ' + boxTop())
+  lines.push('  ' + boxRow(
+    titleVisible.length,
+    c.bold(c.gold('Preview')) + c.muted(' · ') + c.cream('not entered in the season'),
+  ))
+  lines.push('  ' + boxBlank())
+  lines.push('  ' + boxRow(headVisible.length, c.cream(headVisible)))
+
+  // Backstage = our brand for the prompt-extraction analysis (Phase 2 brief).
+  // Lead the unlock list with it because it's the most concrete, immediate
+  // payoff on signup: see how the project was built (delegation map, failure
+  // log, decision archaeology) and unlock +15-20 audit points typical.
+  // Tags are 15-char column-aligned so the · separator lines up vertically.
+  // Tags column-padded to 16 chars (1 trailing space guaranteed so the · in
+  // `rest` always has a visual gap from the tag, even when the tag fills 15).
+  const items: Array<{ tag: string; rest: string; tone: (s: string) => string }> = [
+    { tag: 'Backstage       ', rest: '· build process + prompts · +15 pts', tone: c.gold },
+    { tag: 'Scout forecasts ', rest: '· human verdicts (30% of score)',     tone: c.teal },
+    { tag: 'Season ranking  ', rest: '· top 20% graduate per cycle',        tone: c.teal },
+    { tag: 'Hall of Fame    ', rest: '· permanent archive + badge',         tone: c.teal },
+    { tag: 'Live applauds   ', rest: '· notifications on reactions',        tone: c.teal },
+    { tag: 'Recommit loop   ', rest: '· weekly delta + share card',         tone: c.teal },
   ]
   for (const it of items) {
-    lines.push('  ' + c.muted('│ ') + c.teal('→ ') + c.cream(pad(it, 54)) + c.muted('│'))
+    const visible = `→ ${it.tag}${it.rest}`
+    lines.push('  ' + boxRow(visible.length, it.tone('→ ') + c.cream(it.tag) + c.muted(it.rest)))
   }
-  lines.push('  ' + c.muted('│' + ' '.repeat(58) + '│'))
-  lines.push('  ' + c.muted('│ ') + c.gold('→ https://commit.show/submit') + ' '.repeat(58 - 30) + c.muted('│'))
-  lines.push('  ' + c.muted('└' + bar + '┘'))
+
+  lines.push('  ' + boxBlank())
+  lines.push('  ' + boxRow(ctaVisible.length, c.gold(ctaVisible)))
+  lines.push('  ' + boxBottom())
   return lines.join('\n')
 }
 

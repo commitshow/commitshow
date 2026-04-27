@@ -778,6 +778,26 @@ OUTPUT RULES
      the same score by default — avoid the 75-80 "pretty good" anchor.
   5) If the math lands you in 75-85 for a solid-but-not-outstanding project,
      push DOWN. The rookie bar is 75 and it should be hard to cross.
+  CLI-PREVIEW MODE (input.is_cli_preview === true):
+     This run was triggered by an anonymous \`npx commitshow audit\` call —
+     the creator never reached the /submit form, so the build_brief is empty
+     by design. Adjust scoring rules:
+       · DO NOT emit a tampering_signal for missing Phase 2 brief sections
+         (failure_log, decision_archaeology, ai_delegation_map, etc.). The
+         creator never had the chance to fill them.
+       · DO NOT apply the integrity_score = 0 penalty.
+       · You MAY note in delta_reasoning that "Phase 2 brief not yet
+         provided · audition (commit.show/submit) unlocks +15 to +20 typical."
+       · Score what you can verify objectively (Lighthouse, GitHub signals,
+         live URL, completeness). The auto_baseline × 2 still applies, but
+         missing brief sections are framed as "not yet provided" not as
+         dishonesty.
+       · Phase 1 self-claims are also absent in CLI mode — that's expected,
+         not suspicious.
+     The intent: a CLI preview should land at a fair, evidence-only score
+     that Creator can clearly improve by auditioning. Don't punish for the
+     flow they haven't seen yet.
+
   6) ALSO emit the arithmetic as a structured list in score.breakdown — one
      entry per step of your math. This is what the UI renders as a ledger:
        · kind: 'baseline' (first row · starting auto_score × 2)
@@ -1270,13 +1290,20 @@ Deno.serve(async (req) => {
   // Load project + brief
   const { data: project, error: projErr } = await admin
     .from('projects')
-    .select('id, project_name, description, github_url, live_url, creator_id')
+    .select('id, project_name, description, github_url, live_url, creator_id, status')
     .eq('id', projectId)
     .single()
   if (projErr || !project) return json({ error: 'project not found' }, 404)
 
   const { data: brief } = await admin
     .from('build_briefs').select('*').eq('project_id', projectId).maybeSingle()
+
+  // Anonymous CLI previews never had a chance to fill the brief — penalising
+  // them for missing Phase 2 sections is structurally unfair (the user never
+  // saw the form). Tag the run so Claude can adjust its scoring rubric:
+  // skip "tampering -10" + "Phase 2 missing" deductions, frame missing
+  // sections as "not yet provided · audition to add" instead.
+  const isCliPreview = project.status === 'preview' && !project.creator_id && !brief
 
   // Parallel external probes
   const [lh, gh, health, completeness] = await Promise.all([
@@ -1367,11 +1394,13 @@ Deno.serve(async (req) => {
         health_pts: healthPts,
         total: score_auto,
       },
-      // Polish & sharing signals · NOT in auto_50, but Claude weighs them
-      // into score.current. Captures what Lighthouse SEO misses: og:image,
-      // twitter:card, manifest, apple-touch-icon, theme-color, etc.
       polish_signals_0_to_5: completeness.score,
     },
+    // True when the project was created via `npx commitshow audit` and the
+    // creator hasn't run through the /submit brief flow. Claude must NOT
+    // apply Phase-2-missing tampering penalties in this mode — the creator
+    // never saw the form. See SCORE FORMATION rule 7 in the system prompt.
+    is_cli_preview: isCliPreview,
     trigger_type: triggerType,
   }, { includeExpertPanel })
 
