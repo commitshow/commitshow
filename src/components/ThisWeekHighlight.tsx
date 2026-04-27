@@ -86,7 +86,7 @@ export function ThisWeekHighlight() {
   if (movers.length === 0) return null  // hide entirely when nothing moved
 
   return (
-    <section className="relative z-10 px-6 py-12" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
+    <section className="relative z-10 px-4 md:px-6 py-12" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
       <div className="max-w-5xl mx-auto">
         <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
           // THIS WEEK IN COMMIT

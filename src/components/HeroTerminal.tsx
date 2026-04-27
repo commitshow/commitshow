@@ -15,6 +15,7 @@
 // Section wrapper (header + container) is provided by the caller.
 
 import { useEffect, useRef, useState } from 'react'
+import { useRecentAudits, type AuditDemo } from '../lib/recentAudits'
 
 // 5×5 ASCII font for the big score · same shapes as packages/cli/src/lib/render.ts
 // so the visual is the SAME mark a user gets in their terminal.
@@ -48,47 +49,66 @@ type Line =
   | { kind: 'arrow';  dir: 'up' | 'down'; text: string }
   | { kind: 'spacer' }
 
-// The full sequence (steady-state · what you see at the end of one cycle)
-const FULL_SEQUENCE: Line[] = [
-  { kind: 'prompt',  text: 'npx commitshow audit github.com/shadcn-ui/ui' },
-  { kind: 'spacer' },
-  { kind: 'note',    text: 'Refreshing audit for shadcn-ui/ui…' },
-  { kind: 'spacer' },
-  { kind: 'big',     score: '82' },
-  { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: ' · strong' },
-  { kind: 'spacer' },
-  { kind: 'bar',       label: 'Audit', value: '37/45', bar: '▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱', color: '#00D4AA' },
-  { kind: 'lockedBar', label: 'Scout', value: '—/30' },
-  { kind: 'lockedBar', label: 'Comm.', value: '—/20' },
-  { kind: 'spacer' },
-  { kind: 'arrow', dir: 'up',   text: '90.5% TypeScript with strict mode' },
-  { kind: 'arrow', dir: 'up',   text: '7 CI workflows + 79 test files' },
-  { kind: 'arrow', dir: 'up',   text: 'Lighthouse Accessibility 100, BP 100' },
-  { kind: 'arrow', dir: 'down', text: 'Lighthouse perf 56 on docs site' },
-  { kind: 'arrow', dir: 'down', text: 'Zero observability libs detected' },
-]
+// Hardcoded fallback · used when the live audit pool is empty (cold start /
+// API failure / RLS block). Mirrors a real shadcn-ui/ui walk-on result.
+const FALLBACK_DEMO: AuditDemo = {
+  projectName: 'ui',
+  slug:        'shadcn-ui/ui',
+  score:       82,
+  band:        'strong',
+  auditPts:    37,
+  strengths:   [
+    '90.5% TypeScript with strict mode',
+    '7 CI workflows + 79 test files',
+    'Lighthouse Accessibility 100, BP 100',
+  ],
+  concerns:    [
+    'Lighthouse perf 56 on docs site',
+    'Zero observability libs detected',
+  ],
+}
+
+// Build the per-cycle line sequence from a live demo. The ASCII `bar`
+// uses 20 cells (matches CLI render) so the audit fill ratio (auditPts/45)
+// maps cleanly to filled vs empty cells.
+function sequenceForDemo(d: AuditDemo): Line[] {
+  const FILL_CELLS = 20
+  const ratio = Math.max(0, Math.min(1, d.auditPts / 45))
+  const filled = Math.round(ratio * FILL_CELLS)
+  const bar = '▰'.repeat(filled) + '▱'.repeat(FILL_CELLS - filled)
+  return [
+    { kind: 'prompt', text: `npx commitshow audit github.com/${d.slug}` },
+    { kind: 'spacer' },
+    { kind: 'note',   text: `Refreshing audit for ${d.slug}…` },
+    { kind: 'spacer' },
+    { kind: 'big',    score: String(d.score) },
+    { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: ` · ${d.band}` },
+    { kind: 'spacer' },
+    { kind: 'bar',       label: 'Audit', value: `${d.auditPts}/45`, bar, color: '#00D4AA' },
+    { kind: 'lockedBar', label: 'Scout', value: '—/30' },
+    { kind: 'lockedBar', label: 'Comm.', value: '—/20' },
+    { kind: 'spacer' },
+    ...d.strengths.map((t): Line => ({ kind: 'arrow', dir: 'up',   text: t })),
+    ...d.concerns .map((t): Line => ({ kind: 'arrow', dir: 'down', text: t })),
+  ]
+}
 
 // Stage timeline · ms after cycle start where each line should APPEAR.
-// Tuned so the big score lands around 2.5s (early enough to be the hook).
-// Total cycle ≈ 12s including a 4s "hold" at the end.
-const STAGE_REVEAL_AT: number[] = [
-  300,    // 0  prompt (typed in over its own duration · see TYPING_MS)
-  1700,   // 1  spacer
-  1750,   // 2  note "Refreshing…"
-  2400,   // 3  spacer
-  2700,   // 4  big score
-  3100,   // 5  caption
-  3500,   // 6  spacer
-  3700,   // 7  Audit bar
-  4000,   // 8  Scout locked
-  4250,   // 9  Comm locked
-  4600,   // 10 spacer
-  4800,   // 11 ↑ TS strict
-  5100,   // 12 ↑ CI + tests
-  5400,   // 13 ↑ Lighthouse a11y
-  5750,   // 14 ↓ perf 56
-  6100,   // 15 ↓ no observability
-]
+// First 7 stages fixed (the "build-up" — prompt typed, then score reveal,
+// then bars). Remaining lines (strengths/concerns) interpolate at fixed
+// step so demos with 2-vs-3 strengths still feel rhythmic. Tuned so the
+// big score lands around 2.7s (early enough to be the hook), and the
+// last line reveals before the 4s hold/fade-restart at the end of cycle.
+const FIXED_STAGES = [300, 1700, 1750, 2400, 2700, 3100, 3500]
+const STAGE_STEP   = 300                     // ms between strength/concern lines
+
+function stagesFor(seq: Line[]): number[] {
+  const out = [...FIXED_STAGES.slice(0, Math.min(seq.length, FIXED_STAGES.length))]
+  for (let i = FIXED_STAGES.length; i < seq.length; i++) {
+    out.push(FIXED_STAGES[FIXED_STAGES.length - 1] + (i - FIXED_STAGES.length + 1) * STAGE_STEP)
+  }
+  return out
+}
 
 const CYCLE_MS  = 12_000   // total before fade-restart
 const FADE_MS   = 800      // fade out → in
@@ -105,6 +125,15 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
   const [reducedMotion, setReducedMotion] = useState(forceReduce ?? false)
   const rafRef = useRef<number | null>(null)
   const startRef = useRef<number>(0)
+
+  // Demo pool — live recent audits (≥70 score, ≤7d old). When empty
+  // (cold-start / API error / no recent demos), fall back to hardcoded
+  // shadcn-ui/ui sample so the section never sits empty.
+  const liveDemos = useRecentAudits()
+  const pool = liveDemos.length > 0 ? liveDemos : [FALLBACK_DEMO]
+  const currentDemo = pool[cycleId % pool.length]
+  const sequence = sequenceForDemo(currentDemo)
+  const stages   = stagesFor(sequence)
 
   useEffect(() => {
     if (forceReduce) { setReducedMotion(true); return }
@@ -136,10 +165,10 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
 
   // How many lines (and chars within the typing prompt) are visible right now.
   // In reduced-motion mode, everything is at final state.
-  const visibleLines = reducedMotion ? FULL_SEQUENCE.length : STAGE_REVEAL_AT.filter(t => tick >= t).length
+  const visibleLines = reducedMotion ? sequence.length : stages.filter(t => tick >= t).length
   const promptCharProgress = reducedMotion
     ? 1
-    : Math.max(0, Math.min(1, (tick - STAGE_REVEAL_AT[0]) / TYPING_MS))
+    : Math.max(0, Math.min(1, (tick - stages[0]) / TYPING_MS))
 
   // Cycle fade · briefly drop opacity right before/after restart so the loop
   // doesn't feel jarring. Computed off the same tick.
@@ -166,9 +195,9 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
         overflow: 'hidden',
       }}
     >
-      <TerminalChrome />
+      <TerminalChrome demoSlug={currentDemo.slug} />
       <div className="px-4 md:px-6 py-4 md:py-5" style={{ minHeight: '380px' }}>
-        {FULL_SEQUENCE.slice(0, visibleLines).map((line, i) => (
+        {sequence.slice(0, visibleLines).map((line, i) => (
           <LineRow
             key={i}
             line={line}
@@ -186,7 +215,7 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
   )
 }
 
-function TerminalChrome() {
+function TerminalChrome({ demoSlug }: { demoSlug: string }) {
   return (
     <div
       className="flex items-center gap-1.5 px-3 py-2"
@@ -203,10 +232,10 @@ function TerminalChrome() {
       <Dot color="rgba(255,189,46,0.7)" />
       <Dot color="rgba(39,201,63,0.7)" />
       <span
-        className="ml-3 tracking-widest"
-        style={{ color: 'rgba(248,245,238,0.45)', fontSize: '10px' }}
+        className="ml-3 tracking-widest truncate"
+        style={{ color: 'rgba(248,245,238,0.45)', fontSize: '10px', maxWidth: 'calc(100% - 80px)' }}
       >
-        commit.show — npx commitshow audit
+        commit.show — auditing {demoSlug}
       </span>
     </div>
   )
