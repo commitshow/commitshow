@@ -1,7 +1,7 @@
-// HeroTerminal — code-rendered terminal animation that replaces the hero
-// background video. Same visual goal (atmospheric depth behind the
-// headline) but at zero asset cost, no codec/CDN/autoplay headaches, and
-// it doubles as a live demo of the product itself.
+// CliDemoSection — code-rendered live `commitshow audit` terminal. Used
+// as a dedicated section below the hero (NOT as a background — earlier
+// attempt to layer behind the headline broke ASCII alignment via vignette
+// fight; foreground-only is cleaner).
 //
 // Behavior:
 //   - 14-stage state machine cycling every ~12s
@@ -9,11 +9,10 @@
 //     output stage-by-stage (score → bars → strengths/concerns)
 //   - Loops with a soft fade
 //   - Honors prefers-reduced-motion (jumps to final state, no looping)
-//   - Mobile: terminal stays visible but font scales down + content
-//     content fits the narrower viewport
+//   - Mobile: font scales down via clamp · ASCII width contained
 //
-// Sits behind the headline (z-index 0) with the existing hero vignette
-// keeping the middle area legible. Headline + CTAs render above (z-10).
+// Renders inline as a centered terminal window with macOS chrome.
+// Section wrapper (header + container) is provided by the caller.
 
 import { useEffect, useRef, useState } from 'react'
 
@@ -151,42 +150,37 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
 
   return (
     <div
-      aria-hidden="true"
-      className="absolute inset-0 pointer-events-none flex items-center justify-center"
-      style={{ zIndex: -1 }}
+      key={cycleId}
+      className="font-mono mx-auto"
+      style={{
+        opacity: fadeOpacity,
+        transition: 'opacity 200ms ease-out',
+        width: 'min(640px, 100%)',
+        fontSize: 'clamp(11px, 1.6vw, 14px)',
+        lineHeight: 1.6,
+        color: 'rgba(248,245,238,0.85)',
+        background: 'rgba(15, 32, 64, 0.5)',
+        border: '1px solid rgba(240,192,64,0.15)',
+        borderRadius: 4,
+        boxShadow: '0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02)',
+        overflow: 'hidden',
+      }}
     >
-      <div
-        key={cycleId}
-        className="font-mono"
-        style={{
-          opacity: fadeOpacity,
-          transition: 'opacity 200ms ease-out',
-          width: 'min(720px, 92vw)',
-          fontSize: 'clamp(11px, 1.05vw, 13px)',
-          lineHeight: 1.55,
-          color: 'rgba(248,245,238,0.55)',
-          // The terminal content sits behind the headline. The hero's
-          // vignette gradient (in Hero.tsx) layers on top to keep the
-          // middle dark enough for the headline to read.
-          textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-        }}
-      >
-        <TerminalChrome />
-        <div className="px-4 md:px-5 py-3 md:py-4">
-          {FULL_SEQUENCE.slice(0, visibleLines).map((line, i) => (
-            <LineRow
-              key={i}
-              line={line}
-              index={i}
-              isLastLine={i === visibleLines - 1}
-              promptProgress={i === 0 ? promptCharProgress : 1}
-              showCursor={!reducedMotion && (
-                (i === 0 && promptCharProgress < 1) ||
-                (i === visibleLines - 1 && i > 0 && tick < CYCLE_MS - FADE_MS)
-              )}
-            />
-          ))}
-        </div>
+      <TerminalChrome />
+      <div className="px-4 md:px-6 py-4 md:py-5" style={{ minHeight: '380px' }}>
+        {FULL_SEQUENCE.slice(0, visibleLines).map((line, i) => (
+          <LineRow
+            key={i}
+            line={line}
+            index={i}
+            isLastLine={i === visibleLines - 1}
+            promptProgress={i === 0 ? promptCharProgress : 1}
+            showCursor={!reducedMotion && (
+              (i === 0 && promptCharProgress < 1) ||
+              (i === visibleLines - 1 && i > 0 && tick < CYCLE_MS - FADE_MS)
+            )}
+          />
+        ))}
       </div>
     </div>
   )
@@ -257,15 +251,17 @@ function LineRow({
   if (line.kind === 'big') {
     const rows = bigDigits(line.score)
     return (
-      <div className="my-1.5">
+      <div className="my-2 text-center">
         {rows.map((row, i) => (
           <div
             key={i}
             style={{
               color: '#D4A838',                   // brand goldDeep · matches CLI big digit
               letterSpacing: '0.05em',
-              textShadow: '0 0 8px rgba(212,168,56,0.25), 0 1px 2px rgba(0,0,0,0.6)',
-              paddingLeft: '6.5em',                // visually center beside ascii art
+              textShadow: '0 0 12px rgba(212,168,56,0.3)',
+              fontSize: '1.1em',                  // slightly bigger than line height
+              lineHeight: 1.05,
+              whiteSpace: 'pre',
             }}
           >
             {row}
@@ -277,7 +273,7 @@ function LineRow({
 
   if (line.kind === 'caption') {
     return (
-      <div style={{ color: 'rgba(248,245,238,0.45)', paddingLeft: '5.5em' }}>
+      <div className="text-center" style={{ color: 'rgba(248,245,238,0.6)', marginBottom: '0.4em' }}>
         {line.pre}
         <span style={{ color: line.mid_color }}>{line.mid}</span>
         {line.post}
@@ -311,10 +307,40 @@ function LineRow({
     return (
       <div style={{ paddingLeft: '2em' }}>
         <span style={{ color: arrowColor, marginRight: '0.5em' }}>{arrowChar}</span>
-        <span style={{ color: 'rgba(248,245,238,0.6)' }}>{line.text}</span>
+        <span style={{ color: 'rgba(248,245,238,0.7)' }}>{line.text}</span>
       </div>
     )
   }
 
   return null
+}
+
+// ── Section wrapper · used in LandingPage just below the hero ──
+//
+// Shows the live audit demo with a small header + CTA hint. Sits in its
+// own section (not as hero background) because the ASCII score box reads
+// best when it owns the canvas, not when fighting a vignette.
+export function CliDemoSection() {
+  return (
+    <section
+      className="relative z-10 px-4 md:px-6 py-16 md:py-20"
+      style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}
+    >
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-8 md:mb-10">
+          <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+            // LIVE FROM YOUR TERMINAL
+          </div>
+          <h2 className="font-display font-black text-2xl sm:text-3xl md:text-4xl mb-3" style={{ color: 'var(--cream)', lineHeight: 1.15 }}>
+            One command. Real audit
+          </h2>
+          <p className="font-light max-w-md mx-auto text-sm md:text-base" style={{ color: 'rgba(248,245,238,0.55)' }}>
+            <span className="font-mono" style={{ color: 'var(--gold-500)' }}>npx commitshow audit</span>
+            {' '}on any GitHub repo. Score in 60 seconds.
+          </p>
+        </div>
+        <HeroTerminal />
+      </div>
+    </section>
+  )
 }

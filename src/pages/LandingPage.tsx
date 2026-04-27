@@ -1,6 +1,7 @@
 import { Hero } from '../components/Hero'
 import { SeasonProgressBar } from '../components/SeasonProgress'
 import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
+import { CliDemoSection } from '../components/HeroTerminal'
 import { useHeroStats } from '../lib/heroStats'
 
 // Simple monochrome line icons — inherit stroke from currentColor.
@@ -69,6 +70,12 @@ export function LandingPage() {
   return (
     <div className="relative min-h-screen">
       <Hero stats={stats} />
+
+      {/* ── CLI LIVE DEMO ── animated `commitshow audit` terminal session,
+          formerly attempted as hero background but the ASCII score box
+          and vignette fought for legibility. Lives better here, owning
+          the canvas. */}
+      <CliDemoSection />
 
       {/* ── SEASON PROGRESS ── */}
       <section className="relative z-10 px-4 md:px-6 pt-4 pb-0">

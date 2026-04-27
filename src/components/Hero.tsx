@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { HeroStats } from '../lib/heroStats'
-import { HeroTerminal } from './HeroTerminal'
 
 const HEADLINE_LINE_1 = 'Show your'
 const HEADLINE_LINE_2 = 'Commit'
@@ -108,13 +107,11 @@ export function Hero({ stats }: HeroProps) {
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-4 md:px-6 pt-20 pb-16 overflow-hidden">
 
-      {/* ── Background · code-rendered terminal animation (v3 · 2026-04-27).
-          Replaces the prior MP4/WebM video for: zero asset cost, no codec
-          gotchas, no CDN cache drama, full responsiveness, AND it doubles
-          as a live demo of `commitshow audit` itself. The original
-          <HeroBackground /> video implementation is kept below for rollback. */}
-      <HeroTerminal />
-      {/* <HeroBackground /> */}
+      {/* ── Background · video restored. The terminal animation didn't
+          read well behind the headline (ASCII box clipping, vignette
+          fighting the score's gold) and lives better in its own section
+          below the hero. See <CliDemoSection /> on the landing page. */}
+      <HeroBackground />
 
 
       {/* Subtle vertical vignette so text stays legible while the conductor
@@ -139,7 +136,7 @@ export function Hero({ stats }: HeroProps) {
         }}
       >
         <span className="pulse-dot w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-        SEASON ZERO · NOW OPEN · CLASS OF 2026
+        SEASON ZERO · NOW OPEN<span className="hidden sm:inline"> · CLASS OF 2026</span>
       </div>
 
       {/* Main headline · typed-terminal effect */}
@@ -149,18 +146,19 @@ export function Hero({ stats }: HeroProps) {
       {/* Rule */}
       <div className="stagger-3 w-24 h-px mb-6" style={{ background: 'var(--gold-500)', opacity: 0.4 }} />
 
-      {/* Sub */}
+      {/* Sub · 3-beat rhythm — Audit · Forecast · Graduate. Tight by design. */}
       <p
-        className="stagger-3 max-w-xl mx-auto mb-10 font-light"
-        style={{ color: 'rgba(248,245,238,0.55)', fontSize: '1.1rem', lineHeight: 1.8 }}
+        className="stagger-3 max-w-md mx-auto mb-10 font-light"
+        style={{ color: 'rgba(248,245,238,0.55)', fontSize: '1.1rem', lineHeight: 1.7 }}
       >
-        The vibe coding league where every commit is evidence. The engine audits
-        the work, Scouts forecast the finish, and the ones ready for production graduate.
+        Engine audits. Scouts forecast. Top 20% graduate.
       </p>
 
-      {/* CTA · matched widths so the pair reads as a balanced unit. The
-          longer label ("Audition your product →") sets the floor; the
-          shorter one stretches to match via min-width. */}
+      {/* CTA · matched widths · fixed 280px so both buttons render at the
+          identical pixel width regardless of label length. min-width
+          alone wasn't enough — the longer label ("Audition your product →")
+          overflowed past 240px (~257px natural width in DM Mono), making
+          the pair visually mismatched. */}
       <div className="stagger-4 flex gap-4 justify-center flex-wrap mb-16">
         <button
           onClick={onSubmitClick}
@@ -173,7 +171,7 @@ export function Hero({ stats }: HeroProps) {
             cursor: 'pointer',
             fontFamily: 'DM Mono, monospace',
             boxShadow: '0 0 40px rgba(240,192,64,0.2)',
-            minWidth: '240px',
+            width: '280px',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-400)'; e.currentTarget.style.boxShadow = '0 0 60px rgba(240,192,64,0.35)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(240,192,64,0.2)'; }}
@@ -190,7 +188,7 @@ export function Hero({ stats }: HeroProps) {
             borderRadius: '2px',
             cursor: 'pointer',
             fontFamily: 'DM Mono, monospace',
-            minWidth: '240px',
+            width: '280px',
           }}
           onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
           onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
