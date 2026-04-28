@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { AuthModal } from './AuthModal'
@@ -32,12 +33,29 @@ interface SubmitFormProps {
 // phases + timer live there. SubmitForm only drives outer-step index (loaderIndex)
 // and signals completion (edgeProgress >= 100).
 
+// Normalize various GitHub URL shapes (with/without scheme, with .git suffix,
+// owner/repo bare, github.com/owner/repo) to the canonical https://github.com/<o>/<r>
+// form so the submit form's GitHub input is prefilled correctly when arriving
+// from a CLI deep-link like /submit?repo=github.com/owner/repo.
+function canonicalGithubUrl(raw: string): string {
+  if (!raw) return ''
+  let s = raw.trim().replace(/\.git\/?$/, '').replace(/^https?:\/\//, '').replace(/^www\./, '')
+  if (s.startsWith('github.com/')) s = s.slice('github.com/'.length)
+  if (s.startsWith('github.com:')) s = s.slice('github.com:'.length)
+  // accept owner/repo bare
+  const m = s.match(/^([\w.-]+)\/([\w.-]+?)(?:\/.*)?$/)
+  if (!m) return ''
+  return `https://github.com/${m[1]}/${m[2]}`
+}
+
 export function SubmitForm({ onComplete }: SubmitFormProps) {
   const { user, member } = useAuth()
+  const [searchParams] = useSearchParams()
+  const prefilledGithub = canonicalGithubUrl(searchParams.get('repo') ?? searchParams.get('github_url') ?? '')
   const [authOpen, setAuthOpen] = useState(false)
   const [step, setStep] = useState<Step>(1)
   const [form, setForm] = useState<FormData>({
-    name: '', email: user?.email ?? '', github: '', url: '', desc: '',
+    name: '', email: user?.email ?? '', github: prefilledGithub, url: '', desc: '',
   })
   const [brief, setBrief] = useState<ExtractedBrief | null>(null)
   const [briefRaw, setBriefRaw] = useState('')

@@ -87,7 +87,7 @@ export async function audit(args: string[]): Promise<number> {
       console.log(renderAudit(view))
       if (project.status === 'preview') {
         console.log('')
-        console.log(renderUpsell())
+        console.log(renderUpsell(project.github_url ?? target.github_url))
       }
       console.log('')
     }
@@ -203,7 +203,7 @@ export async function audit(args: string[]): Promise<number> {
       console.log(renderQuotaFooter(envelope.quota))
       console.log('')
     }
-    console.log(renderUpsell())
+    console.log(renderUpsell(envelope.project.github_url ?? target.github_url))
     console.log('')
   }
   if (target.kind === 'local') {

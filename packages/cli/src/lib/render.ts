@@ -692,15 +692,23 @@ function wrapText(s: string, width: number): string[] {
   return out
 }
 
-export function renderUpsell(): string {
+export function renderUpsell(githubUrl?: string | null): string {
   const lines: string[] = []
   // "Walk-on" — anyone running CLI without auditioning. Theatre-coherent
   // (Audition / Audit / Stage / Backstage / Walk-on) · friendlier than
   // "preview" (which doubles as our DB status) · positions audition as the
   // upgrade path without making the walk-on tier feel lesser.
+  //
+  // CTA carries the repo URL as a query param so /submit pre-fills the
+  // GitHub input — one-click conversion from the terminal to the form.
+  // Slug form (github.com/owner/repo) keeps the URL short.
+  const repoSlug   = githubUrl ? githubUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : null
+  const submitUrl  = repoSlug
+    ? `https://commit.show/submit?repo=${encodeURIComponent(repoSlug)}`
+    : 'https://commit.show/submit'
   const titleVisible = 'Walk-on · drop-in audit, no audition yet'
   const headVisible  = 'Audition to unlock:'
-  const ctaVisible   = '→ https://commit.show/submit'
+  const ctaVisible   = `→ ${submitUrl}`
 
   lines.push('  ' + boxTop())
   lines.push('  ' + boxRow(
