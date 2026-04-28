@@ -143,6 +143,7 @@ interface GitHubInfo {
     has_changelog: boolean
     has_code_of_conduct: boolean
     is_monorepo: boolean                 // workspaces / turbo.json / pnpm-workspace.yaml
+    app_root: string                     // detected sub-folder app root ('' when at repo root)
     // ── Responsive design signals (NEW · v3 mobile audit) ──
     tailwind_responsive_count: number    // count of `sm:` `md:` `lg:` `xl:` `2xl:` prefixes
     tailwind_class_total:      number    // total class occurrences sampled (denominator)
@@ -272,6 +273,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_typescript_strict: false, typescript_pct: 0,
       has_license: false, has_contributing: false, has_changelog: false, has_code_of_conduct: false,
       is_monorepo: false,
+      app_root: '',
       tailwind_responsive_count: 0, tailwind_class_total: 0,
       css_media_query_count: 0,
       has_overflow_x_hidden: false,
@@ -338,6 +340,36 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
 
   // Signal extraction
   const paths = blobs.map(b => b.path)
+
+  // ── Monorepo / subfolder app root detection ──
+  // Many vibe-coded projects live in a sub-folder (e.g. `website/`, `apps/web/`)
+  // while CI · LICENSE · README stay at repo root. If there's no root
+  // package.json, find the most likely "app root" so subsequent path probes
+  // (package.json · tsconfig.json · lockfile) hit the real app instead of
+  // returning 404 and dragging the score to the floor. Common subfolder
+  // names ranked by convention.
+  const _earlyPathSet = new Set(paths)
+  const APP_ROOT_PREFERENCE = [
+    'website', 'web', 'app', 'apps/web', 'apps/website', 'apps/app',
+    'frontend', 'client', 'site', 'packages/web', 'packages/app',
+  ]
+  let app_root = ''
+  if (!_earlyPathSet.has('package.json')) {
+    // Candidates = any folder (1 or 2 levels deep) containing package.json.
+    const candidates = new Set<string>()
+    for (const p of paths) {
+      const m1 = p.match(/^([^/]+)\/package\.json$/)
+      const m2 = p.match(/^([^/]+\/[^/]+)\/package\.json$/)
+      if (m1) candidates.add(m1[1])
+      if (m2) candidates.add(m2[1])
+    }
+    app_root = APP_ROOT_PREFERENCE.find(n => candidates.has(n))
+              ?? [...candidates][0]
+              ?? ''
+  }
+  // Prefix used for subsequent /contents/ probes. Empty string → root.
+  const appPrefix = app_root ? `${app_root}/` : ''
+
   const sol = paths.filter(p => p.endsWith('.sol'))
   const sqlFiles = paths.filter(p => p.endsWith('.sql'))
   const edgeFnDirs = new Set<string>()
@@ -416,7 +448,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   let observabilityLibs: string[] = []
   let pkgParsed: Record<string, unknown> | null = null
   let pkgName: string | null = null
-  const pkgText = await ghText(`/contents/package.json?ref=${defBranch}`)
+  const pkgText = await ghText(`/contents/${appPrefix}package.json?ref=${defBranch}`)
   if (pkgText) {
     try {
       const pkg = JSON.parse(pkgText)
@@ -453,7 +485,10 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   }
   let lockfile_kind: 'npm' | 'yarn' | 'pnpm' | 'bun' | null = null
   for (const [file, kind] of Object.entries(LOCKFILE_MAP)) {
-    if (pathSet.has(file)) { lockfile_kind = kind; break }
+    // Accept lockfile at root OR at the detected app root (monorepos).
+    if (pathSet.has(file) || (appPrefix && pathSet.has(`${appPrefix}${file}`))) {
+      lockfile_kind = kind; break
+    }
   }
   const has_lockfile = !!lockfile_kind
 
@@ -474,7 +509,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   // TypeScript strict mode (strip line/block comments before JSON.parse —
   // tsconfig.json officially supports comments).
   let has_typescript_strict = false
-  const tsconfigText = await ghText(`/contents/tsconfig.json?ref=${defBranch}`)
+  const tsconfigText = await ghText(`/contents/${appPrefix}tsconfig.json?ref=${defBranch}`)
   if (tsconfigText) {
     try {
       const stripped = tsconfigText
@@ -682,6 +717,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_changelog,
       has_code_of_conduct,
       is_monorepo,
+      app_root,                         // detected sub-folder when no root package.json (e.g. 'website')
       tailwind_responsive_count,
       tailwind_class_total,
       css_media_query_count,

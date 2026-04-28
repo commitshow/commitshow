@@ -212,23 +212,38 @@ export async function runPreviewAudit(
   return body as PreviewEnvelope
 }
 
-/** Poll a preview job until the snapshot lands or we time out. */
+/** Poll a preview job until the snapshot lands or we time out.
+ *
+ *  `since` (ISO timestamp) is the baseline we wait past. For an INITIAL audit
+ *  on a brand-new project, leave it undefined — any snapshot wins. For a
+ *  REFRESH (force=true) on an existing project, pass the project's previous
+ *  `last_analysis_at` so we keep polling until a *new* snapshot lands.
+ *  Without this guard, a force-refresh against an already-analyzed project
+ *  returns the stale snapshot immediately because `last_analysis_at` is
+ *  already truthy. (Bug seen in 0.2.1 and earlier.) */
 export async function waitForPreviewSnapshot(
   projectId: string,
+  since?: string | null,
   timeoutMs = 180_000,
   intervalMs = 4_000,
 ): Promise<PreviewEnvelope | null> {
+  const sinceMs = since ? new Date(since).getTime() : 0
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const project = await findProjectById(projectId)
     if (project && project.last_analysis_at) {
-      const snapshot = await fetchLatestSnapshot(projectId)
-      return {
-        project,
-        snapshot,
-        standing: null,
-        is_preview: project.status === 'preview',
-        cache_hit: false,
+      const lastMs = new Date(project.last_analysis_at).getTime()
+      // sinceMs === 0 → first ever audit, accept any snapshot.
+      // Otherwise require last_analysis_at to have advanced.
+      if (sinceMs === 0 || lastMs > sinceMs) {
+        const snapshot = await fetchLatestSnapshot(projectId)
+        return {
+          project,
+          snapshot,
+          standing: null,
+          is_preview: project.status === 'preview',
+          cache_hit: false,
+        }
       }
     }
     await new Promise(r => setTimeout(r, intervalMs))

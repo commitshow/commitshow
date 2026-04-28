@@ -36,7 +36,14 @@ export async function audit(args: string[]): Promise<number> {
   // already have the snapshot. Covers all full-audition projects.
   // --refresh / --force skips this entirely and goes straight to audit-preview
   // with force=true (counts against IP + URL + global rate limits).
-  const project = force ? null : await findProjectByGithubUrl(target.github_url)
+  //
+  // We always look up `existing` (even on --force) so that we can capture the
+  // pre-refresh `last_analysis_at` baseline and poll for a *newer* snapshot.
+  // Without that baseline, polling sees the stale snapshot's timestamp as
+  // "ready" and returns it immediately.
+  const existing = await findProjectByGithubUrl(target.github_url)
+  const project  = force ? null : existing
+  const refreshBaseline = force ? (existing?.last_analysis_at ?? null) : null
 
   if (project) {
     const [snapshot, standing] = await Promise.all([
@@ -140,7 +147,7 @@ export async function audit(args: string[]): Promise<number> {
   if ('status' in result && result.status === 'running') {
     const pending = result as PreviewPending
     if (!asJson) console.log(c.dim('  This runs the full Claude audit · ~60-90 seconds. Hang tight.'))
-    const waited = await waitForPreviewSnapshot(pending.project_id)
+    const waited = await waitForPreviewSnapshot(pending.project_id, refreshBaseline)
     if (!waited) {
       emitError(asJson, 'timeout', 'Preview audit is taking longer than expected. Try `commitshow status <repo>` in a minute.', target.github_url)
       return 1
