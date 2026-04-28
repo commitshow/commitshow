@@ -216,7 +216,18 @@ function detectFormFactor(
   const monorepo = pathSet.has('turbo.json') || pathSet.has('pnpm-workspace.yaml') ||
     !!(pkg && (pkg as { workspaces?: unknown }).workspaces) ||
     paths.some(p => /^packages\/[^/]+\/package\.json$/.test(p))
+  const packageCount = paths.filter(p => /^packages\/[^/]+\/package\.json$/.test(p)).length
   const npmInstallExample = /\b(npm i\s+|yarn add\s+|pnpm add\s+|bun add\s+)\S/.test(readmeHead)
+
+  // Strong library signal · monorepo with 3+ published-shape packages.
+  // The workspace root for vercel/ai · @anthropic-ai/sdk-monorepo style
+  // has no main/exports/module of its own (each sub-package does), so the
+  // existing libIndicators check undercounted. Counting sub-packages
+  // captures these workspaces directly. Single-package monorepos (1-2
+  // packages — common in apps that vendor one shared lib) still go
+  // through libIndicators.
+  if (monorepo && packageCount >= 3) return 'library'
+
   const libIndicators = [
     !isPrivate && (hasMain || hasModule || hasExports),
     monorepo && paths.some(p => /^packages\//.test(p)),
@@ -1028,6 +1039,10 @@ function scoreProductionMaturity(
   s: GitHubInfo['signals'],
   lhMobile: LighthouseScores,
   lhDesktop: LighthouseScores,
+  isLibrary: boolean = false,   // form-aware (B follow-up): library mode neutralizes
+                                 // app-only sub-slots (responsive design + observability libs)
+                                 // since libraries don't have UIs and provide hooks
+                                 // rather than ship internal observability.
 ): {
   pts: number
   breakdown: { tests: number; ci: number; observability: number; ts_strict: number; lockfile: number; license: number; responsive: number }
@@ -1036,28 +1051,32 @@ function scoreProductionMaturity(
   const tests = s.test_files >= 50 ? 3 : s.test_files >= 10 ? 2 : s.test_files >= 1 ? 1 : 0
   // CI · GH Actions / GitLab / CircleCI / Vercel · binary 2pt
   const ci = s.has_ci_config ? 2 : 0
-  // Observability · 1+ libs in package.json earns 2 pts (binary signal)
-  const observability = s.observability_libs.length >= 1 ? 2 : 0
+  // Observability · 1+ libs in package.json earns 2 pts. Library mode:
+  // libraries provide observability (sentry/winston ARE libraries), they
+  // don't necessarily ship internal telemetry — give 1pt baseline if no
+  // libs detected so they're not penalized for the form-factor mismatch.
+  const observabilityRaw = s.observability_libs.length >= 1 ? 2 : 0
+  const observability    = (observabilityRaw === 0 && isLibrary) ? 1 : observabilityRaw
   // TS strict · half point
   const ts_strict = s.has_typescript_strict ? 1 : 0
   // Lockfile · binary 1 pt (signal of dependency hygiene)
   const lockfile = s.has_lockfile ? 1 : 0
   // LICENSE · binary 1 pt (legal hygiene)
   const license = s.has_license ? 1 : 0
-  // Responsive design · NEW · max 2 pts.
-  //   +1: project shows responsive intent — Tailwind responsive prefixes
-  //       used substantially (≥10% of class tokens) OR ≥5 CSS media queries.
-  //   +1: mobile Lighthouse perf doesn't tank vs desktop. Either the
-  //       mobile perf is decent on its own (≥70) OR the gap to desktop
-  //       is small (<15 points). Pure greenfield desktop-first projects
-  //       fail this; mobile-aware ones pass.
-  const responsiveStrategy =
-    (s.tailwind_class_total > 0 && s.tailwind_responsive_count / s.tailwind_class_total >= 0.10) ||
-    s.css_media_query_count >= 5
-  const lhM = lhMobile.performance
-  const lhD = lhDesktop.performance
-  const mobilePerfHealthy = lhM >= 70 || (lhM >= 0 && lhD >= 0 && Math.abs(lhD - lhM) < 15)
-  const responsive = (responsiveStrategy ? 1 : 0) + (mobilePerfHealthy ? 1 : 0)
+  // Responsive design · max 2 pts. Library mode: not relevant (libs have
+  // no UI surface), award neutral 1pt baseline rather than penalize.
+  let responsive: number
+  if (isLibrary) {
+    responsive = 1
+  } else {
+    const responsiveStrategy =
+      (s.tailwind_class_total > 0 && s.tailwind_responsive_count / s.tailwind_class_total >= 0.10) ||
+      s.css_media_query_count >= 5
+    const lhM = lhMobile.performance
+    const lhD = lhDesktop.performance
+    const mobilePerfHealthy = lhM >= 70 || (lhM >= 0 && lhD >= 0 && Math.abs(lhD - lhM) < 15)
+    responsive = (responsiveStrategy ? 1 : 0) + (mobilePerfHealthy ? 1 : 0)
+  }
   const pts = Math.min(12, tests + ci + observability + ts_strict + lockfile + license + responsive)
   return { pts, breakdown: { tests, ci, observability, ts_strict, lockfile, license, responsive } }
 }
@@ -2190,7 +2209,11 @@ Deno.serve(async (req) => {
   ].filter(Boolean) as string[]
   const tech       = scoreTechLayers(gh.languages || {}, stackHints)           //  0-3
   const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on without substitute)
-  const maturity   = scoreProductionMaturity(gh.signals, lh, lhDesktop)        //  0-12
+  // Library-form maturity (B): pass !isAppForm so responsive + observability
+  // slots get neutralized for libraries / CLIs / scaffolds (they don't have
+  // UIs and don't necessarily ship internal observability — penalizing on
+  // these slots was conflating app criteria onto library form factors).
+  const maturity   = scoreProductionMaturity(gh.signals, lh, lhDesktop, !isAppForm)  //  0-12
   const hygiene    = scoreSourceHygiene(gh)                                    //  0-5  (v3 restored)
   const ecosystem  = scoreEcosystem(gh)                                        //  0-3 soft
   const activity   = scoreActivity(gh)                                         //  0-2 soft
