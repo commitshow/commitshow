@@ -590,23 +590,29 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const releases_count     = Array.isArray(releasesResp) ? releasesResp.length : 0
 
   // ── Security violation · committed .env file ──
-  // Excludes:
-  //   - .env.example / .env.template / .env.sample / .env.tpl (docs)
-  //   - .env.development  (Next.js convention · public-only NEXT_PUBLIC_*)
-  //   - anything inside examples/, demo/, sample/, demos/, fixtures/,
-  //     test/, tests/, e2e/  (likely mock data, not real secrets)
-  //   - dotenvx-style paths containing 'dotenvx' in the path  (intentionally
-  //     committed encrypted .env with public keys)
-  // The remaining hits are real .env files in production app paths
-  // (apps/web/.env, src/.env, root/.env). Those still trip the -5 penalty.
-  const ENV_FILE_RE   = /(^|\/)\.env(\.[a-z0-9]+)?$/i
-  const ENV_DOC_RE    = /\.env\.(example|sample|template|local\.example|defaults|development)$|\.env\.tpl$/i
-  const ENV_SKIP_DIR  = /(^|\/)(examples?|demo|demos|sample|samples|fixtures?|tests?|e2e|playground|cookbook|docs)\//i
-  const ENV_DOTENVX_RE= /dotenvx/i
+  // Excludes (false positives we've actually hit on supabase / vite /
+  // big monorepos):
+  //   1. .env.example / .env.template / .env.sample / .env.tpl (docs)
+  //   2. .env.development / .env.staging / .env.preview / .env.production
+  //      with these names alone (Next.js convention — public NEXT_PUBLIC_*
+  //      build-time defaults, no real secrets). The actual sensitive
+  //      override is .env.local which is gitignored.
+  //   3. anything inside examples/, demo/, sample/, demos/, fixtures/,
+  //      test/, tests/, e2e/, playground/, cookbook/, docs/ subtrees
+  //   4. monorepo workspace .env at apps/<name>/ or packages/<name>/
+  //      (per-workspace public defaults, no production secret pattern)
+  //   5. dotenvx-style paths (encrypted-env tool with public keys
+  //      intentionally committed)
+  const ENV_FILE_RE      = /(^|\/)\.env(\.[a-z0-9]+)?$/i
+  const ENV_DOC_RE       = /\.env\.(example|sample|template|local\.example|defaults|development|staging|preview|production)$|\.env\.tpl$/i
+  const ENV_SKIP_DIR     = /(^|\/)(examples?|demo|demos|sample|samples|fixtures?|tests?|e2e|playground|cookbook|docs)\//i
+  const ENV_MONOREPO_RE  = /^(apps|packages)\/[^/]+\//i
+  const ENV_DOTENVX_RE   = /dotenvx/i
   const env_committed = paths.some(p =>
     ENV_FILE_RE.test(p) &&
     !ENV_DOC_RE.test(p) &&
     !ENV_SKIP_DIR.test(p) &&
+    !ENV_MONOREPO_RE.test(p) &&
     !ENV_DOTENVX_RE.test(p)
   )
 
