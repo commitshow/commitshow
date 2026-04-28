@@ -2098,7 +2098,14 @@ Deno.serve(async (req) => {
   // This way the /52 hard ceiling stays uniform across forms and a
   // polished CLI tool isn't structurally penalized 27pt for not having
   // a public URL. Slot semantics adapt; the math doesn't.
-  const isAppForm = gh.form_factor === 'app' || gh.form_factor === 'unknown'
+  // useWebSlots is the actual switch — web slots only meaningful when the
+  // project both LOOKS like a web app AND has a reachable live URL we can
+  // probe with Lighthouse. Otherwise (no URL · transient outage · desktop
+  // app · iOS · Electron · pre-deploy PoC) fall back to library-style
+  // slots so we score on what's verifiable in the repo. form_factor stays
+  // available to Claude as evidence in the prompt.
+  const isAppForm    = gh.form_factor === 'app' || gh.form_factor === 'unknown'
+  const useWebSlots  = isAppForm && health.ok
 
   const stackHints = [
     brief?.features ?? '',
@@ -2151,9 +2158,9 @@ Deno.serve(async (req) => {
                          (gh.signals.has_changelog ? 1 : 0)
 
   // Pick the right slot values based on form factor.
-  const lhPts          = isAppForm ? lhScore.total : libLhEquivPts             //  0-20
-  const healthPts      = isAppForm ? liveHealthPts : libLiveEquiv              //  0-5
-  const completenessPts = isAppForm ? completenessRawPts : libComplEquiv       //  0-2
+  const lhPts          = useWebSlots ? lhScore.total : libLhEquivPts             //  0-20
+  const healthPts      = useWebSlots ? liveHealthPts : libLiveEquiv            //  0-5
+  const completenessPts = useWebSlots ? completenessRawPts : libComplEquiv     //  0-2
   // Walk-on Brief substitute · 0-3 pts when no Brief is submitted (CLI
   // track) but README is rich AND the live URL is healthy. Lifts the
   // walk-on ceiling from /47 toward /50 for projects that ship real
@@ -2184,7 +2191,7 @@ Deno.serve(async (req) => {
   // already maturity evidence — so coupling them again would double-deflate
   // libraries with thin coverage. maturityFactor = 1.0 for non-app.
   const maturityRatio  = maturity.pts / 10                               // 0.0 - 1.0
-  const maturityFactor = isAppForm ? (0.6 + 0.4 * maturityRatio) : 1.0   // 0.6-1.0 for app · 1.0 for lib/cli/scaffold
+  const maturityFactor = useWebSlots ? (0.6 + 0.4 * maturityRatio) : 1.0  // 0.6-1.0 for web-evaluable · 1.0 for lib-evaluable
   const polishSubtotal = lhPts + healthPts + completenessPts + tech.pts
   const scaledPolish   = Math.round(polishSubtotal * maturityFactor)
 
@@ -2258,10 +2265,13 @@ Deno.serve(async (req) => {
     scoring_so_far: {
       auto_50_breakdown: {
         is_app_form:          isAppForm,
-        // For app: Lighthouse mobile breakdown.
-        // For lib/cli/scaffold: substituted by libLhEquivPts (tests + docs +
-        // types + governance) — slot weight stays 0-20 either way.
-        lighthouse:           isAppForm ? lhScore : { total: libLhEquivPts, performance: null, accessibility: null, best_practices: null, seo: null, equivalent_for: gh.form_factor, breakdown: { tests: libTestsPts, docs: libDocsPts, types: libTypesPts, governance: libGovPts } },
+        use_web_slots:        useWebSlots,
+        slot_evaluation_mode: useWebSlots ? 'web' : 'library',
+        live_url_reachable:   health.ok,
+        // web mode  → Lighthouse mobile breakdown
+        // library mode (no URL OR non-app form) → libLhEquivPts substitute
+        //   (tests + docs + types + governance) · slot weight stays 0-20.
+        lighthouse:           useWebSlots ? lhScore : { total: libLhEquivPts, performance: null, accessibility: null, best_practices: null, seo: null, equivalent_for: `${gh.form_factor}${health.ok ? '' : '-no-live-url'}`, breakdown: { tests: libTestsPts, docs: libDocsPts, types: libTypesPts, governance: libGovPts } },
         production_maturity:  maturity,                //  0-12
         source_hygiene:       hygiene,                 //  0-5
         completeness_pts:     completenessPts,         //  0-2 (app: meta tags · lib/cli: release discipline)
@@ -2388,7 +2398,9 @@ Deno.serve(async (req) => {
     delta_from_parent: Object.keys(deltaFromParent).length ? deltaFromParent : null,
     breakdown: {
       is_app_form:         isAppForm,
-      lighthouse:          isAppForm ? lhScore : { total: libLhEquivPts, equivalent_for: gh.form_factor, breakdown: { tests: libTestsPts, docs: libDocsPts, types: libTypesPts, governance: libGovPts } },
+      use_web_slots:       useWebSlots,
+      live_url_reachable:  health.ok,
+      lighthouse:          useWebSlots ? lhScore : { total: libLhEquivPts, equivalent_for: `${gh.form_factor}${health.ok ? '' : '-no-live-url'}`, breakdown: { tests: libTestsPts, docs: libDocsPts, types: libTypesPts, governance: libGovPts } },
       production_maturity: maturity,
       source_hygiene:      hygiene,
       completeness_pts:    completenessPts,
