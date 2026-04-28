@@ -1742,18 +1742,33 @@ OUTPUT SHAPE
   }
 
   try {
+    // Prompt caching · the system prompt + analysisTool definition are
+    // byte-identical across audits, so we mark them with `cache_control`
+    // so Anthropic caches the prefix. Cache warm path:
+    //   - First request after 5+ min idle (or after deploy): cache WRITE
+    //     · costs 1.25× normal input price · doesn't count toward TPM
+    //   - Subsequent requests within 5 min: cache READ
+    //     · 0.1× normal input price · doesn't count toward TPM
+    // For ~7K system prompt + ~3K tools schema, this shrinks the
+    // TPM-counted portion from ~12K to ~3K (just the per-audit user
+    // payload), letting 6+ audits/min through the 30K Anthropic limit.
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'x-api-key': key,
         'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
+        'anthropic-beta':    'prompt-caching-2024-07-31',
+        'content-type':      'application/json',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: includeExpertPanel ? 5600 : 4500,
-        system: systemPrompt,
-        tools: [analysisTool],
+        system: [
+          { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+        ],
+        tools: [
+          { ...analysisTool, cache_control: { type: 'ephemeral' } },
+        ],
         tool_choice: { type: 'tool', name: 'output_analysis' },
         messages: [{ role: 'user', content: userPrompt }],
       }),
