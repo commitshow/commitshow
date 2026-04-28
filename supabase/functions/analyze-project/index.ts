@@ -1145,7 +1145,12 @@ async function inspectSecurityHeaders(url: string): Promise<SecurityHeaders> {
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 5000)
-    const res = await fetch(url, { method: 'GET', signal: ctrl.signal, redirect: 'follow' })
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: BROWSER_PROBE_HEADERS,
+    })
     clearTimeout(timer)
     if (!res.ok) return blank
     const h = res.headers
@@ -1198,7 +1203,12 @@ async function inspectLegalPages(baseUrl: string): Promise<LegalPages> {
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 4000)
-      const res = await fetch(`${base}${path}`, { method: 'GET', signal: ctrl.signal, redirect: 'follow' })
+      const res = await fetch(`${base}${path}`, {
+        method: 'GET',
+        signal: ctrl.signal,
+        redirect: 'follow',
+        headers: BROWSER_PROBE_HEADERS,
+      })
       clearTimeout(timer)
       if (!res.ok) return false
       const text = await res.text()
@@ -1215,13 +1225,40 @@ async function inspectLegalPages(baseUrl: string): Promise<LegalPages> {
   return { fetched: true, has_privacy: privacyHits, has_terms: termsHits }
 }
 
+// Browser-like headers for outbound site probes. Without a real UA, many
+// hosts (Vercel/Cloudflare bot-fight · WAF rules · firewall preset 'block
+// non-browser') return 0 / 403 even though the site is healthy. blockbuster
+// lab.com → curl gets 200, edge fn got 0 → -5pt unfair penalty. Match
+// modern Chrome-on-Linux closely.
+const BROWSER_PROBE_HEADERS: Record<string, string> = {
+  'user-agent':       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'accept':           'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'accept-language':  'en-US,en;q=0.9',
+  'accept-encoding':  'gzip, deflate, br',
+  'cache-control':    'no-cache',
+  'pragma':           'no-cache',
+  'sec-ch-ua':        '"Chromium";v="126", "Not(A:Brand";v="99"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Linux"',
+  'sec-fetch-dest':   'document',
+  'sec-fetch-mode':   'navigate',
+  'sec-fetch-site':   'none',
+  'sec-fetch-user':   '?1',
+  'upgrade-insecure-requests': '1',
+}
+
 // ── Live URL health ───────────────────────────────────────────
 async function liveHealth(url: string) {
   const t0 = performance.now()
   try {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 5000)
-    const res = await fetch(url, { method: 'GET', signal: ctrl.signal, redirect: 'follow' })
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: BROWSER_PROBE_HEADERS,
+    })
     clearTimeout(timer)
     return { status: res.status, ok: res.ok, elapsed_ms: Math.round(performance.now() - t0) }
   } catch (e) {
@@ -1268,7 +1305,7 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
     const timer = setTimeout(() => ctrl.abort(), 5000)
     const res = await fetch(url, {
       method: 'GET', signal: ctrl.signal, redirect: 'follow',
-      headers: { 'User-Agent': 'commit.show-completeness-probe/1' },
+      headers: BROWSER_PROBE_HEADERS,
     })
     clearTimeout(timer)
     if (!res.ok) return blank
