@@ -16,6 +16,7 @@ import {
 import type { AnalysisResult } from '../lib/analysis'
 import { AnalysisResultCard } from '../components/AnalysisResultCard'
 import { ScoreTimeline } from '../components/ScoreTimeline'
+import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
 import { ForecastModal } from '../components/ForecastModal'
 import { ApplaudButton } from '../components/ApplaudButton'
 import { EditProjectModal } from '../components/EditProjectModal'
@@ -38,6 +39,7 @@ export function ProjectDetailPage() {
 
   const [project, setProject] = useState<Project | null>(null)
   const [snapshotResult, setSnapshotResult] = useState<AnalysisResult | null>(null)
+  const [vibeConcerns, setVibeConcerns] = useState<any>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [forecasts, setForecasts] = useState<ForecastRow[]>([])
   const [applauds, setApplauds] = useState<ApplaudRow[]>([])
@@ -89,6 +91,8 @@ export function ProjectDetailPage() {
 
       if (latest) {
         const lhRaw = (latest.lighthouse ?? {}) as { performance?: number; accessibility?: number; bestPractices?: number; seo?: number }
+        const ghSig = (latest.github_signals ?? {}) as { vibe_concerns?: unknown }
+        setVibeConcerns(ghSig.vibe_concerns ?? null)
         setSnapshotResult({
           score_auto:        latest.score_auto ?? 0,
           score_forecast:    proj.score_forecast ?? 0,
@@ -398,6 +402,15 @@ export function ProjectDetailPage() {
               <GraduationStanding projectId={project.id} viewerMode={isOwner ? 'owner' : 'visitor'} />
               <ScoreTimeline points={timeline} />
             </div>
+
+            {/* Vibe Coder Checklist · 7-category framework — sits between
+                score timeline and full Analysis card so beginners see the
+                most actionable failure-mode summary first. */}
+            {vibeConcerns && (
+              <div className="mt-8">
+                <VibeConcernsPanel vibeConcerns={vibeConcerns} />
+              </div>
+            )}
           </section>
 
           {/* ANALYSIS */}

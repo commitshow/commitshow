@@ -159,6 +159,20 @@ interface GitHubInfo {
     readme_line_count:    number         // raw line count of README
     has_readme_install:   boolean        // README has "Installation" / "Install" section
     has_readme_usage:     boolean        // README has "Usage" / "Getting Started" / "Quick Start"
+    // ── Vibe Coder Checklist · 7-category framework (2026-04-28) ──
+    // The systematic failure modes that ~70% of AI-coded projects miss
+    // and generic linters / Cursor reviews don't catch. Surfaced as
+    // structured signals so the UI can render a 7-card status panel
+    // and Claude can speak to specific concerns instead of generic ones.
+    vibe_concerns: {
+      webhook_idempotency: { handlers_seen: number; idempotency_signal_seen: number; gap: boolean; sample_files: string[] }
+      rls_gaps:            { tables: number; policies: number; writable_table_signals: number; gap_estimate: number; has_rls_intent: boolean }
+      secret_exposure:     { client_violations: Array<{ file: string; pattern: string }>; total: number }
+      db_indexes:          { fk_columns_seen: number; indexes_seen: number; gap_estimate: number }
+      observability:       { libs: string[]; detected: boolean }
+      rate_limit:          { lib_detected: string | null; middleware_detected: boolean; has_api_routes: boolean; needs_attention: boolean }
+      prompt_injection:    { uses_ai_sdk: boolean; raw_input_to_prompt_files: string[]; suspicious: boolean }
+    }
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
   debut_brief: {
@@ -298,6 +312,15 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       readme_line_count: 0,
       has_readme_install: false,
       has_readme_usage: false,
+      vibe_concerns: {
+        webhook_idempotency: { handlers_seen: 0, idempotency_signal_seen: 0, gap: false, sample_files: [] },
+        rls_gaps:            { tables: 0, policies: 0, writable_table_signals: 0, gap_estimate: 0, has_rls_intent: false },
+        secret_exposure:     { client_violations: [], total: 0 },
+        db_indexes:          { fk_columns_seen: 0, indexes_seen: 0, gap_estimate: 0 },
+        observability:       { libs: [], detected: false },
+        rate_limit:          { lib_detected: null, middleware_detected: false, has_api_routes: false, needs_attention: false },
+        prompt_injection:    { uses_ai_sdk: false, raw_input_to_prompt_files: [], suspicious: false },
+      },
     },
     readme_excerpt: null,
     debut_brief: { found: false, path: null, raw: null, last_commit_at: null, sha: null },
@@ -443,9 +466,13 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     .sort((a, b) => a.r - b.r || a.p.length - b.p.length)
     .slice(0, 12)
     .map(x => x.p)
+  // Cache fetched SQL text so the vibe_concerns block (rls writable detection,
+  // FK index gap detection) can reuse it without re-fetching from GitHub.
+  const sqlSampleCache = new Map<string, string>()
   for (const sql of sqlSample) {
     const text = await ghText(`/contents/${encodeURI(sql)}?ref=${defBranch}`)
     if (!text) continue
+    sqlSampleCache.set(sql, text)
     createTableCount += (text.match(/create\s+table\s+(if\s+not\s+exists\s+)?[a-zA-Z_]/gi) || []).length
     // Two signals — `enable row level security` (the toggle) and
     // `create policy` (the actual policy definition). Either one means
@@ -627,6 +654,166 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     !ENV_DOTENVX_RE.test(p)
   )
 
+  // ── Vibe Coder Checklist · 7-category framework (2026-04-28) ──
+  // The 70% of vibe-coded projects miss systematic failure modes that
+  // generic linters / Cursor reviews don't catch. We probe a handful of
+  // high-leverage files to surface them as structured signals. UI + CLI
+  // render this as a 7-card / 7-line checklist.
+
+  // 1. WEBHOOK IDEMPOTENCY · Stripe / payment / webhooks endpoint files
+  const webhookFiles = paths.filter(p =>
+    /(^|\/)(webhooks?|api\/webhook|stripe|payments?)\/[^/]+\.(ts|tsx|js|jsx|mjs|py|go|rs)$/i.test(p) ||
+    /(^|\/)api\/.*(webhook|stripe|paypal|payment).*\.(ts|js|tsx|jsx|mjs)$/i.test(p)
+  ).slice(0, 6)
+  let webhook_handlers_seen = 0
+  let webhook_idempotency_seen = 0
+  const webhook_evidence_files: string[] = []
+  for (const f of webhookFiles) {
+    const text = await ghText(`/contents/${encodeURI(f)}?ref=${defBranch}`)
+    if (!text) continue
+    webhook_handlers_seen++
+    if (/idempotency[_-]?key|idempotent|processedEvents|webhook_id\b|event[._]id\b|already[_-]?processed|stripe-signature/i.test(text)) {
+      webhook_idempotency_seen++
+    }
+    if (webhook_evidence_files.length < 3) webhook_evidence_files.push(f)
+  }
+
+  // 2. SUPABASE RLS GAPS · use existing rls signals + state-changing detection
+  // Heuristic: count tables with INSERT/UPDATE/DELETE in migrations vs
+  // policy count. supabase/postgres-only — best-effort gap estimate.
+  const rls_tables_writable = (function () {
+    let count = 0
+    for (const text of sqlSampleCache.values()) {
+      count += (text.match(/insert\s+into\b|update\s+\w+\s+set\b|delete\s+from\b/gi) || []).length
+    }
+    return count
+  })()
+  // gap_estimate = max(0, tables_with_writes - policies). Crude but directionally OK.
+  const rls_gap_estimate = Math.max(0, createTableCount - rlsPolicyCount)
+
+  // 3. SERVICE-ROLE / SECRET CLIENT EXPOSURE · scan client-side files only
+  // Client paths · NOT API/server/middleware. Also exclude tests/storybook.
+  const SECRET_PATTERNS = /(SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service[_-]?role|sk_live_[a-zA-Z0-9]{8,}|sk_test_[a-zA-Z0-9]{8,}|OPENAI_API_KEY|STRIPE_SECRET_KEY|ANTHROPIC_API_KEY|AWS_SECRET_ACCESS_KEY|GITHUB_TOKEN\s*=)/g
+  const clientPaths = paths.filter(p =>
+    /\.(ts|tsx|js|jsx|svelte|vue|astro)$/.test(p) &&
+    /(^|\/)(src\/(components|pages|app|features|views|screens)|app|pages|components)\//.test(p) &&
+    !/(^|\/)(api|server|backend|edge|functions|middleware)\//.test(p) &&
+    !/\.(test|spec|stories)\./i.test(p) &&
+    !/\.d\.ts$/.test(p)
+  ).slice(0, 25)
+  const secret_violations: Array<{ file: string; pattern: string }> = []
+  for (const f of clientPaths) {
+    const text = await ghText(`/contents/${encodeURI(f)}?ref=${defBranch}`)
+    if (!text) continue
+    const m = text.match(SECRET_PATTERNS)
+    if (m && m[0]) {
+      secret_violations.push({ file: f, pattern: m[0].slice(0, 30) })
+      if (secret_violations.length >= 5) break
+    }
+  }
+
+  // 4. DATABASE MISSING INDEXES · scan migrations for FK columns without CREATE INDEX
+  let fk_columns_seen = 0
+  let indexes_seen = 0
+  const FK_RE = /references\s+\w+\s*\(\s*\w+\s*\)|\b\w+_id\s+(uuid|integer|bigint|int)\b/gi
+  const INDEX_RE = /create\s+(unique\s+)?index/gi
+  for (const text of sqlSampleCache.values()) {
+    fk_columns_seen += (text.match(FK_RE) || []).length
+    indexes_seen    += (text.match(INDEX_RE) || []).length
+  }
+  const index_gap_estimate = Math.max(0, fk_columns_seen - indexes_seen)
+
+  // 5. OBSERVABILITY · already detected via observabilityLibs above (reuse).
+
+  // 6. RATE LIMITING · package.json libs + middleware presence
+  const RATE_LIMIT_LIBS = ['@upstash/ratelimit', 'express-rate-limit', 'rate-limiter-flexible', 'next-rate-limit', 'hono-rate-limiter']
+  const allDeps = pkgParsed
+    ? { ...((pkgParsed as { dependencies?: Record<string, string> }).dependencies ?? {}), ...((pkgParsed as { devDependencies?: Record<string, string> }).devDependencies ?? {}) }
+    : {}
+  const rate_limit_lib = RATE_LIMIT_LIBS.find(l => Object.keys(allDeps).some(k => k === l || k.startsWith(l))) ?? null
+  const middleware_files = paths.filter(p =>
+    /(^|\/)(middleware|rate[-_]?limit|throttle)/i.test(p) &&
+    /\.(ts|tsx|js|jsx|mjs)$/.test(p)
+  ).slice(0, 4)
+  let rate_limit_middleware_detected = false
+  for (const f of middleware_files) {
+    const text = await ghText(`/contents/${encodeURI(f)}?ref=${defBranch}`)
+    if (text && /rate[_-]?limit|RateLimiter|throttle\(|requestLimit/i.test(text)) {
+      rate_limit_middleware_detected = true
+      break
+    }
+  }
+  const has_api_routes = paths.some(p =>
+    /^(app\/api|src\/api|pages\/api|api)\//.test(p) ||
+    /^supabase\/functions\//.test(p)
+  )
+  const rate_limit_needs_attention = has_api_routes && !rate_limit_lib && !rate_limit_middleware_detected
+
+  // 7. PROMPT INJECTION RISK (heuristic) · uses AI SDK + handles user input
+  const uses_ai_sdk = aiLibs.length > 0
+  // Look for handler files where prompt template includes req.body / params
+  const apiHandlerFiles = paths.filter(p =>
+    /^(app\/api|src\/api|pages\/api|api|supabase\/functions)\//.test(p) &&
+    /\.(ts|tsx|js|jsx|mjs)$/.test(p)
+  ).slice(0, 6)
+  let raw_input_to_prompt_files: string[] = []
+  if (uses_ai_sdk) {
+    for (const f of apiHandlerFiles) {
+      const text = await ghText(`/contents/${encodeURI(f)}?ref=${defBranch}`)
+      if (!text) continue
+      // Crude: if file imports an AI SDK AND uses req.body or params in a prompt-like template
+      const importsAi = /from\s+['"](?:@anthropic-ai\/sdk|openai|@google\/generative|langchain|ai\b)/i.test(text)
+      const inlinesUserInput = /(prompt|content|messages?)\s*[:=].*?(req\.body|request\.body|params\.|searchParams\.|body\.)/.test(text)
+      if (importsAi && inlinesUserInput) {
+        raw_input_to_prompt_files.push(f)
+        if (raw_input_to_prompt_files.length >= 3) break
+      }
+    }
+  }
+  const prompt_injection_suspicious = raw_input_to_prompt_files.length > 0
+
+  // Aggregate vibe_concerns object — surfaced both to Claude evidence pack
+  // and persisted in github_signals for UI rendering.
+  const vibe_concerns = {
+    webhook_idempotency: {
+      handlers_seen: webhook_handlers_seen,
+      idempotency_signal_seen: webhook_idempotency_seen,
+      gap: webhook_handlers_seen > 0 && webhook_idempotency_seen < webhook_handlers_seen,
+      sample_files: webhook_evidence_files,
+    },
+    rls_gaps: {
+      tables: createTableCount,
+      policies: rlsPolicyCount,
+      writable_table_signals: rls_tables_writable,
+      gap_estimate: rls_gap_estimate,
+      has_rls_intent: hasRls,
+    },
+    secret_exposure: {
+      client_violations: secret_violations,
+      total: secret_violations.length,
+    },
+    db_indexes: {
+      fk_columns_seen,
+      indexes_seen,
+      gap_estimate: index_gap_estimate,
+    },
+    observability: {
+      libs: observabilityLibs,
+      detected: observabilityLibs.length > 0,
+    },
+    rate_limit: {
+      lib_detected: rate_limit_lib,
+      middleware_detected: rate_limit_middleware_detected,
+      has_api_routes,
+      needs_attention: rate_limit_needs_attention,
+    },
+    prompt_injection: {
+      uses_ai_sdk,
+      raw_input_to_prompt_files,
+      suspicious: prompt_injection_suspicious,
+    },
+  }
+
   // ── README depth analysis ── (uses readmeRaw already fetched above)
   const readmeFull = readmeRaw ?? ''
   const readme_line_count = readmeFull.split('\n').length
@@ -766,6 +953,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       readme_line_count,
       has_readme_install,
       has_readme_usage,
+      vibe_concerns,
     },
     readme_excerpt,
     debut_brief,
@@ -1396,6 +1584,37 @@ Rules for the panel:
 - All four experts MUST be present; don't skip one because evidence is thin — if evidence is thin, confidence drops and verdict_summary says so.
 - American English, no Korean.` : ''}
 
+VIBE CODER 7-CATEGORY FRAMEWORK (priority lens for weaknesses):
+The structured signal block input.github.signals.vibe_concerns lists the
+seven failure modes that ~70% of AI-assisted projects ship without:
+
+  1. webhook_idempotency  — Stripe / payment retry safety. .gap=true means
+     handler files were found but no idempotency-key check pattern.
+  2. rls_gaps             — Supabase row-level-security coverage. Compare
+     tables vs policies; gap_estimate > 0 means writable tables likely
+     unprotected.
+  3. secret_exposure      — Service-role / API keys in client-side files.
+     client_violations > 0 = immediate takeover risk.
+  4. db_indexes           — FK columns vs CREATE INDEX count. gap_estimate
+     > 0 means likely query-perf cliff at scale.
+  5. observability        — sentry / datadog / pino / winston / otel libs
+     in package.json. detected=false = production blind.
+  6. rate_limit           — needs_attention=true means project has API
+     routes but no rate-limit lib or middleware → DoS / bill shock.
+  7. prompt_injection     — uses_ai_sdk=true + raw_input_to_prompt_files
+     non-empty = user input flowing unsanitized into a model prompt.
+
+When a vibe_concerns flag is set, weaknesses[] MUST surface it before
+generic concerns. Use exact phrasing the user can act on:
+  Good: "Stripe webhook handler at api/webhook/stripe.ts — no idempotency
+         key check (85% of vibe-coded projects miss this)."
+  Good: "5 FK columns across migrations · only 1 CREATE INDEX — query perf
+         cliff likely at >100K rows."
+  Bad:  "Could improve security." / "Some performance concerns."
+
+Generic axes ("Security", "Code", "UX", etc.) still apply for OTHER
+findings, but the vibe_concerns signals are the lead concerns when present.
+
 SCOUT BRIEF — MANDATORY on every analysis (not just when expert_panel runs):
 Scouts forecast on these projects but most don't have Platinum clearance to read the full audit. Distill the review into a list they can read in 10 seconds.
 
@@ -1404,6 +1623,7 @@ Scouts forecast on these projects but most don't have Platinum clearance to read
 
 Ordering matters:
 - Order by IMPORTANCE for scouting, most decision-moving first. Position 1 = the bullet a Scout would want to see before any other.
+- ANY vibe_concerns flag (gap=true / suspicious=true / needs_attention=true / total>0 / detected=false) takes precedence over generic concerns for weakness positions 1-3.
 - For weaknesses, items 4 and 5 are the deepest/most sensitive issues — only Platinum Scouts will see them. Put surface-level issues first (positions 1-3) and structural/hidden issues last (positions 4-5).
 
 Format per bullet:

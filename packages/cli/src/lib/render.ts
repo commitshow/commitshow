@@ -228,6 +228,36 @@ export function renderAudit(view: AuditView): string {
     lines.push('')
   }
 
+  // ─── Vibe Coder Checklist · 7-category framework ───
+  // Render only the categories that produced an actionable status (fail /
+  // warn / pass when meaningful). N/A categories are dropped to keep the
+  // terminal output compact. Helps beginners see "the 7 things AI-coded
+  // projects miss" framework directly in the report.
+  const vc = (snapshot as { github_signals?: { vibe_concerns?: any } } | null)?.github_signals?.vibe_concerns
+  if (vc) {
+    const items = vibeChecklistLines(vc)
+    const actionable = items.filter(i => i.status !== 'na')
+    if (actionable.length > 0) {
+      lines.push('  ' + boxTop())
+      lines.push('  ' + boxRow('Vibe Coder Checklist · 7 things AI-coded projects miss'.length,
+        c.bold(c.gold('Vibe Coder Checklist')) + c.muted(' · 7 things AI-coded projects miss')))
+      lines.push('  ' + boxBlank())
+      for (const it of actionable.slice(0, 7)) {
+        const tone = it.status === 'fail' ? c.scarlet : it.status === 'warn' ? c.gold : c.teal
+        const dot  = it.status === 'fail' ? '✕' : it.status === 'warn' ? '⚠' : '✓'
+        const labelVisible = `${dot} ${it.label}`
+        const detailVisible = it.detail
+        // First line: dot + label (status colored)
+        lines.push('  ' + boxRow(labelVisible.length, tone(`${dot} `) + c.cream(it.label)))
+        // Second line: indented detail
+        const detailTrunc = truncate(detailVisible, 50)
+        lines.push('  ' + boxRow(2 + detailTrunc.length, c.muted('  ') + c.muted(detailTrunc)))
+      }
+      lines.push('  ' + boxBottom())
+      lines.push('')
+    }
+  }
+
   // Standings + delta
   if (standing) {
     const rank = `#${standing.rank} of ${standing.total_in_season}`
@@ -250,6 +280,83 @@ export function renderAudit(view: AuditView): string {
   lines.push(' '.repeat(footerPad) + c.gold('commit.show'))
 
   return lines.join('\n')
+}
+
+// ─── Vibe Coder Checklist · 7-category framework ───
+type VibeStatus = 'pass' | 'warn' | 'fail' | 'na'
+function vibeChecklistLines(vc: any): Array<{ key: string; status: VibeStatus; label: string; detail: string }> {
+  const out: Array<{ key: string; status: VibeStatus; label: string; detail: string }> = []
+  // 1. Webhook idempotency
+  {
+    const w = vc?.webhook_idempotency
+    if (w && w.handlers_seen > 0) {
+      out.push(w.gap
+        ? { key:'webhook', status:'fail', label:'Webhook idempotency', detail:`${w.handlers_seen} handler${w.handlers_seen>1?'s':''} · 0 idempotency-key check found` }
+        : { key:'webhook', status:'pass', label:'Webhook idempotency', detail:`${w.idempotency_signal_seen}/${w.handlers_seen} handler${w.handlers_seen>1?'s':''} dedupe by event id` })
+    } else {
+      out.push({ key:'webhook', status:'na', label:'Webhook idempotency', detail:'no webhook handler files detected' })
+    }
+  }
+  // 2. RLS gaps
+  {
+    const r = vc?.rls_gaps
+    if (r && r.tables > 0) {
+      if (!r.has_rls_intent) out.push({ key:'rls', status:'fail', label:'RLS coverage', detail:`${r.tables} tables · 0 row-level-security policies` })
+      else if (r.gap_estimate >= 3) out.push({ key:'rls', status:'warn', label:'RLS coverage', detail:`${r.tables} tables · ${r.policies} policies · ~${r.gap_estimate} likely uncovered` })
+      else out.push({ key:'rls', status:'pass', label:'RLS coverage', detail:`${r.tables} tables · ${r.policies} policies · gap minimal` })
+    } else {
+      out.push({ key:'rls', status:'na', label:'RLS coverage', detail:'no SQL migrations detected' })
+    }
+  }
+  // 3. Secret exposure
+  {
+    const s = vc?.secret_exposure
+    if (s && s.total > 0) {
+      const first = s.client_violations[0]
+      out.push({ key:'secrets', status:'fail', label:'Secret in client code', detail:`${s.total} file${s.total>1?'s':''} · e.g. ${first?.pattern ?? '?'}` })
+    } else {
+      out.push({ key:'secrets', status:'pass', label:'Secret in client code', detail:'no service-role keys in client paths' })
+    }
+  }
+  // 4. DB indexes
+  {
+    const d = vc?.db_indexes
+    if (d && d.fk_columns_seen > 0) {
+      if (d.gap_estimate >= 3) out.push({ key:'indexes', status:'warn', label:'Database indexes', detail:`${d.fk_columns_seen} FK columns · ${d.indexes_seen} CREATE INDEX` })
+      else if (d.gap_estimate > 0) out.push({ key:'indexes', status:'warn', label:'Database indexes', detail:`${d.fk_columns_seen} FK columns · ${d.indexes_seen} indexes · ${d.gap_estimate} likely gaps` })
+      else out.push({ key:'indexes', status:'pass', label:'Database indexes', detail:`${d.fk_columns_seen} FK columns · ${d.indexes_seen} indexes · healthy` })
+    } else {
+      out.push({ key:'indexes', status:'na', label:'Database indexes', detail:'no SQL migrations detected' })
+    }
+  }
+  // 5. Observability
+  {
+    const o = vc?.observability
+    if (o?.detected) out.push({ key:'observability', status:'pass', label:'Error tracking', detail:o.libs.join(' · ') })
+    else out.push({ key:'observability', status:'fail', label:'Error tracking', detail:'no sentry / datadog / pino / winston / otel lib in package.json' })
+  }
+  // 6. Rate limiting
+  {
+    const r = vc?.rate_limit
+    if (r) {
+      if (!r.has_api_routes) out.push({ key:'rate_limit', status:'na', label:'API rate limiting', detail:'no API routes detected' })
+      else if (r.lib_detected) out.push({ key:'rate_limit', status:'pass', label:'API rate limiting', detail:r.lib_detected })
+      else if (r.middleware_detected) out.push({ key:'rate_limit', status:'pass', label:'API rate limiting', detail:'custom middleware detected' })
+      else if (r.needs_attention) out.push({ key:'rate_limit', status:'fail', label:'API rate limiting', detail:'API routes · 0 rate-limit lib or middleware' })
+    } else {
+      out.push({ key:'rate_limit', status:'na', label:'API rate limiting', detail:'unknown' })
+    }
+  }
+  // 7. Prompt injection
+  {
+    const p = vc?.prompt_injection
+    if (!p?.uses_ai_sdk) out.push({ key:'prompt_injection', status:'na', label:'Prompt injection risk', detail:'no AI SDK detected' })
+    else if (p.suspicious) out.push({ key:'prompt_injection', status:'warn', label:'Prompt injection risk', detail:`${p.raw_input_to_prompt_files.length} file${p.raw_input_to_prompt_files.length>1?'s':''} pipe user input into prompt` })
+    else out.push({ key:'prompt_injection', status:'pass', label:'Prompt injection risk', detail:'AI SDK in use · no obvious raw-input patterns' })
+  }
+  // Sort fail → warn → pass → na
+  const order: Record<VibeStatus, number> = { fail:0, warn:1, pass:2, na:3 }
+  return out.sort((a,b) => order[a.status] - order[b.status])
 }
 
 function truncate(s: string, w: number): string {

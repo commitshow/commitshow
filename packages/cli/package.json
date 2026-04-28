@@ -1,6 +1,6 @@
 {
   "name": "commitshow",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "commit.show CLI — audit any vibe-coded project from your terminal.",
   "type": "module",
   "bin": {

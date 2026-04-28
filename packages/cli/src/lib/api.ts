@@ -80,6 +80,19 @@ export interface AuditErrorEnvelope {
   retry_after_seconds?: number | null
 }
 
+// Vibe-coder 7-category checklist signals · structured failure-mode
+// detection persisted on every snapshot. CLI renders a 7-line summary
+// after concerns; web UI renders the full 7-card panel.
+export interface VibeConcerns {
+  webhook_idempotency?: { handlers_seen: number; idempotency_signal_seen: number; gap: boolean; sample_files: string[] }
+  rls_gaps?:            { tables: number; policies: number; writable_table_signals: number; gap_estimate: number; has_rls_intent: boolean }
+  secret_exposure?:     { client_violations: Array<{ file: string; pattern: string }>; total: number }
+  db_indexes?:          { fk_columns_seen: number; indexes_seen: number; gap_estimate: number }
+  observability?:       { libs: string[]; detected: boolean }
+  rate_limit?:          { lib_detected: string | null; middleware_detected: boolean; has_api_routes: boolean; needs_attention: boolean }
+  prompt_injection?:    { uses_ai_sdk: boolean; raw_input_to_prompt_files: string[]; suspicious: boolean }
+}
+
 export interface SnapshotRow {
   id:                   string
   project_id:           string
@@ -99,6 +112,7 @@ export interface SnapshotRow {
     headline?: string
     error?: AuditErrorEnvelope          // NEW · set when Claude call failed
   } | null
+  github_signals?:      { vibe_concerns?: VibeConcerns; [k: string]: unknown } | null
 }
 
 export interface StandingRow {
