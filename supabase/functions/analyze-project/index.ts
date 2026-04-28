@@ -588,9 +588,25 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const releases_count     = Array.isArray(releasesResp) ? releasesResp.length : 0
 
   // ── Security violation · committed .env file ──
-  // Excludes .env.example / .env.template / .env.sample (those are docs).
-  const env_committed = paths.some(p => /(^|\/)\.env(\.[a-z0-9]+)?$/i.test(p) &&
-    !/(\.env\.(example|sample|template|local\.example|defaults)|\.env\.tpl)$/i.test(p))
+  // Excludes:
+  //   - .env.example / .env.template / .env.sample / .env.tpl (docs)
+  //   - .env.development  (Next.js convention · public-only NEXT_PUBLIC_*)
+  //   - anything inside examples/, demo/, sample/, demos/, fixtures/,
+  //     test/, tests/, e2e/  (likely mock data, not real secrets)
+  //   - dotenvx-style paths containing 'dotenvx' in the path  (intentionally
+  //     committed encrypted .env with public keys)
+  // The remaining hits are real .env files in production app paths
+  // (apps/web/.env, src/.env, root/.env). Those still trip the -5 penalty.
+  const ENV_FILE_RE   = /(^|\/)\.env(\.[a-z0-9]+)?$/i
+  const ENV_DOC_RE    = /\.env\.(example|sample|template|local\.example|defaults|development)$|\.env\.tpl$/i
+  const ENV_SKIP_DIR  = /(^|\/)(examples?|demo|demos|sample|samples|fixtures?|tests?|e2e|playground|cookbook|docs)\//i
+  const ENV_DOTENVX_RE= /dotenvx/i
+  const env_committed = paths.some(p =>
+    ENV_FILE_RE.test(p) &&
+    !ENV_DOC_RE.test(p) &&
+    !ENV_SKIP_DIR.test(p) &&
+    !ENV_DOTENVX_RE.test(p)
+  )
 
   // ── README depth analysis ── (uses readmeRaw already fetched above)
   const readmeFull = readmeRaw ?? ''
@@ -1410,12 +1426,15 @@ OUTPUT RULES
          polish offsets it). Surface in delta_reasoning even though the
          deduction is already in score_auto.
 
-     Tier-1 EVIDENCE inputs (don't double-count as deductions, just inform):
-       security_headers  — CSP / HSTS / X-Frame / X-Content-Type / Referrer / Permissions
-       legal_pages       — /privacy and /terms reachability (SaaS-pattern signal)
+     Tier-1 EVIDENCE inputs — STRICT NO-DEDUCT (mention in scout_brief
+     weaknesses if relevant; NEVER add a 'minus' chip for these):
+       security_headers   — CSP / HSTS / X-Frame / X-Content-Type / Referrer / Permissions
+       legal_pages        — /privacy and /terms reachability
        readme_depth_score — README length + Install/Usage section presence
-     Mention these in delta_reasoning or strengths/concerns when relevant
-     but do NOT deduct points (the hard slots above already calibrate).
+     If you write a chip like "Security headers sparse (1 of 6)" with
+     points: -3, that is a RULE VIOLATION. The hard slots above already
+     calibrate. Only the explicit deductions in section (2) below are
+     allowed; everything else is informational.
      Soft bonus (NOT in 50, stacks on top, capped +10):
         Ecosystem            +0-3  (stars / contributors / npm weekly downloads)
         Activity             +0-2  (recent commit / momentum)
@@ -1459,7 +1478,14 @@ OUTPUT RULES
        · "thin README"        — README depth signal is informational only
        · "no responsive design" — already in production_maturity.responsive
        · "no mobile optimization" — already in production_maturity.responsive
-       · "committed .env"     — already deducted -5 deterministically
+       · "committed .env"     — already deducted -5 deterministically;
+         scoring_so_far.auto_50_breakdown.env_penalty shows the -5.
+         NEVER add another 'minus' chip naming .env / env_committed /
+         "committed dotfile" / "secret in repo". The deduction is in
+         the baseline already; chipping again is double-counting.
+       · "security headers sparse"  — Tier-1 evidence, no-deduct (above)
+       · "no privacy/terms pages"   — Tier-1 evidence, no-deduct
+       · "thin readme"              — Tier-1 evidence, no-deduct
      If a project earned 2/10 in production_maturity, that 8-point gap from
      the ceiling IS the deduction. Adding a "−5 no tests" line on top
      punishes the same fact twice. The new rubric explicitly relocated those
