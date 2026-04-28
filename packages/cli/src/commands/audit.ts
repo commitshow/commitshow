@@ -10,6 +10,7 @@ import {
   writeAuditMarkdown, writeAuditJson,
 } from '../lib/render.js'
 import { c } from '../lib/colors.js'
+import { Spinner } from '../lib/spinner.js'
 
 export async function audit(args: string[]): Promise<number> {
   const asJson = args.includes('--json')
@@ -142,12 +143,22 @@ export async function audit(args: string[]): Promise<number> {
     return 1
   }
 
-  // Background job — poll until the snapshot lands.
+  // Background job — poll until the snapshot lands. While polling, run
+  // a TTY spinner with phase labels + elapsed time so the user sees
+  // continuous feedback during the 60-90s wait. Skipped in --json mode
+  // so machine consumers see clean output. Falls back to phase-boundary
+  // line prints in non-TTY contexts (CI · redirected stderr).
   let envelope: PreviewEnvelope
   if ('status' in result && result.status === 'running') {
     const pending = result as PreviewPending
-    if (!asJson) console.log(c.dim('  This runs the full Claude audit · ~60-90 seconds. Hang tight.'))
-    const waited = await waitForPreviewSnapshot(pending.project_id, refreshBaseline)
+    const spinner = new Spinner()
+    if (!asJson) spinner.start(`Auditing ${target.slug}`)
+    let waited
+    try {
+      waited = await waitForPreviewSnapshot(pending.project_id, refreshBaseline)
+    } finally {
+      spinner.stop()
+    }
     if (!waited) {
       emitError(asJson, 'timeout', 'Preview audit is taking longer than expected. Try `commitshow status <repo>` in a minute.', target.github_url)
       return 1

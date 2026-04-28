@@ -7,7 +7,7 @@ import { whoami }  from './commands/whoami.js'
 import { c } from './lib/colors.js'
 import { checkLatestVersion, formatUpdateBanner } from './lib/version-check.js'
 
-const VERSION = '0.2.10'
+const VERSION = '0.2.11'
 
 const USAGE = `
 ${c.bold(c.gold('commit.show'))} ${c.dim(`v${VERSION}`)}  ${c.muted('—')} ${c.cream('audit any vibe-coded project from your terminal.')}
