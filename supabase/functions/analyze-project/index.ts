@@ -144,6 +144,7 @@ interface GitHubInfo {
     has_code_of_conduct: boolean
     is_monorepo: boolean                 // workspaces / turbo.json / pnpm-workspace.yaml
     app_root: string                     // detected sub-folder app root ('' when at repo root)
+    form_factor: string                  // mirror of gh.form_factor for snapshot persistence (B18)
     // ── Responsive design signals (NEW · v3 mobile audit) ──
     tailwind_responsive_count: number    // count of `sm:` `md:` `lg:` `xl:` `2xl:` prefixes
     tailwind_class_total:      number    // total class occurrences sampled (denominator)
@@ -274,6 +275,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_license: false, has_contributing: false, has_changelog: false, has_code_of_conduct: false,
       is_monorepo: false,
       app_root: '',
+      form_factor: 'unknown',
       tailwind_responsive_count: 0, tailwind_class_total: 0,
       css_media_query_count: 0,
       has_overflow_x_hidden: false,
@@ -734,6 +736,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_code_of_conduct,
       is_monorepo,
       app_root,                         // detected sub-folder when no root package.json (e.g. 'website')
+      form_factor,                      // mirror of gh.form_factor so snapshot.github_signals retains it (B18)
       tailwind_responsive_count,
       tailwind_class_total,
       css_media_query_count,
@@ -1081,13 +1084,14 @@ function scoreCompleteness(c: { score: number }): number {
 }
 
 // Ecosystem signal — soft bonus capped +3, library reach signal.
-// Stars are log-scale: each 10× lifts +1 (cap at 10K+ stars = +3).
+// Stars are log-scale: each 10× lifts +1 — 100/1K/10K → 1/2/3 pts.
 // Releases (semver tags published) added in v4 — counts toward same cap.
 function scoreEcosystem(gh: GitHubInfo): {
   pts: number
   breakdown: { stars: number; contributors: number; downloads: number; releases: number }
 } {
-  const stars = gh.stars >= 10000 ? 2 : gh.stars >= 1000 ? 2 : gh.stars >= 100 ? 1 : 0
+  // Fixed B1 (was: 10K and 1K both yielding 2pt — 10K threshold dead).
+  const stars = gh.stars >= 10000 ? 3 : gh.stars >= 1000 ? 2 : gh.stars >= 100 ? 1 : 0
   const contributors = gh.contributors_count >= 50 ? 1 : 0
   const dl = gh.npm.weekly_downloads ?? 0
   // Library only: weekly downloads 1K+ +1, 100K+ already implied by stars
@@ -1122,8 +1126,15 @@ function scoreTechLayers(langs: Record<string, number>, stack: string[]): { pts:
   const s = stack.join(' ').toLowerCase()
   if (/supabase|postgres|mysql|mongodb|firebase|neon|planetscale/.test(s)) L.add('backend')
   if (/postgres|supabase|mongodb|mysql|redis|d1|neon/.test(s)) L.add('database')
-  if (/claude|openai|gpt|gemini|llm|anthropic|cursor|lovable|v0|replit/.test(s)) L.add('ai')
-  if (/ethereum|solana|base|chain|wallet|web3|nft|mcp/.test(s)) L.add('chain')
+  // Fixed B4 — only mark AI layer when the project is BUILT WITH an AI
+  // SDK / model API at runtime, not when text just mentions an AI coding
+  // tool used during development. Tools like cursor/lovable/v0/replit
+  // produce code; they don't ship in the runtime stack.
+  if (/anthropic[-_/.]ai|@anthropic|openai\b|@openai|gemini[-_]api|@google\/generative|langchain|llama[._-]?index|vercel[-_]?ai/.test(s)) L.add('ai')
+  // Web3/chain — drop bare "base" (false-positive prone) and "mcp" (not
+  // a chain — MCP is the AI agent protocol). Keep Ethereum/Solana
+  // ecosystem terms that signal real on-chain integration.
+  if (/ethereum|solana|polygon|arbitrum|optimism|wagmi|viem|ethers|web3\.js|@solana|hardhat|foundry|nft\b/.test(s)) L.add('chain')
   // v2 weights: Frontend+Backend+DB = 2, +AI = +0.5 (rounded), +Chain/MCP = +0.5 (cap 3)
   let pts = 0
   if (L.has('frontend') && L.has('backend') && L.has('database')) pts += 2
@@ -1143,52 +1154,71 @@ function scoreBriefIntegrity(brief: Record<string, unknown>) {
 // Walk-on partial credit for the Brief Integrity slot.
 // Walk-ons (CLI track) can't submit a Phase 1 brief, so the 5pt slot
 // historically locked at 0 — capping walk-on at /47 of /52 (~90% ceiling).
-// For elite OSS that already ship rich READMEs and a working live URL,
-// give partial credit (up to 3pt) so the walk-on track ceiling rises
-// to /50. Real Brief still beats this when properly submitted.
+// We accept either a healthy live URL OR a published npm package as
+// "live proof" (so library / CLI form factors can also reach the
+// substitute), then layer README depth on top.
+//
+// Fixed B5 — earlier this required liveOk and never gave libraries
+// without a public URL any substitute pts.
 function walkOnBriefSubstitute(
   gh: GitHubInfo,
   health: { ok: boolean; elapsed_ms: number },
 ): { pts: number; reason: string } {
-  const liveOk = health.ok && health.elapsed_ms < 3000
-  if (!liveOk) return { pts: 0, reason: 'no live URL or live URL too slow' }
+  const liveOk     = health.ok && health.elapsed_ms < 3000
+  const npmOk      = gh.npm.weekly_downloads != null   // published & resolvable
+  const proof      = liveOk ? 'live URL'
+                   : npmOk  ? 'npm package'
+                   : null
+  if (!proof) return { pts: 0, reason: 'no live URL and not npm-published' }
   const install = !!gh.signals.has_readme_install
   const usage   = !!gh.signals.has_readme_usage
   const lines   = gh.signals.readme_line_count || 0
   if (install && usage && lines >= 80) {
-    return { pts: 3, reason: 'live URL OK + README has Install + Usage + ≥80 lines' }
+    return { pts: 3, reason: `${proof} + README has Install + Usage + ≥80 lines` }
   }
   if (install && usage) {
-    return { pts: 2, reason: 'live URL OK + README has Install + Usage' }
+    return { pts: 2, reason: `${proof} + README has Install + Usage` }
   }
   if (install || usage) {
-    return { pts: 1, reason: 'live URL OK + README has Install OR Usage' }
+    return { pts: 1, reason: `${proof} + README has Install OR Usage` }
+  }
+  // Fallback for npm-only libraries with thin READMEs but published
+  // releases — at least 1pt for being a real, resolvable package.
+  if (npmOk && lines >= 40) {
+    return { pts: 1, reason: 'npm package + README ≥40 lines' }
   }
   return { pts: 0, reason: 'README missing Install/Usage sections' }
 }
 
 // Elite ecosystem bonus — a separate +5 cap on top of the regular +3
-// ecosystem soft. Triggers only when a project clears all three
-// production-scale thresholds (stars + npm reach + contributor pool).
-// Designed for the 100K-star / 1M-download tier — supabase, cal.com,
-// shadcn-ui, etc. — so calibration ceiling lifts toward 90+ without
-// inflating mid-tier projects.
-function eliteEcosystem(gh: GitHubInfo): { pts: number; reason: string } {
-  const stars        = gh.stars >= 10_000
-  const downloads    = (gh.npm.weekly_downloads ?? 0) >= 1_000_000
-  const contributors = gh.contributors_count >= 100
-  if (stars && downloads && contributors) {
-    return {
-      pts: 5,
-      reason: `elite tier · ${gh.stars.toLocaleString()} stars + ${(gh.npm.weekly_downloads ?? 0).toLocaleString()} weekly dl + ${gh.contributors_count}+ contributors`,
-    }
-  }
-  // Partial · any 2 of 3 thresholds met → +2 (e.g. high-star + high-dl
-  // but contributor count under 100). Keeps the gradient smooth so
-  // mid-elite (50K stars · 500K dl) doesn't sit at zero.
-  const count = (stars ? 1 : 0) + (downloads ? 1 : 0) + (contributors ? 1 : 0)
-  if (count === 2) return { pts: 2, reason: '2 of 3 elite thresholds met' }
-  return { pts: 0, reason: 'below elite thresholds' }
+// ecosystem soft. Designed for production-scale OSS (supabase, cal.com,
+// shadcn-ui) so calibration ceiling lifts toward 90+ without inflating
+// mid-tier projects.
+//
+// Fixed B6 — earlier tiering had hard cliffs (9999 stars + 999K dl +
+// 99 contrib all just-under → 0pt; 10K + 1M + 0 contrib → 2pt).
+// Replaced with per-axis 0/1/2 buckets: 1pt at "near-elite" threshold,
+// 2pt at "elite" threshold. Sum of three axes capped at 5.
+function eliteEcosystem(gh: GitHubInfo): {
+  pts: number
+  reason: string
+  breakdown: { stars: number; downloads: number; contributors: number }
+} {
+  // Stars · 5K = +1, 10K = +2
+  const starsPts = gh.stars >= 10_000 ? 2 : gh.stars >= 5_000 ? 1 : 0
+  // Weekly npm downloads · 100K = +1, 1M = +2
+  const dl = gh.npm.weekly_downloads ?? 0
+  const downloadsPts = dl >= 1_000_000 ? 2 : dl >= 100_000 ? 1 : 0
+  // Contributors · 50 = +1, 100 = +2
+  const contributorsPts = gh.contributors_count >= 100 ? 2
+                       : gh.contributors_count >= 50  ? 1 : 0
+  const raw = starsPts + downloadsPts + contributorsPts
+  const pts = Math.min(5, raw)
+  const reason = pts >= 5 ? `elite tier · ${gh.stars.toLocaleString()} stars + ${dl.toLocaleString()} weekly dl + ${gh.contributors_count}+ contributors`
+              : pts >= 3 ? `production-scale · raw ${raw}/6 (capped 5) — ${gh.stars.toLocaleString()} stars / ${dl.toLocaleString()} dl / ${gh.contributors_count} contributors`
+              : pts >= 1 ? `near-elite gradient · raw ${raw}/6 — ${gh.stars.toLocaleString()} stars / ${dl.toLocaleString()} dl / ${gh.contributors_count} contributors`
+              : 'below near-elite thresholds (5K stars / 100K dl / 50 contrib)'
+  return { pts, reason, breakdown: { stars: starsPts, downloads: downloadsPts, contributors: contributorsPts } }
 }
 
 // ── Claude deep analysis (multi-axis) ─────────────────────────
@@ -2231,7 +2261,10 @@ Deno.serve(async (req) => {
   // For non-app forms the "polish" slots ARE tests/docs/types/governance —
   // already maturity evidence — so coupling them again would double-deflate
   // libraries with thin coverage. maturityFactor = 1.0 for non-app.
-  const maturityRatio  = maturity.pts / 10                               // 0.0 - 1.0
+  // maturity.pts cap is 12 (responsive slot added 2pt above the original 10);
+  // dividing by 10 used to push factor to 1.08 at perfect maturity, inflating
+  // the polish slots beyond raw value. Cap ratio at 1.0 explicitly.
+  const maturityRatio  = Math.min(1.0, maturity.pts / 10)
   const maturityFactor = useWebSlots ? (0.6 + 0.4 * maturityRatio) : 1.0  // 0.6-1.0 for web-evaluable · 1.0 for lib-evaluable
   const polishSubtotal = lhPts + healthPts + completenessPts + tech.pts
   const scaledPolish   = Math.round(polishSubtotal * maturityFactor)
@@ -2352,16 +2385,94 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Prefer Claude's current score (evidence-weighted) but keep auto-50 as floor signal.
-  // Walk-on (CLI preview) bypasses Claude's qualitative score because
-  // Claude reliably double-counts deductions for signals already priced
-  // into the auto_50 slots (production_maturity, source_hygiene,
-  // ecosystem). The deterministic score_auto is the source of truth.
-  // For walk-on display, the CLI normalizes score_auto / 45 * 100.
-  // For league projects (auditioned), Claude's calibration matters
-  // because it considers Brief integrity + Phase 1/2 cross-checks.
+  // ── Server-side anti-double-counting validation (B16) ──
+  // Claude is instructed not to re-deduct for signals already priced
+  // into the auto_50_breakdown slots, but discretion sometimes slips.
+  // We scan claude.score.breakdown for forbidden chip patterns,
+  // strip them, and recompute score.current. Strengths/weaknesses in
+  // scout_brief stay untouched (they're informational, not arithmetic).
+  const FORBIDDEN_CHIP_PATTERNS = [
+    // env_committed already at -5 deterministic
+    /\bcommitted\s*\.?env\b/i, /\benv[_-]?committed\b/i, /\bdotfile\b.*\bsecret/i,
+    // Tier-1 evidence (no-deduct)
+    /security[\s-]?headers?\s+(sparse|missing|absent|incomplete|none)/i,
+    /\b(no|missing|absent)\s+(privacy|terms)\b/i,
+    /\bthin\s+readme\b/i, /\breadme\s+(thin|short|sparse)\b/i,
+    // Already in production_maturity slot
+    /\bno\s+tests?\b/i, /\bzero\s+tests?\b/i,
+    /\bno\s+ci\b/i, /\bno\s+ci\/cd\b/i,
+    /\bno\s+observability\b/i,
+    /\bno\s+typescript\s+strict\b/i, /\bts[\s-]?strict\s+(false|missing|off)\b/i,
+    /\bno\s+lockfile\b/i,
+    /\bno\s+license\b/i, /\bmissing\s+license\b/i,
+    /\bno\s+responsive\b/i, /\bno\s+mobile\b/i,
+    // Already in source_hygiene slot
+    /\bno\s+monorepo\b/i,
+    /\bno\s+governance\s+docs?\b/i,
+    // Already in completeness slot
+    /\blow\s+completeness\b/i,
+    // Already in soft.ecosystem / soft.elite
+    /\bno\s+(github\s+)?stars?\b/i,
+    /\bno\s+contributors?\b/i,
+    /\blow\s+npm\s+downloads\b/i,
+    /\bno\s+releases?\b/i,
+    /\bbelow\s+elite\s+scale\b/i,
+    // Production-scale reach already in soft.elite — don't re-bonus
+    /\bproduction[\s-]?scale\s+reach\b/i,
+    // Already in soft.activity
+    /\bstale\s+repo\b/i,
+  ]
+  type Chip = { kind: string; points: number; label?: string; evidence?: string }
+  const breakdown = claude.score?.breakdown
+  if (Array.isArray(breakdown)) {
+    const baselineRow = breakdown.find((c: Chip) => c.kind === 'baseline')
+    const finalRow    = breakdown.find((c: Chip) => c.kind === 'final')
+    const baseline    = baselineRow?.points ?? 0
+    let stripped: Chip[] = []
+    let kept: Chip[] = []
+    for (const chip of breakdown as Chip[]) {
+      if (chip.kind !== 'plus' && chip.kind !== 'minus') { kept.push(chip); continue }
+      const label = String(chip.label ?? '')
+      const matched = FORBIDDEN_CHIP_PATTERNS.some(p => p.test(label))
+      if (matched) stripped.push(chip)
+      else kept.push(chip)
+    }
+    if (stripped.length > 0) {
+      // Recompute score.current = baseline + sum(plus/minus kept).
+      const adjustedDelta = (kept as Chip[])
+        .filter(c => c.kind === 'plus' || c.kind === 'minus')
+        .reduce((acc, c) => acc + (c.points ?? 0), 0)
+      const newScore = Math.max(0, Math.min(100, baseline + adjustedDelta))
+      // Mutate the claude object before persistence so downstream uses
+      // the cleaned-up version.
+      ;(claude.score as any).current = newScore
+      ;(claude.score as any).breakdown = [
+        ...kept.filter(c => c.kind !== 'final'),
+        ...(finalRow ? [{ ...finalRow, points: newScore, label: 'Score.current (post-validation)' }] : []),
+      ]
+      ;(claude.score as any).post_validation = {
+        original_current: finalRow?.points ?? null,
+        original_baseline: baseline,
+        stripped_chips: stripped.map(c => ({ kind: c.kind, points: c.points, label: c.label })),
+        recomputed_current: newScore,
+        rule: 'anti-double-counting · forbidden chip patterns matched',
+      }
+    }
+  }
+
+  // Prefer Claude's current score (evidence-weighted, post-validation) but
+  // keep auto-50 as floor signal.
+  //
+  // Walk-on (CLI preview) bypasses Claude's qualitative score and uses a
+  // form-aware deterministic denominator (B19):
+  //   - web mode  → /50  (52 hard - 2 brief unattainable for walk-on)
+  //   - lib mode  → /48  (lib slot ceilings sum lower in practice — hardest
+  //                       slots like docs cap 7 of an "LH 20" slot · without
+  //                       this libraries floated to 100 too easily)
+  // The hard cap 52 stays the same; only the walk-on normalize denom shifts.
+  const walkOnDenom = useWebSlots ? 50 : 48
   const scoreTotal = isCliPreview
-    ? Math.min(100, Math.round((score_auto / 50) * 100))    // walk-on: deterministic /50 normalize (52 hard - 2 brief unattainable · partial Brief substitute up to 3pt)
+    ? Math.min(100, Math.round((score_auto / walkOnDenom) * 100))
     : (claude.score?.current && claude.score.current > 0
         ? Math.round(claude.score.current)
         : score_auto)
