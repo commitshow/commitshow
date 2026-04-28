@@ -51,7 +51,29 @@ function json(body: unknown, status = 200) {
   })
 }
 
-const CACHE_TTL_MS         = 7 * 24 * 60 * 60 * 1000   // 7 days per-URL cache
+const CACHE_TTL_MS         = 7 * 24 * 60 * 60 * 1000   // 7 days per-URL cache (when commit_sha unknown / probe fails)
+const CACHE_LONG_TTL_MS    = 30 * 24 * 60 * 60 * 1000  // 30 days when commit_sha matches (code unchanged → only ecosystem drift)
+
+// Fetch the current HEAD commit sha for a public GitHub repo.
+// Used to invalidate cache early when the repo has been pushed since
+// the last snapshot. Returns null on any failure (rate-limit / private /
+// network) so the caller can fall back to time-based TTL.
+async function fetchGithubHead(slug: string): Promise<string | null> {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 4000)
+    const headers: Record<string, string> = { 'accept': 'application/vnd.github+json', 'user-agent': 'commit.show-cache/1.0' }
+    const ghToken = Deno.env.get('GITHUB_TOKEN')
+    if (ghToken) headers['authorization'] = `Bearer ${ghToken}`
+    const r = await fetch(`https://api.github.com/repos/${slug}/commits?per_page=1`, { headers, signal: ctrl.signal })
+    clearTimeout(timer)
+    if (!r.ok) return null
+    const j = await r.json() as Array<{ sha?: string }>
+    return j[0]?.sha ?? null
+  } catch {
+    return null
+  }
+}
 const RATE_ANON_PER_IP     = 5                          // anon IP cap
 const RATE_AUTHED_PER_IP   = 50                         // authed IP cap · early-launch generous (revisit when real traffic ramps)
 const RATE_PER_URL_GLOBAL  = 5                          // per github_url cap (any IP)
@@ -319,18 +341,44 @@ Deno.serve(async (req) => {
 
   let projectId: string | null = existing?.id ?? null
   let isCacheHit = false
+  let cacheReason: string = 'no existing project'
 
   if (existing && !force) {
     const { data: lastSnap } = await admin
       .from('analysis_snapshots')
-      .select('created_at')
+      .select('created_at, commit_sha')
       .eq('project_id', existing.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     if (lastSnap?.created_at) {
       const age = Date.now() - new Date(lastSnap.created_at).getTime()
-      if (age < CACHE_TTL_MS) isCacheHit = true
+      // Commit-sha aware cache (added 2026-04-28):
+      //   1. If we can probe the current HEAD sha AND it differs from the
+      //      last snapshot's sha → INVALIDATE regardless of TTL (fresh
+      //      push, user wants the new state reflected).
+      //   2. If commit_sha matches → extend TTL to 30 days (code is
+      //      identical; only ecosystem drift like npm dl / stars / LH
+      //      score timing matters, and that's lower-stakes).
+      //   3. If sha probe fails → fall back to default 7-day TTL.
+      const lastSha    = (lastSnap as { commit_sha?: string | null }).commit_sha ?? null
+      const headSha    = await fetchGithubHead(canon.slug)
+      const shaKnown   = !!(lastSha && headSha)
+      const shaMatch   = shaKnown && lastSha === headSha
+      const shaDiffer  = shaKnown && lastSha !== headSha
+      if (shaDiffer) {
+        isCacheHit  = false
+        cacheReason = `commit_sha changed (${(lastSha ?? '').slice(0, 7)} → ${(headSha ?? '').slice(0, 7)}) — invalidating cache`
+      } else if (shaMatch && age < CACHE_LONG_TTL_MS) {
+        isCacheHit  = true
+        cacheReason = `commit_sha unchanged (${lastSha!.slice(0, 7)}) within 30-day extended TTL`
+      } else if (age < CACHE_TTL_MS) {
+        isCacheHit  = true
+        cacheReason = shaKnown ? 'within 7-day TTL · sha not compared' : 'within 7-day TTL · sha probe failed'
+      } else {
+        isCacheHit  = false
+        cacheReason = `last snapshot ${Math.round(age / (24 * 60 * 60 * 1000))}d old · TTL exceeded`
+      }
     }
   }
 
@@ -358,10 +406,12 @@ Deno.serve(async (req) => {
     quota:   rl.quota,
   }, 429)
 
-  // Cache hit — return immediately
+  // Cache hit — return immediately. cache_reason surfaces WHY the
+  // cached snapshot was reused (commit_sha match · TTL · etc.) so
+  // downstream tooling can show "no recent push" UX without re-checking.
   if (isCacheHit && projectId) {
     const env = await buildEnvelope(admin, projectId, true)
-    return json({ ...env, quota: rl.quota })
+    return json({ ...env, quota: rl.quota, cache_reason: cacheReason })
   }
 
   // Cache miss — create shadow row if needed
@@ -402,6 +452,7 @@ Deno.serve(async (req) => {
     status:        'running',
     is_preview:    !existing,
     cache_hit:     false,
+    cache_reason:  cacheReason,
     poll_after_ms: 5000,
     quota:         rl.quota,
   }), {
