@@ -1124,6 +1124,57 @@ function scoreBriefIntegrity(brief: Record<string, unknown>) {
   return { pts, filled, of: required.length }
 }
 
+// Walk-on partial credit for the Brief Integrity slot.
+// Walk-ons (CLI track) can't submit a Phase 1 brief, so the 5pt slot
+// historically locked at 0 — capping walk-on at /47 of /52 (~90% ceiling).
+// For elite OSS that already ship rich READMEs and a working live URL,
+// give partial credit (up to 3pt) so the walk-on track ceiling rises
+// to /50. Real Brief still beats this when properly submitted.
+function walkOnBriefSubstitute(
+  gh: GitHubInfo,
+  health: { ok: boolean; elapsed_ms: number },
+): { pts: number; reason: string } {
+  const liveOk = health.ok && health.elapsed_ms < 3000
+  if (!liveOk) return { pts: 0, reason: 'no live URL or live URL too slow' }
+  const install = !!gh.signals.has_readme_install
+  const usage   = !!gh.signals.has_readme_usage
+  const lines   = gh.signals.readme_line_count || 0
+  if (install && usage && lines >= 80) {
+    return { pts: 3, reason: 'live URL OK + README has Install + Usage + ≥80 lines' }
+  }
+  if (install && usage) {
+    return { pts: 2, reason: 'live URL OK + README has Install + Usage' }
+  }
+  if (install || usage) {
+    return { pts: 1, reason: 'live URL OK + README has Install OR Usage' }
+  }
+  return { pts: 0, reason: 'README missing Install/Usage sections' }
+}
+
+// Elite ecosystem bonus — a separate +5 cap on top of the regular +3
+// ecosystem soft. Triggers only when a project clears all three
+// production-scale thresholds (stars + npm reach + contributor pool).
+// Designed for the 100K-star / 1M-download tier — supabase, cal.com,
+// shadcn-ui, etc. — so calibration ceiling lifts toward 90+ without
+// inflating mid-tier projects.
+function eliteEcosystem(gh: GitHubInfo): { pts: number; reason: string } {
+  const stars        = gh.stars >= 10_000
+  const downloads    = (gh.npm.weekly_downloads ?? 0) >= 1_000_000
+  const contributors = gh.contributors_count >= 100
+  if (stars && downloads && contributors) {
+    return {
+      pts: 5,
+      reason: `elite tier · ${gh.stars.toLocaleString()} stars + ${(gh.npm.weekly_downloads ?? 0).toLocaleString()} weekly dl + ${gh.contributors_count}+ contributors`,
+    }
+  }
+  // Partial · any 2 of 3 thresholds met → +2 (e.g. high-star + high-dl
+  // but contributor count under 100). Keeps the gradient smooth so
+  // mid-elite (50K stars · 500K dl) doesn't sit at zero.
+  const count = (stars ? 1 : 0) + (downloads ? 1 : 0) + (contributors ? 1 : 0)
+  if (count === 2) return { pts: 2, reason: '2 of 3 elite thresholds met' }
+  return { pts: 0, reason: 'below elite thresholds' }
+}
+
 // ── Claude deep analysis (multi-axis) ─────────────────────────
 
 // Expert panel (v1.6 — panel of experts layered on top of scoring).
@@ -1313,25 +1364,46 @@ OUTPUT RULES
 
   SCORE FORMATION — anti-anchoring discipline (critical, v2 · 2026-04-27):
   1) START from auto_baseline = scoring_so_far.auto_50_breakdown.total * 2.
-     v3 calibration restored — v4 Tier-1 slot expansion over-penalized
-     library form factors. Tier-1 SIGNALS still collected (security_headers
-     / legal_pages / readme_depth) and surface as evidence — they just
-     don't move slot scores.
-        Lighthouse (mobile)  20  (Performance 8 · A11y 5 · BP 4 · SEO 3)
-        Production Maturity  12  tests 3 · CI 2 · observability 2 · TS strict 1
-                                 · lockfile 1 · LICENSE 1 · responsive 2
-        Source Hygiene        5  github 3 · monorepo 1 · governance docs 1
-        Live URL Health       5
-        Completeness          2
-        Tech Diversity        3
-        Brief Integrity       5  (0 for walk-on · ceiling effectively 47)
-        ─────────────────────
-        Total cap            52
-     Walk-on track normalizes against /47 (52 minus the 5 brief slot).
+     v3 calibration restored + v3.1 form-aware slot remapping
+     (2026-04-28). Slot WEIGHTS stay constant across form factors so the
+     /52 hard ceiling is uniform; only slot SEMANTICS adapt:
 
-     Soft bonuses (capped +5):
-       Ecosystem +0-3: stars · contributors · npm dl · releases
-       Activity  +0-2: recent commit · momentum
+        ┌──────────────────────┬─────────────────┬───────────────────┐
+        │ Slot (weight)        │ App / web       │ Library/CLI/scaff │
+        ├──────────────────────┼─────────────────┼───────────────────┤
+        │ Lighthouse-equiv 20  │ Perf 8·A11y 5·  │ Tests 8·Docs 7·   │
+        │                      │ BP 4·SEO 3      │ TS-strict 3·      │
+        │                      │                 │ License 2         │
+        │ Live-equiv        5  │ HTTP+SSL+<3000ms│ npm published 4·  │
+        │                      │                 │ weekly dl ≥1k +1  │
+        │ Completeness-eq   2  │ og·meta·favicon │ releases ≥5 +1·   │
+        │                      │ ·apple-touch··· │ has_changelog +1  │
+        │ Production Maturity 12 (same: tests · CI · obs · TS strict ·     │
+        │                        lockfile · LICENSE · responsive)         │
+        │ Source Hygiene    5 (same: github · monorepo · governance docs) │
+        │ Tech Diversity    3 (same)                                      │
+        │ Brief Integrity   5 (full 5 with submitted Phase 1 Brief;       │
+        │                     walk-on track earns 0-3 via README depth    │
+        │                     + live URL substitute — capped at 3 of 5)   │
+        └──────────────────────┴─────────────────┴───────────────────┘
+        Total cap            52
+
+     Tier-1 SIGNALS still collected (security_headers / legal_pages /
+     readme_depth) and surface as evidence — they don't move slot scores.
+     Walk-on track normalizes against /50 (52 minus the 2 brief points
+     unattainable without a real Phase 1 Brief). The substitute lifts the
+     walk-on ceiling toward 90+ for projects with rich READMEs. Same /50
+     denominator applies regardless of form factor — slot semantics adapt
+     but the maximum stays uniform.
+
+     Soft bonuses (capped +10 total):
+       Ecosystem  +0-3: stars · contributors · npm dl · releases
+       Activity   +0-2: recent commit · momentum
+       Elite OSS  +0-5: production-scale triple threshold —
+                        10K+ stars AND 1M+ weekly downloads AND 100+ contributors
+                        (full 5). Any 2 of 3 thresholds → +2.
+                        Designed for the supabase / cal.com / shadcn-ui tier
+                        so calibration ceiling reaches 90+.
 
      Hard penalty (deterministic, applied before cap):
        env_committed: -5 — committed \`.env\` file (security violation, no
@@ -1344,14 +1416,16 @@ OUTPUT RULES
        readme_depth_score — README length + Install/Usage section presence
      Mention these in delta_reasoning or strengths/concerns when relevant
      but do NOT deduct points (the hard slots above already calibrate).
-     Soft bonus (NOT in 50, stacks on top, capped +5):
+     Soft bonus (NOT in 50, stacks on top, capped +10):
         Ecosystem            +0-3  (stars / contributors / npm weekly downloads)
         Activity             +0-2  (recent commit / momentum)
+        Elite OSS            +0-5  (10K+ stars · 1M+ weekly dl · 100+ contributors)
      This means a polished tiny app with no tests / no CI / no observability
      gets ≤3 in the Maturity slot, capping its baseline naturally — old rubric
      let such projects climb to 88. The new rubric pulls them back to ~70.
      Conversely a 100K-star library with tests + CI + lockfile + governance
-     earns the full 10 Maturity + 3 Ecosystem soft, lifting it correctly.
+     earns the full Maturity slot + 3 Ecosystem + 5 Elite, lifting it
+     toward the 90+ band correctly.
   2) Apply deductions (in addition to baseline):
        · Each tampering_signal: high -10 to -20 · medium -5 · low -2
        · Lighthouse Performance  <50 and not NA: -3 (lighter than v1 since slot is now 8 not 10)
@@ -1372,9 +1446,15 @@ OUTPUT RULES
        · "no monorepo"        — already in source_hygiene.structure
        · "no governance docs" — already in source_hygiene.governance
        · "low completeness"   — already in completeness_pts (capped 0-2)
-       · "no GitHub stars"    — already in soft.ecosystem.stars
-       · "no contributors"    — already in soft.ecosystem.contributors
+       · "no GitHub stars"    — already in soft.ecosystem.stars (+ soft.elite if elite tier)
+       · "no contributors"    — already in soft.ecosystem.contributors (+ soft.elite if elite tier)
+       · "low npm downloads"  — already in soft.ecosystem.downloads (+ soft.elite if elite tier)
        · "no releases"        — already in soft.ecosystem.releases
+       · "below elite scale"  — already represented by soft.elite = 0
+       · also do NOT add a "+production-scale reach" plus chip for 1M+ npm
+         downloads or 100K+ stars: those signals already power soft.elite.
+         Naming them as a strength in scout_brief is fine; awarding +pts
+         in the breakdown is double-counting.
        · "stale repo"         — already in soft.activity.recent_commit
        · "thin README"        — README depth signal is informational only
        · "no responsive design" — already in production_maturity.responsive
@@ -2003,30 +2083,93 @@ Deno.serve(async (req) => {
     }),
   ])
 
-  // Score components · v2 (50pt cap with optional +5 soft bonus).
-  // See scoring section above for slot allocation.
-  const lhScore = scoreLighthouse(lh)                                          //  0-20
+  // Score components · v3 form-aware (2026-04-28).
+  //
+  // Web apps and non-web projects (libraries · CLIs · scaffolds · MCP
+  // servers) split the 27pt of LH+Live+Completeness slots differently:
+  //
+  //   isAppForm:  LH 20 (mobile Lighthouse) + Live 5 (HTTP+SSL+latency)
+  //               + Completeness 2 (og · meta · manifest · favicon · …)
+  //
+  //   non-app:    "LH" 20 reinterpreted as code/docs/types polish
+  //               "Live" 5 reinterpreted as npm publish + reach
+  //               "Completeness" 2 reinterpreted as release discipline
+  //
+  // This way the /52 hard ceiling stays uniform across forms and a
+  // polished CLI tool isn't structurally penalized 27pt for not having
+  // a public URL. Slot semantics adapt; the math doesn't.
+  const isAppForm = gh.form_factor === 'app' || gh.form_factor === 'unknown'
+
   const stackHints = [
     brief?.features ?? '',
     project.description ?? '',
   ].filter(Boolean) as string[]
   const tech       = scoreTechLayers(gh.languages || {}, stackHints)           //  0-3
-  const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on)
-  // Live URL Health · binary 5/0 (v3 calibration restored). v4 graded
-  // buckets (5/4/2/0) added complexity without proportional accuracy
-  // gain — the cliff at 3000ms wasn't actually causing variance in
-  // calibration set, just hypothetical concern.
-  const healthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0             //  0-5
+  const briefScore = scoreBriefIntegrity(brief ?? {})                          //  0-5  (0 for walk-on without substitute)
   const maturity   = scoreProductionMaturity(gh.signals, lh, lhDesktop)        //  0-12
   const hygiene    = scoreSourceHygiene(gh)                                    //  0-5  (v3 restored)
-  const completenessPts = scoreCompleteness(completeness)                      //  0-2
   const ecosystem  = scoreEcosystem(gh)                                        //  0-3 soft
   const activity   = scoreActivity(gh)                                         //  0-2 soft
+
+  // ── Web slots (only meaningful for app form) ──
+  const lhScore        = scoreLighthouse(lh)                                   //  0-20 (raw; only used if isAppForm)
+  // Live URL Health · binary 5/0 (v3 calibration restored).
+  const liveHealthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0
+  const completenessRawPts = scoreCompleteness(completeness)                   //  0-2
+
+  // ── Non-web equivalent slots (for library/cli/scaffold/mcp) ──
+  // Test depth · 0-8 (replaces ~Lighthouse Performance 8pt for libs)
+  const testFiles      = gh.signals.test_files
+  const libTestsPts    = testFiles >= 50 ? 8
+                       : testFiles >= 10 ? 6
+                       : testFiles >= 1  ? 3
+                       : 0
+  // Docs depth · 0-7 (replaces ~Lighthouse A11y 5 + BP 4 - 2 for libs)
+  const libDocsPts     = Math.min(7,
+    (gh.signals.has_readme_install ? 1 : 0) +
+    (gh.signals.has_readme_usage   ? 1 : 0) +
+    (gh.signals.readme_line_count >= 80 ? 2 : 0) +
+    (gh.signals.has_changelog          ? 1 : 0) +
+    (gh.signals.has_contributing       ? 1 : 0) +
+    (gh.signals.has_code_of_conduct    ? 1 : 0)
+  )
+  // Type discipline · 0-3 (replaces ~LH SEO 3 for libs — "discoverability"
+  // for libs = type definitions consumers can rely on)
+  const libTypesPts    = gh.signals.has_typescript_strict ? 3 : 0
+  // Production safety · 0-2 (LICENSE binary)
+  const libGovPts      = gh.signals.has_license ? 2 : 0
+  // Total non-app "LH equivalent" · 0-20
+  const libLhEquivPts  = libTestsPts + libDocsPts + libTypesPts + libGovPts
+
+  // npm publish + reach · 0-5 (replaces Live URL Health for libs)
+  const libNpmPub      = gh.npm.weekly_downloads != null ? 4 : 0
+  const libReach       = (gh.npm.weekly_downloads ?? 0) >= 1000 ? 1 : 0
+  const libLiveEquiv   = libNpmPub + libReach
+
+  // Release discipline · 0-2 (replaces Completeness for libs)
+  const libComplEquiv  = (gh.signals.releases_count >= 5 ? 1 : 0) +
+                         (gh.signals.has_changelog ? 1 : 0)
+
+  // Pick the right slot values based on form factor.
+  const lhPts          = isAppForm ? lhScore.total : libLhEquivPts             //  0-20
+  const healthPts      = isAppForm ? liveHealthPts : libLiveEquiv              //  0-5
+  const completenessPts = isAppForm ? completenessRawPts : libComplEquiv       //  0-2
+  // Walk-on Brief substitute · 0-3 pts when no Brief is submitted (CLI
+  // track) but README is rich AND the live URL is healthy. Lifts the
+  // walk-on ceiling from /47 toward /50 for projects that ship real
+  // documentation. Real Brief.pts always wins when present.
+  const briefSubst = brief ? { pts: 0, reason: 'graduation track · brief required' }
+                           : walkOnBriefSubstitute(gh, health)
+  const briefEffective = Math.max(briefScore.pts, briefSubst.pts)
+  // Elite ecosystem · 0-5 separate cap above the regular +3 ecosystem
+  // soft. Triple threshold (10K+ stars · 1M+ weekly downloads · 100+
+  // contributors) — production-scale OSS only.
+  const elite      = eliteEcosystem(gh)                                        //  0-5 soft
 
   // Hard security penalty · committed .env file is a categorical security
   // violation that no amount of polish offsets. -5 deterministic, applied
   // before cap so the best a project with .env in repo can score on
-  // walk-on (47/49 normalize) is ~85 even if all else is perfect.
+  // walk-on (50 normalize) is ~85 even if all else is perfect.
   const env_penalty = gh.signals.env_committed ? -5 : 0
 
   // Polish + Maturity coupling — a polished greenfield app with no tests /
@@ -2036,17 +2179,25 @@ Deno.serve(async (req) => {
   // 10/10 maturity → 100% polish credit. Maturity, Hygiene, Brief, and
   // Soft bonuses are NOT scaled — they're the maturity evidence itself.
   // This is the structural fix for the vibe-88 / shadcn-68 inversion.
+  //
+  // For non-app forms the "polish" slots ARE tests/docs/types/governance —
+  // already maturity evidence — so coupling them again would double-deflate
+  // libraries with thin coverage. maturityFactor = 1.0 for non-app.
   const maturityRatio  = maturity.pts / 10                               // 0.0 - 1.0
-  const maturityFactor = 0.6 + 0.4 * maturityRatio                       // 0.6 - 1.0
-  const polishSubtotal = lhScore.total + healthPts + completenessPts + tech.pts
+  const maturityFactor = isAppForm ? (0.6 + 0.4 * maturityRatio) : 1.0   // 0.6-1.0 for app · 1.0 for lib/cli/scaffold
+  const polishSubtotal = lhPts + healthPts + completenessPts + tech.pts
   const scaledPolish   = Math.round(polishSubtotal * maturityFactor)
 
   // Hard 50-cap pillar — Lighthouse + Maturity + Hygiene + Completeness +
   // TechDiv + Live + Brief = 20 + 10 + 5 + 2 + 3 + 5 + 5 = 50 (before scaling).
-  const auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefScore.pts
-  // Soft bonus stacks ON TOP, capped so total stays ≤ 60 (54 hard + 5 soft + 1 buffer).
-  const auto_soft = ecosystem.pts + activity.pts
-  const score_auto = Math.max(0, Math.min(60, auto_hard + auto_soft + env_penalty))
+  // briefEffective = max(real brief, walk-on substitute) so walk-on track
+  // can reach ~3pt of the brief slot via README depth + live URL.
+  const auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefEffective
+  // Soft bonus stacks ON TOP. ecosystem(3) + activity(2) + elite(5) = 10
+  // max soft. Combined cap raised to 65 to actually let elite OSS land
+  // in the 90+ band (60 cap was capping calibration before elite landed).
+  const auto_soft = ecosystem.pts + activity.pts + elite.pts
+  const score_auto = Math.max(0, Math.min(65, auto_hard + auto_soft + env_penalty))
 
   // Fetch parent snapshot BEFORE Claude call — for re-analysis we want Claude
   // to frame deltas against the prior snapshot, not against the brief.
@@ -2106,22 +2257,28 @@ Deno.serve(async (req) => {
     github: gh,
     scoring_so_far: {
       auto_50_breakdown: {
-        lighthouse:           lhScore,                 //  0-20 (Performance 8 · A11y 5 · BP 4 · SEO 3)
-        production_maturity:  maturity,                //  0-12 (tests · CI · observability · TS strict · lockfile · LICENSE · responsive)
-        source_hygiene:       hygiene,                 //  0-7  (github · monorepo · governance · security · legal · readme)
-        completeness_pts:     completenessPts,         //  0-2
+        is_app_form:          isAppForm,
+        // For app: Lighthouse mobile breakdown.
+        // For lib/cli/scaffold: substituted by libLhEquivPts (tests + docs +
+        // types + governance) — slot weight stays 0-20 either way.
+        lighthouse:           isAppForm ? lhScore : { total: libLhEquivPts, performance: null, accessibility: null, best_practices: null, seo: null, equivalent_for: gh.form_factor, breakdown: { tests: libTestsPts, docs: libDocsPts, types: libTypesPts, governance: libGovPts } },
+        production_maturity:  maturity,                //  0-12
+        source_hygiene:       hygiene,                 //  0-5
+        completeness_pts:     completenessPts,         //  0-2 (app: meta tags · lib/cli: release discipline)
         tech_pts:             tech.pts,                //  0-3
         tech_layers_detected: tech.layers,
-        brief_pts:            briefScore.pts,          //  0-5  (0 for walk-on)
-        health_pts:           healthPts,               //  0-5
+        brief_pts:            briefEffective,          //  0-5  (walk-on substitute capped at 3)
+        brief_substitute:     briefSubst,              //  describes which substitute pts applied if any
+        health_pts:           healthPts,               //  0-5 (app: live URL · lib/cli: npm publish + reach)
         env_penalty:          env_penalty,             //  -5 if .env committed
-        hard_subtotal:        auto_hard,               //  cap 54
+        hard_subtotal:        auto_hard,               //  cap 52
         soft: {
           ecosystem:          ecosystem,               //  +0-3 stars · contributors · npm dl · releases
           activity:           activity,                //  +0-2 recent commit · momentum
-          subtotal:           auto_soft,               //  +0-5
+          elite:              elite,                   //  +0-5 elite OSS triple threshold (10K stars · 1M dl · 100 contrib)
+          subtotal:           auto_soft,               //  +0-10
         },
-        total:                score_auto,              //  cap 60 (54 + 5 + buffer · env penalty applied)
+        total:                score_auto,              //  cap 65 (52 hard + 10 soft + buffer · env penalty applied)
       },
       polish_signals_0_to_5: completeness.score,
       form_factor:           gh.form_factor,
@@ -2153,7 +2310,7 @@ Deno.serve(async (req) => {
   // For league projects (auditioned), Claude's calibration matters
   // because it considers Brief integrity + Phase 1/2 cross-checks.
   const scoreTotal = isCliPreview
-    ? Math.min(100, Math.round((score_auto / 47) * 100))    // walk-on: deterministic /47 normalize (52 hard - 5 brief inaccessible · v3)
+    ? Math.min(100, Math.round((score_auto / 50) * 100))    // walk-on: deterministic /50 normalize (52 hard - 2 brief unattainable · partial Brief substitute up to 3pt)
     : (claude.score?.current && claude.score.current > 0
         ? Math.round(claude.score.current)
         : score_auto)
@@ -2230,15 +2387,17 @@ Deno.serve(async (req) => {
     score_total_delta: scoreTotalDelta,
     delta_from_parent: Object.keys(deltaFromParent).length ? deltaFromParent : null,
     breakdown: {
-      lighthouse:          lhScore,
+      is_app_form:         isAppForm,
+      lighthouse:          isAppForm ? lhScore : { total: libLhEquivPts, equivalent_for: gh.form_factor, breakdown: { tests: libTestsPts, docs: libDocsPts, types: libTypesPts, governance: libGovPts } },
       production_maturity: maturity,
       source_hygiene:      hygiene,
       completeness_pts:    completenessPts,
       tech:                { pts: tech.pts, layers: tech.layers },
-      brief:               briefScore,
+      brief:               { ...briefScore, effective: briefEffective, substitute: briefSubst },
       health_pts:          healthPts,
       ecosystem:           ecosystem,
       activity:            activity,
+      elite:               elite,
       hard_subtotal:       auto_hard,
       soft_subtotal:       auto_soft,
       form_factor:         gh.form_factor,

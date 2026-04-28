@@ -279,18 +279,20 @@ function LineRow({
 
   if (line.kind === 'big') {
     const rows = bigDigits(line.score)
+    // Plain monospace ASCII · no shadow / glow / extrusion. Fixed-integer
+    // fontSize keeps the grid tight on wide screens (sub-pixel drift was
+    // the breakage we hit at clamp() midpoints).
     return (
-      <div className="my-2 text-center">
+      <div className="text-center" style={{ margin: '0.5em 0' }}>
         {rows.map((row, i) => (
           <div
             key={i}
             style={{
-              color: '#D4A838',                   // brand goldDeep · matches CLI big digit
-              letterSpacing: '0.05em',
-              textShadow: '0 0 12px rgba(212,168,56,0.3)',
-              fontSize: '1.1em',                  // slightly bigger than line height
-              lineHeight: 1.05,
-              whiteSpace: 'pre',
+              color:       '#D4A838',
+              fontSize:    '16px',
+              lineHeight:  1.05,
+              whiteSpace:  'pre',
+              fontWeight:  700,
             }}
           >
             {row}

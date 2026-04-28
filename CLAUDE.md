@@ -242,34 +242,67 @@ vibe/
 
 ### 6.1 종합 점수 = Audit 50 + Scout 30 + Community 20
 
-**Audit pillar (52pt cap · v3 · 2026-04-27 restored)** — Tier-1 sub-slot 확장 (v4) 이 라이브러리 형태 부당 페널티로 calibration 깨뜨려 v3 으로 복귀. Tier-1 신호는 collected · Claude evidence 로만 활용.
+**Audit pillar (52pt cap · v3.1 form-aware · 2026-04-28)** — v3 calibration 복귀 + form_factor 별 slot 의미 재해석. 슬롯 WEIGHT 는 모든 form 동일 (52pt 천장 통일), 슬롯 SEMANTICS 만 적응 — 로컬 CLI/library 가 URL 없다고 27pt 자동 깎이는 구조적 페널티 제거.
+
+| 슬롯 (가중치) | App / web 형식 | Library/CLI/Scaffold 형식 |
+|---|---|---|
+| Lighthouse-equiv 20 | Perf 8 · A11y 5 · BP 4 · SEO 3 | Tests 8 · Docs 7 · TS-strict 3 · License 2 |
+| Live-equiv 5 | HTTP 200 + SSL + <3000ms | npm published 4 + weekly dl ≥1k +1 |
+| Completeness-equiv 2 | og · meta · favicon · apple-touch · … | releases ≥5 +1 · has_changelog +1 |
+| Production Maturity 12 | tests · CI · observability · TS strict · lockfile · LICENSE · responsive (form 무관) |
+| Source Hygiene 5 | github · monorepo · governance docs (form 무관) |
+| Tech Diversity 3 | frontend+backend+DB +2 · AI +1 · Web3/MCP +1 cap 3 |
+| Brief Integrity 5 | Phase 1 제출 시 5 · walk-on substitute 0-3 (live OK + README install/usage/depth) |
+
+`form_factor` 감지: app · library · cli · scaffold · unknown. `app` 또는 `unknown` 은 web slot · 그 외는 lib slot 으로 평가.
 
 ```
-Audit pillar (50pt 명목 cap · 실제 52pt 가능 — responsive slot 추가):
+Audit pillar (52pt hard cap · form-aware slot semantics):
+
+  ── App / web form ──
   Lighthouse mobile         20  Performance 8 · A11y 5 · BP 4 · SEO 3
                                 step buckets: Perf 90+=8 · 70-89=6 · 50-69=3 · <50=0
                                               A11y 90+=5 · 70-89=3 · <70=1
                                               BP   90+=4 · 70-89=2 · <70=0
                                               SEO  90+=3 · 70-89=2 · <70=0
                                 not assessed → neutral midpoint
-  Production Maturity       12  tests 0-3 · CI +2 · observability +2 · TS strict +1 ·
-                                lockfile +1 · LICENSE +1 · responsive 0-2
-                                · Polish×Maturity coupling: factor 0.6+0.4×(maturity/10)
-                                  scales LH+Live+Compl+Tech polish slots
-  Source Hygiene             5  github accessible 3 · monorepo +1 · governance docs +1
-                                (governance = 2+ of CONTRIBUTING/CHANGELOG/CODE_OF_CONDUCT)
   Live URL Health            5  HTTP 200 + SSL + < 3000ms · 모두 만족 시 5, 아니면 0
   Completeness signals       2  10 신호 (og:image · twitter · manifest · apple-touch ·
                                 theme-color · favicon · canonical · meta-desc 등)
                                 round((filled/5)*2)
+
+  ── Library / CLI / scaffold form (substituted) ──
+  Lighthouse-equiv          20  Tests: 50+=8 · 10-49=6 · 1-9=3 · 0=0
+                                Docs (cap 7): install +1 · usage +1 · ≥80 lines +2
+                                              changelog +1 · contributing +1 · CoC +1
+                                TS strict 3
+                                LICENSE 2
+  Live-equiv                 5  npm published 4 + weekly dl ≥1k +1
+  Completeness-equiv         2  releases ≥5 +1 · has_changelog +1
+
+  ── Common slots (form 무관) ──
+  Production Maturity       12  tests 0-3 · CI +2 · observability +2 · TS strict +1 ·
+                                lockfile +1 · LICENSE +1 · responsive 0-2
+                                · App form: Polish×Maturity coupling factor 0.6+0.4×(maturity/10)
+                                  scales LH+Live+Compl+Tech polish slots
+                                · Non-app form: Polish×Maturity factor = 1.0 (polish IS maturity)
+  Source Hygiene             5  github accessible 3 · monorepo +1 · governance docs +1
   Tech Layer Diversity       3  frontend+backend+DB +2 · AI layer +1 · Web3/MCP +1 (cap 3)
   Build Brief Integrity      5  Phase 1 · 3/3 → 5 · 2/3 → 3 · 1/3 → 1 · 0/3 → 0
-                                (walk-on 은 0 · 분모 47 정규화)
+                                walk-on track substitute (no Brief): up to 3 of 5
+                                — live URL OK + README has Install AND Usage AND
+                                ≥80 lines → 3 · 2 of those → 2 · 1 → 1 · else 0
+                                (분모 50 정규화 · 52 hard - 2 unattainable brief pts)
 
-Soft bonuses (cap +5):
+Soft bonuses (cap +10 total · v3 elite tier added 2026-04-28):
   Ecosystem soft           +0-3 stars 100/1K/10K (cap 2) + contributors 50+ (1) +
                                 npm dl 1K+ (1) + releases 5+ (1) — all to cap 3
   Activity soft            +0-2 recent commit ≤30d +1 · momentum (≥20 commits / last 100) +1
+  Elite OSS soft           +0-5 production-scale triple threshold —
+                                10K+ stars AND 1M+ weekly npm downloads AND 100+
+                                contributors → 5. Any 2 of 3 → 2. Else 0.
+                                Designed for the supabase / cal.com / shadcn-ui
+                                tier so calibration ceiling reaches 90+.
 
 Hard penalty (deterministic · pre-cap):
   env_committed             -5  paths 에 .env / .env.production 등 발견 시
@@ -285,9 +318,10 @@ Tier-1 evidence (수집만 · 슬롯 점수 영향 X · Claude prompt 에 eviden
   has_prefers_reduced_motion    CSS @media (prefers-reduced-motion)
   npm_downloads                 last-week downloads (libraries only)
 
-Total cap: 52pt + 5 soft = 57. score_auto cap 60.
+Total cap: 52pt + 10 soft = 62. score_auto cap 65.
 
-CLI walk-on score = score_auto / 47 × 100 (52 hard - 5 brief inaccessible).
+CLI walk-on score = score_auto / 50 × 100 (52 hard - 2 brief unattainable
+                    · partial Brief substitute up to 3pt available).
 League score      = Claude.score.current (qualitative bonuses + deductions adjusted).
 
 엔진 모델: claude-sonnet-4-6 (사용자 노출 명칭 = "Audit" / "Audit report").
@@ -1286,7 +1320,7 @@ delta + URL 워드마크가 한 화면에 들어가면 "82 / 100 · Honors track
 commitshow audit     [<target>] [--refresh] [--json] [--watch]
   Run Audit on a target. Polls analyze-project Edge Function, renders
   the report inline, and writes .commitshow/audit.md for AI re-read.
-  Walk-on track: status="preview" project · score_total = score_auto/47*100
+  Walk-on track: status="preview" project · score_total = score_auto/50*100
   (deterministic, Brief slot inaccessible · normalized to /100 display).
 
   Flags:
