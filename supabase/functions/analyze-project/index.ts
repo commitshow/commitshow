@@ -2427,6 +2427,14 @@ Deno.serve(async (req) => {
     /\bproduction[\s-]?scale\s+reach\b/i,
     // Already in soft.activity
     /\bstale\s+repo\b/i,
+    // Brief slot is already calibrated in baseline (briefEffective: 0-5,
+    // walk-on capped at 3 via substitute). Claude was adding a separate
+    // -10 chip "No Build Brief submitted (walk-on ceiling 45/50)" — that
+    // is the third deduction for the same fact (slot floor + cap + chip).
+    /\bno\s+(build\s+)?brief\b/i,
+    /\bbrief\s+(absent|missing|not\s+submitted|empty|unclaimed)/i,
+    /\bwalk[\s-]?on\s+ceiling\b/i,
+    /\b(no|missing)\s+phase[\s-]?\d+\s+brief\b/i,
   ]
   type Chip = { kind: string; points: number; label?: string; evidence?: string }
   const breakdown = claude.score?.breakdown
