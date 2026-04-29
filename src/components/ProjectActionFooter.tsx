@@ -110,7 +110,7 @@ export function ProjectActionFooter({
 
       {!isVotingPhase && (
         <div className="mt-4 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          Forecasts close outside the 3-week league window.
+          Forecasts open during a quarterly event. The ladder keeps ranking in the meantime.
         </div>
       )}
     </section>

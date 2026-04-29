@@ -1,4 +1,5 @@
 import { Hero } from '../components/Hero'
+import { LadderTopStrip } from '../components/LadderTopStrip'
 import { SeasonProgressBar } from '../components/SeasonProgress'
 import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
 import { useHeroStats } from '../lib/heroStats'
@@ -47,7 +48,7 @@ const GRADE_ICONS: Record<string, React.ReactNode> = {
 }
 
 const GRADE_DATA = [
-  { name: 'Rookie',        cond: '1+ application submitted · 0 graduated' },
+  { name: 'Rookie',        cond: '1+ audit · 0 graduated' },
   { name: 'Builder',       cond: '1 graduated · avg 60+' },
   { name: 'Maker',         cond: '2 graduated · avg 70+' },
   { name: 'Architect',     cond: '3 graduated · avg 75+ · tech diversity' },
@@ -56,11 +57,11 @@ const GRADE_DATA = [
 ]
 
 const UNLOCK_DATA = [
-  { votes: 'Application',  label: 'Initial Evaluation',       desc: 'Source structure · live performance audit · brief integrity · live URL health',          active: true },
-  { votes: '3 votes',      label: 'Code Quality Snapshot',    desc: 'Complexity analysis · duplicate pattern detection · function length audit',            active: false },
-  { votes: '5 votes',      label: 'Security Layer Analysis',  desc: 'Row-level security review · secret exposure check · API auth patterns',                active: false },
-  { votes: '10 votes',     label: 'Production Ready Check',   desc: 'Core Web Vitals · dependency vulnerabilities · uptime estimation',                     active: false },
-  { votes: '20 votes',     label: 'Scout Deep Review',        desc: 'Structured expert feedback interface — Platinum+ Scouts only',                         active: false },
+  { votes: 'Audit 1',     label: 'Initial audit',            desc: 'Source structure · live performance audit · brief integrity · live URL health',          active: true },
+  { votes: '3 votes',     label: 'Code quality snapshot',    desc: 'Complexity · duplicate patterns · function length',                                       active: false },
+  { votes: '5 votes',     label: 'Security layer audit',     desc: 'Row-level security review · secret exposure · API auth patterns',                        active: false },
+  { votes: '10 votes',    label: 'Production-ready check',   desc: 'Core Web Vitals · dependency vulnerabilities · uptime estimation',                       active: false },
+  { votes: '20 votes',    label: 'Scout deep review',        desc: 'Structured expert feedback interface — Platinum+ Scouts only',                           active: false },
 ]
 
 export function LandingPage() {
@@ -70,42 +71,71 @@ export function LandingPage() {
     <div className="relative min-h-screen">
       <Hero stats={stats} />
 
-      {/* ── SEASON PROGRESS ── */}
-      <section className="relative z-10 px-4 md:px-6 pt-4 pb-0">
-        <div className="max-w-5xl mx-auto">
-          <SeasonProgressBar />
-        </div>
-      </section>
+      {/* ── LADDER TOP 3 · always-on · §11-NEW.1 ── */}
+      <LadderTopStrip />
 
-      {/* ── THIS WEEK IN COMMIT · P6 3-min digest hook ── */}
-      <ThisWeekHighlight />
-
-      {/* ── HOW IT WORKS ── */}
+      {/* ── HOW IT WORKS · two layers (always-on + quarterly) ──
+          v3 reframe: Ladder runs continuously; quarterly events
+          (Season Zero etc.) culminate in graduation. Audience needs
+          both surfaces in the same glance — left = always, right =
+          seasonal. */}
       <section id="how" className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// HOW IT WORKS</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight">
-            3-week league<br />Real graduation
+            Ladder always live<br />Quarterly graduation
           </h2>
-          <p className="font-light max-w-md mb-14" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            Not just upvotes. A structured analysis system that separates production-ready projects from prototypes.
+          <p className="font-light max-w-xl mb-14" style={{ color: 'rgba(248,245,238,0.45)' }}>
+            Two layers. The ladder runs the whole year — every audited project ranks against its category.
+            Quarterly events stack a Scout-Forecast layer on top and end in a graduation tier.
           </p>
 
-          <div className="grid md:grid-cols-3 gap-6 mb-20">
-            {[
-              { pct: '50%', color: 'var(--gold-500)', title: 'Automated Evaluation', desc: 'Source structure · live performance audit · brief integrity · live URL health · tech-layer diversity. Objective. Uncheatable.' },
-              { pct: '30%', color: '#A78BFA',         title: 'Scout Forecast',       desc: 'Weighted votes from verified Scouts. Platinum×3 · Gold×2 · Silver×1.5 · Bronze×1. Quality over quantity.' },
-              { pct: '20%', color: '#00D4AA',         title: 'Community Signal',     desc: 'Views · comment depth · shares · return visits. Quality-weighted — not raw counts.' },
-            ].map(({ pct, color, title, desc }) => (
-              <div key={title} className="card-navy p-7 transition-all duration-200 hover:border-gold-500/30">
-                <div className="font-display font-black mb-2" style={{ fontSize: '2.8rem', color, lineHeight: 1 }}>{pct}</div>
-                <div className="font-medium mb-2" style={{ color: 'var(--cream)' }}>{title}</div>
-                <div className="text-sm font-light leading-relaxed" style={{ color: 'rgba(248,245,238,0.4)' }}>{desc}</div>
+          <div className="grid md:grid-cols-2 gap-5 mb-16">
+            {/* Always-on layer */}
+            <div className="card-navy p-7" style={{ borderLeft: '3px solid var(--gold-500)' }}>
+              <div className="font-mono text-[10px] tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>ALWAYS-ON · LADDER</div>
+              <h3 className="font-display font-bold text-2xl mb-1" style={{ color: 'var(--cream)' }}>
+                Audit · 70%
+              </h3>
+              <h3 className="font-display font-bold text-2xl mb-4" style={{ color: 'var(--cream)' }}>
+                Community · 30%
+              </h3>
+              <p className="text-sm font-light leading-relaxed mb-5" style={{ color: 'rgba(248,245,238,0.55)' }}>
+                Source structure, live performance, brief integrity, tech-layer diversity, vibe-coder-specific
+                concerns (RLS, webhook idempotency, secret exposure, …). Ranked by category, refreshed every
+                5 minutes.
+              </p>
+              <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                6 categories · saas · tools · ai agents · games · libraries · other
               </div>
-            ))}
+            </div>
+
+            {/* Quarterly layer */}
+            <div className="card-navy p-7" style={{ borderLeft: '3px solid #A78BFA' }}>
+              <div className="font-mono text-[10px] tracking-widest mb-3" style={{ color: '#A78BFA' }}>QUARTERLY · GRADUATION</div>
+              <h3 className="font-display font-bold text-2xl mb-1" style={{ color: 'var(--cream)' }}>
+                Audit 50 + Scout 30 + Community 20
+              </h3>
+              <h3 className="font-display font-bold text-2xl mb-4" style={{ color: 'var(--cream)' }}>
+                Real cohorts. Real outcomes.
+              </h3>
+              <p className="text-sm font-light leading-relaxed mb-5" style={{ color: 'rgba(248,245,238,0.55)' }}>
+                Every 3 weeks a Scout-Forecast layer adds expert prediction weight. The top 20% of the
+                quarterly cohort graduates: 1 Valedictorian, 5% Honors, 14.5% Graduate. The rest join the
+                Rookie Circle and come back next season.
+              </p>
+              <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                Season Zero · auditioning now
+              </div>
+            </div>
           </div>
 
-          <div className="font-mono text-xs tracking-widest mb-6" style={{ color: 'rgba(248,245,238,0.3)' }}>PROGRESSIVE REVEAL — ANALYSIS UNLOCKS WITH SCOUT VOTES</div>
+          {/* Current quarterly progress · subtle, beneath the layered cards */}
+          <div className="mb-20">
+            <SeasonProgressBar />
+          </div>
+
+          <div className="font-mono text-xs tracking-widest mb-6" style={{ color: 'rgba(248,245,238,0.3)' }}>PROGRESSIVE REVEAL — DEEPER ANALYSIS UNLOCKS WITH SCOUT VOTES</div>
           <div className="relative">
             <div className="absolute left-4 top-0 bottom-0 w-px" style={{ background: 'linear-gradient(to bottom, var(--gold-500), transparent)', opacity: 0.2 }} />
             {UNLOCK_DATA.map(({ votes, label, desc, active }) => (
@@ -130,24 +160,30 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── GRADUATION ── */}
+      {/* ── THIS WEEK · 3-min digest ── */}
+      <ThisWeekHighlight />
+
+      {/* ── QUARTERLY CULMINATION · graduation tiers ── */}
       <section className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
         <div className="max-w-5xl mx-auto">
-          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// GRADUATION SYSTEM</div>
-          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-12">
-            Graduate or retry
+          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: '#A78BFA' }}>// QUARTERLY CULMINATION</div>
+          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">
+            Top 20% graduates
           </h2>
+          <p className="font-light max-w-xl mb-12" style={{ color: 'rgba(248,245,238,0.45)' }}>
+            Relative cut against the season cohort — not an absolute score gate. Everything below 20%
+            joins the Rookie Circle and comes back next season.
+          </p>
           <div className="grid md:grid-cols-4 gap-4">
             {[
-              { grade: 'Valedictorian', pct: '≈0.5% (1 fixed)',  refund: '100% + $500 bonus', color: '#F0C040', perks: 'Hall of Fame · 10K media exposure · 1wk featured · Special NFT' },
-              { grade: 'Honors',        pct: 'Top 5%',           refund: '85%',               color: '#A78BFA', perks: 'Hall of Fame · Cert badge · Featured · NFT' },
-              { grade: 'Graduate',      pct: 'Top 20%',          refund: '70%',               color: '#60A5FA', perks: 'Grad badge · Brief full reveal · MD marketplace access' },
-              { grade: 'Retry',         pct: 'Bottom 80%',       refund: '0%',                color: '#6B7280', perks: 'Audit report · Brief private option · Retry next season' },
-            ].map(({ grade, pct, refund, color, perks }) => (
+              { grade: 'Valedictorian', pct: '≈0.5% (1 fixed)',  color: '#F0C040', perks: 'Hall of Fame · 10K media exposure · 1wk featured · Special NFT' },
+              { grade: 'Honors',        pct: 'Top 5%',           color: '#A78BFA', perks: 'Hall of Fame · Cert badge · Featured · NFT' },
+              { grade: 'Graduate',      pct: 'Top 20%',          color: '#60A5FA', perks: 'Grad badge · Brief full reveal · MD marketplace access' },
+              { grade: 'Rookie Circle', pct: 'Everyone else',    color: '#6B7280', perks: 'Audit report · Brief private option · Try again next season' },
+            ].map(({ grade, pct, color, perks }) => (
               <div key={grade} className="card-navy p-5 transition-all hover:border-gold-500/20" style={{ borderTop: `3px solid ${color}` }}>
                 <div className="font-display font-bold text-base mb-0.5" style={{ color }}>{grade}</div>
                 <div className="font-mono text-xs mb-3" style={{ color: 'rgba(248,245,238,0.3)' }}>{pct}</div>
-                <div className="font-mono text-sm font-medium mb-3" style={{ color: 'var(--cream)' }}>Refund: {refund}</div>
                 <div className="text-xs font-light leading-relaxed" style={{ color: 'rgba(248,245,238,0.4)' }}>{perks}</div>
               </div>
             ))}
