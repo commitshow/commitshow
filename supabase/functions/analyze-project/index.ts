@@ -145,6 +145,9 @@ interface GitHubInfo {
     is_monorepo: boolean                 // workspaces / turbo.json / pnpm-workspace.yaml
     app_root: string                     // detected sub-folder app root ('' when at repo root)
     form_factor: string                  // mirror of gh.form_factor for snapshot persistence (B18)
+    is_saas: boolean                     // SaaS sub-form (app + api routes + db + auth) · 2026-04-29
+    has_auth_signals: boolean            // auth lib / middleware / sign-in routes detected
+    has_db_layer: boolean                // db lib in deps OR migrations OR RLS detected
     // ── Responsive design signals (NEW · v3 mobile audit) ──
     tailwind_responsive_count: number    // count of `sm:` `md:` `lg:` `xl:` `2xl:` prefixes
     tailwind_class_total:      number    // total class occurrences sampled (denominator)
@@ -301,6 +304,9 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       is_monorepo: false,
       app_root: '',
       form_factor: 'unknown',
+      is_saas: false,
+      has_auth_signals: false,
+      has_db_layer: false,
       tailwind_responsive_count: 0, tailwind_class_total: 0,
       css_media_query_count: 0,
       has_overflow_x_hidden: false,
@@ -974,6 +980,43 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     },
   }
 
+  // ── SaaS form detection (sub-form of 'app') ──
+  // Lighthouse on a SaaS landing page measures the marketing slice, not
+  // the auth-walled product. So for SaaS we shift weight away from LH
+  // toward Production Maturity + a new Backend Signals slot derived
+  // from vibe_concerns (RLS · webhook · indexes · rate-limit · secrets).
+  //
+  // Heuristic: app-form + has API routes + has DB layer + has auth
+  // boundary signals. Conservative — we'd rather miss SaaS detection
+  // than misclassify a marketing site.
+  const has_db_layer = (() => {
+    const allDeps = pkgParsed
+      ? { ...((pkgParsed as { dependencies?: Record<string, string> }).dependencies ?? {}),
+          ...((pkgParsed as { devDependencies?: Record<string, string> }).devDependencies ?? {}) }
+      : {} as Record<string, string>
+    const dbLibs = ['@supabase/supabase-js', '@prisma/client', 'prisma', 'drizzle-orm',
+                    'kysely', '@neondatabase/serverless', 'mongodb', 'pg', 'mysql2',
+                    '@planetscale/database', 'firebase']
+    return dbLibs.some(l => Object.keys(allDeps).some(k => k === l || k.startsWith(l)))
+        || sqlFiles.length >= 2
+        || hasRls
+  })()
+  const has_auth_signals = (() => {
+    const allDeps = pkgParsed
+      ? { ...((pkgParsed as { dependencies?: Record<string, string> }).dependencies ?? {}),
+          ...((pkgParsed as { devDependencies?: Record<string, string> }).devDependencies ?? {}) }
+      : {} as Record<string, string>
+    const authLibs = ['next-auth', '@auth/', 'clerk', '@clerk/', '@supabase/auth-helpers',
+                       'lucia', 'iron-session', 'jose', 'passport']
+    if (authLibs.some(l => Object.keys(allDeps).some(k => k === l || k.startsWith(l)))) return true
+    // Path-based: middleware.ts at root or app · auth/ subdirs
+    return paths.some(p =>
+      /^(app\/middleware|src\/middleware|middleware)\.(ts|js|tsx|jsx)$/.test(p) ||
+      /(^|\/)(auth|sign-in|signin|login|signup)\/[^/]+\.(ts|tsx|js|jsx)$/.test(p)
+    )
+  })()
+  const is_saas = has_api_routes && has_db_layer && has_auth_signals
+
   // ── README depth analysis ── (uses readmeRaw already fetched above)
   const readmeFull = readmeRaw ?? ''
   const readme_line_count = readmeFull.split('\n').length
@@ -1101,6 +1144,9 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       is_monorepo,
       app_root,                         // detected sub-folder when no root package.json (e.g. 'website')
       form_factor,                      // mirror of gh.form_factor so snapshot.github_signals retains it (B18)
+      is_saas,                          // SaaS sub-form (app + api routes + db + auth) · 2026-04-29
+      has_auth_signals,
+      has_db_layer,
       tailwind_responsive_count,
       tailwind_class_total,
       css_media_query_count,
@@ -2619,6 +2665,13 @@ Deno.serve(async (req) => {
   // available to Claude as evidence in the prompt.
   const isAppForm    = gh.form_factor === 'app' || gh.form_factor === 'unknown'
   const useWebSlots  = isAppForm && health.ok
+  // SaaS sub-form: app-form + auth-walled product. Lighthouse on a
+  // SaaS lands ONLY on the marketing page (auth gates the actual
+  // product), so slot weights shift: LH ↓, Production Maturity ↑,
+  // Source Hygiene ↑, Live URL Health ↓, NEW Backend Signals slot
+  // (5pt from RLS / webhook / indexes / rate-limit / secrets in
+  // vibe_concerns). Total still sums to 52pt cap.
+  const isSaasForm   = useWebSlots && gh.signals.is_saas
 
   const stackHints = [
     brief?.features ?? '',
@@ -2715,14 +2768,69 @@ Deno.serve(async (req) => {
   const polishSubtotal = lhPts + healthPts + completenessPts + tech.pts
   const scaledPolish   = Math.round(polishSubtotal * maturityFactor)
 
-  // Hard 50-cap pillar — Lighthouse + Maturity + Hygiene + Completeness +
-  // TechDiv + Live + Brief = 20 + 10 + 5 + 2 + 3 + 5 + 5 = 50 (before scaling).
-  // briefEffective = max(real brief, walk-on substitute) so walk-on track
-  // can reach ~3pt of the brief slot via README depth + live URL.
-  const auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefEffective
-  // Soft bonus stacks ON TOP. ecosystem(3) + activity(2) + elite(5) = 10
-  // max soft. Combined cap raised to 65 to actually let elite OSS land
-  // in the 90+ band (60 cap was capping calibration before elite landed).
+  // ── Backend Signals slot · 0-5 (SaaS form only · 2026-04-29) ──
+  // Reads from vibe_concerns to score the auth-walled product surface
+  // that Lighthouse can't reach. Only contributes for is_saas; for
+  // non-SaaS this stays 0 (signals still surface as concerns in scout
+  // brief, just not double-scored).
+  let backendSignalsPts = 0
+  let backendBreakdown: Record<string, number> = {}
+  if (isSaasForm) {
+    const vc = gh.signals.vibe_concerns
+    // Webhook · 0-2 · pass=2 partial=1 fail=0 NA=skip
+    let webhookPt = 0
+    if (vc.webhook_idempotency.handlers_seen > 0) {
+      const w = vc.webhook_idempotency
+      webhookPt = w.gap ? 0 : (w.idempotency_signal_seen >= w.handlers_seen ? 2 : 1)
+    }
+    // RLS · 0-2 · all covered=2 · small gap=1 · large gap=0
+    let rlsPt = 0
+    if (vc.rls_gaps.tables > 0) {
+      const r = vc.rls_gaps
+      rlsPt = r.gap_estimate === 0 ? 2 : r.gap_estimate <= 2 ? 1 : 0
+    }
+    // Secret exposure · 0-2 · clean=2 · violations=0 · NA=2 (no client violations is the safe state)
+    const secretsPt = vc.secret_exposure.total === 0 ? 2 : 0
+    // DB indexes · 0-2 · full=2 · partial=1 · gap=0 · NA=skip
+    let indexPt = 0
+    if (vc.db_indexes.fk_columns_seen > 0) {
+      indexPt = vc.db_indexes.gap_estimate === 0 ? 2
+              : vc.db_indexes.gap_estimate <= 3 ? 1 : 0
+    }
+    // Rate limit · 0-1 · present=1 · attention=0 · NA=skip
+    let ratePt = 0
+    if (vc.rate_limit.has_api_routes) {
+      ratePt = (vc.rate_limit.lib_detected || vc.rate_limit.middleware_detected) ? 1 : 0
+    }
+    backendBreakdown = { webhook: webhookPt, rls: rlsPt, secrets: secretsPt, indexes: indexPt, rate_limit: ratePt }
+    backendSignalsPts = Math.min(5, webhookPt + rlsPt + secretsPt + indexPt + ratePt)
+  }
+
+  // Hard 52-cap pillar · slot weights vary by form factor:
+  //   web/lib (default): LH 20 · PM 12 · SH 5 · Live 5 · Compl 2 · Tech 3 · Brief 5 = 52
+  //   SaaS  (auth-walled product, LH only sees marketing landing):
+  //          LH 10 · PM 18 · SH 7  · Live 2 · Compl 2 · Tech 3 · Brief 5 · Backend 5 = 52
+  //
+  // briefEffective = max(real brief, walk-on substitute) · soft bonuses
+  // stack on top capped +10. SaaS scaling for the LH slot specifically
+  // uses scaledPolish-style coupling but rebalances multipliers.
+  let auto_hard: number
+  if (isSaasForm) {
+    // SaaS: rescale slot contributions while keeping totals in 52pt envelope.
+    // Multipliers chosen so ceiling sums match SaaS distribution above.
+    const lhSaas      = Math.round((lhScore.total      / 20) * 10) // 20→10
+    const healthSaas  = Math.round((liveHealthPts      /  5) *  2) // 5→2
+    const matSaas     = Math.round((maturity.pts       / 12) * 18) // 12→18
+    const hygSaas     = Math.round((hygiene.pts        /  5) *  7) // 5→7
+    // Tech, Compl, Brief unchanged (3 / 2 / 5).
+    // Polish×Maturity coupling still applies to LH+Live+Compl+Tech for SaaS
+    // (these are still polish slots), with SaaS-rescaled values.
+    const polishSaas  = lhSaas + healthSaas + completenessPts + tech.pts
+    const scaledSaas  = Math.round(polishSaas * maturityFactor)
+    auto_hard = scaledSaas + matSaas + hygSaas + briefEffective + backendSignalsPts
+  } else {
+    auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefEffective
+  }
   const auto_soft = ecosystem.pts + activity.pts + elite.pts
   const score_auto = Math.max(0, Math.min(65, auto_hard + auto_soft + env_penalty))
 
