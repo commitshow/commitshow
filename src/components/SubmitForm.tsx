@@ -176,14 +176,17 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     let insertedId: string
     if (verdict.kind === 'claim') {
       // CLAIM — upgrade the CLI preview row. Snapshot history stays intact.
-      const { data: updated, error: updErr } = await supabase
+      // Skip .select().single() because RLS on the UPDATE may return 0 rows
+      // even on success (PostgREST then throws "Cannot coerce the result to
+      // a single JSON object"). We already know the id from verdict, so we
+      // only need to know whether the UPDATE itself errored.
+      const { error: updErr } = await supabase
         .from('projects').update(projectFields).eq('id', verdict.projectId)
-        .select('id').single()
-      if (updErr || !updated?.id) {
-        setError(`Failed to claim preview project: ${updErr?.message ?? 'unknown'}`)
+      if (updErr) {
+        setError(`Failed to claim preview project: ${updErr.message}`)
         setStep(2); return
       }
-      insertedId = updated.id
+      insertedId = verdict.projectId
     } else {
       // FRESH — no prior row for this URL.
       const { data: inserted, error: projectErr } = await supabase
@@ -200,7 +203,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     // claim flow doesn't collide with whatever brief the CLI/preview path
     // wrote earlier (and a fresh insert still works).
     setLoaderIndex(1)
-    await supabase.from('build_briefs').upsert([{
+    const { error: briefErr } = await supabase.from('build_briefs').upsert([{
       project_id: inserted.id,
       problem:     finalBrief.core_intent.problem,
       features:    finalBrief.core_intent.features,
@@ -213,6 +216,12 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       next_blocker:         `${finalBrief.next_blocker.current_blocker}\n\nFirst AI task: ${finalBrief.next_blocker.first_ai_task}`,
       integrity_score:      integrityScore(finalBrief),
     }], { onConflict: 'project_id' })
+    if (briefErr) {
+      // Persist failure was a silent black hole before · audit reads brief_id
+      // off this row, so missing it tanks Brief Integrity scoring.
+      setError(`Failed to save brief: ${briefErr.message}`)
+      setStep(2); return
+    }
 
     // Step 3 — Edge Function deep analysis (initial snapshot)
     setLoaderIndex(2)
