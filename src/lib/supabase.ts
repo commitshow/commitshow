@@ -196,7 +196,8 @@ export const PUBLIC_PROJECT_COLUMNS =
   'verdict, claude_insight, tech_layers, unlock_level, status, ' +
   'graduation_grade, season, graduated_at, media_published_at, creator_id, ' +
   'creator_name, season_id, updated_at, project_name, last_analysis_at, ' +
-  'thumbnail_url, thumbnail_path, images'
+  'thumbnail_url, thumbnail_path, images, ' +
+  'business_category, detected_category, audit_count'
 
 export type Member = {
   id: string
@@ -258,6 +259,10 @@ export type Project = {
   thumbnail_url: string | null       // denormalized images[0].url · DB trigger keeps it synced
   thumbnail_path: string | null      // denormalized images[0].path
   images: ProjectImage[]             // up to 3 · [0] is primary
+  // §11-NEW.1.1 ladder category (Migration A · 2026-04-29)
+  business_category: LadderCategory | null    // Creator-set or backfilled · drives ladder bucket
+  detected_category: LadderCategory | null    // Auto-detected at audit time
+  audit_count:       number                    // tiebreaker · increments per audit
 }
 
 export interface ProjectImage {

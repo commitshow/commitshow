@@ -58,7 +58,7 @@ export function ProjectsPage() {
             )}
             <div className="flex items-center gap-2 flex-shrink-0">
               <NavLink
-                to="/leaderboard"
+                to="/ladder"
                 className="font-mono text-[11px] tracking-wide px-3 py-1.5 whitespace-nowrap"
                 style={{
                   background: 'transparent',
@@ -76,7 +76,21 @@ export function ProjectsPage() {
                   e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
               >
-                MAP VIEW →
+                LADDER →
+              </NavLink>
+              <NavLink
+                to="/leaderboard"
+                className="font-mono text-[10px] tracking-wide px-2 py-1.5 whitespace-nowrap hidden md:inline-block"
+                style={{
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '2px',
+                  textDecoration: 'none',
+                }}
+                title="2D scatter map · Audit × Scout"
+              >
+                MAP
               </NavLink>
               {!user && (
                 <NavLink

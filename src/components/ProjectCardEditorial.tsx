@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import type { Project } from '../lib/supabase'
+import { type Project, LADDER_CATEGORY_LABELS } from '../lib/supabase'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { IconForecast, IconApplaud, IconGraduation } from './icons'
 import { resolveCreatorName } from '../lib/creatorName'
@@ -91,6 +91,20 @@ export function ProjectCardEditorial({
           }}>
             <IconGraduation size={10} />
             {p.status === 'valedictorian' ? 'Valedictorian' : 'Graduated'}
+          </span>
+        )}
+        {/* §11-NEW.1.1 ladder category badge · sits opposite the graduation
+            chip when both apply. Hidden for 'other' since that's the misc
+            bucket and adds noise. */}
+        {p.business_category && p.business_category !== 'other' && (
+          <span className={`absolute ${isGraduated ? 'bottom-3' : 'top-3'} left-3 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5`} style={{
+            background: 'rgba(15,32,64,0.7)',
+            color: 'var(--cream)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: '2px',
+            backdropFilter: 'blur(6px)',
+          }}>
+            {LADDER_CATEGORY_LABELS[p.business_category]}
           </span>
         )}
       </div>

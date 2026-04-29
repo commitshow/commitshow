@@ -151,10 +151,12 @@ export async function fetchGraduating(): Promise<Project[]> {
 // Filtered + paginated feed for the main grid.
 export interface GridFilters {
   search?: string
-  grade?: string        // creator_grade
+  grade?: string         // creator_grade
   status?: 'any' | 'active' | 'graduated' | 'retry'
   minScore?: number
   sort?: 'newest' | 'score' | 'forecasts'
+  // §11-NEW.1.1 ladder category filter · 'any' = no filter
+  category?: 'any' | 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other'
 }
 
 export async function fetchProjectsFiltered(
@@ -171,6 +173,9 @@ export async function fetchProjectsFiltered(
 
   if (filters.grade)       q = q.eq('creator_grade', filters.grade)
   if (filters.minScore)    q = q.gte('score_total', filters.minScore)
+  if (filters.category && filters.category !== 'any') {
+    q = q.eq('business_category', filters.category)
+  }
   if (filters.search?.trim()) {
     const s = filters.search.trim().replace(/[%_]/g, m => `\\${m}`)
     q = q.ilike('project_name', `%${s}%`)

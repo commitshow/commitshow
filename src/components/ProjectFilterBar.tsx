@@ -12,6 +12,18 @@ const STATUS_TABS: Array<{ value: NonNullable<ProjectFilters['status']>; label: 
   { value: 'retry',     label: 'Rookie Circle' },
 ]
 
+// §11-NEW.1.1 ladder category chip strip — sits right above the search row
+// so the category dimension is hard to miss. 'any' is the leftmost (default).
+const CATEGORY_TABS: Array<{ value: NonNullable<ProjectFilters['category']>; label: string }> = [
+  { value: 'any',      label: 'All categories' },
+  { value: 'saas',     label: 'SaaS'           },
+  { value: 'tool',     label: 'Tools'          },
+  { value: 'ai_agent', label: 'AI Agents'      },
+  { value: 'game',     label: 'Games'          },
+  { value: 'library',  label: 'Libraries'      },
+  { value: 'other',    label: 'Other'          },
+]
+
 const SORTS: Array<{ value: NonNullable<ProjectFilters['sort']>; label: string }> = [
   { value: 'newest',    label: 'Newest'         },
   { value: 'score',     label: 'Top score'      },
@@ -36,13 +48,38 @@ export function ProjectFilterBar({ value, onChange, totalCount }: Props) {
   const set = <K extends keyof ProjectFilters>(key: K) =>
     (v: ProjectFilters[K]) => onChange({ ...value, [key]: v })
 
-  const currentStatus = value.status ?? 'any'
+  const currentStatus   = value.status   ?? 'any'
+  const currentCategory = value.category ?? 'any'
   const hasGrade    = !!value.grade
   const hasMinScore = !!value.minScore && value.minScore > 0
   const drawerCount = (hasGrade ? 1 : 0) + (hasMinScore ? 1 : 0)
 
   return (
     <div>
+      {/* ── Category chip strip · primary filter axis (§11-NEW.1.1) ── */}
+      <div className="mb-2 flex items-center gap-1.5 flex-wrap">
+        {CATEGORY_TABS.map(c => {
+          const active = currentCategory === c.value
+          return (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => set('category')(c.value)}
+              className="font-mono text-[11px] tracking-wide px-2.5 py-1"
+              style={{
+                background:  active ? 'rgba(240,192,64,0.12)' : 'transparent',
+                color:       active ? 'var(--gold-500)' : 'var(--text-secondary)',
+                border:      `1px solid ${active ? 'rgba(240,192,64,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: '2px',
+                cursor:      'pointer',
+              }}
+            >
+              {c.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* ── Single row · pump.fun-style dense controls ── */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
