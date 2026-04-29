@@ -12,7 +12,53 @@
 // starts returning rows without redeploy.
 
 import { supabase } from './supabase'
-import type { LadderCategory, LadderWindow } from './supabase'
+import type { LadderCategory, LadderWindow, Project } from './supabase'
+
+// ── In-memory cache (SWR pattern · 2026-04-30) ─────────────────
+// /ladder reads the same MV-backed data on every navigation. Cache
+// keyed by (category, window, view) so back-and-forth between filter
+// chips is instant. TTL keeps it shorter than the MV cron (5min) so
+// stale data doesn't pile up; mount always background-refetches.
+//
+// Updates reflect immediately because:
+//   1. New data overwrites cache on every fetch resolution
+//   2. invalidateLadderCache() can be called from anywhere (e.g.
+//      admin re-audit success path) to force the next mount to
+//      bypass cache entirely
+const CACHE_TTL_MS = 30_000
+
+interface CacheEntry<T> { data: T; fetchedAt: number }
+const listCache    = new Map<string, CacheEntry<LadderRow[]>>()
+const projectCache = new Map<string, CacheEntry<Array<{ project: Project; rank: number }>>>()
+const countsCache  = new Map<string, CacheEntry<Record<LadderCategory, number>>>()
+
+function cacheKey(category: LadderCategory, window: LadderWindow): string {
+  return `${category}|${window}`
+}
+function isFresh<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
+  return !!entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS
+}
+
+/** Force the next fetch to bypass cache (e.g. after a triggered audit). */
+export function invalidateLadderCache(): void {
+  listCache.clear()
+  projectCache.clear()
+  countsCache.clear()
+}
+
+/** Read whatever's cached now · used by the page for instant first paint. */
+export function getCachedLadder(category: LadderCategory, window: LadderWindow): LadderRow[] | null {
+  const e = listCache.get(cacheKey(category, window))
+  return isFresh(e) ? e.data : null
+}
+export function getCachedLadderProjects(category: LadderCategory, window: LadderWindow): Array<{ project: Project; rank: number }> | null {
+  const e = projectCache.get(cacheKey(category, window))
+  return isFresh(e) ? e.data : null
+}
+export function getCachedCounts(window: LadderWindow): Record<LadderCategory, number> | null {
+  const e = countsCache.get(window)
+  return isFresh(e) ? e.data : null
+}
 
 export interface LadderRow {
   project_id:    string
@@ -83,7 +129,7 @@ export async function fetchLadder(
     ((pj as unknown as ProjRow[]) ?? []).map(p => [p.id, p])
   )
 
-  return (mvRows as unknown as MvRaw[]).map(r => {
+  const result = (mvRows as unknown as MvRaw[]).map(r => {
     const p = pmap.get(r.project_id)
     return {
       project_id:    r.project_id,
@@ -102,6 +148,8 @@ export async function fetchLadder(
       creator_name:  p?.creator_name ?? null,
     }
   })
+  listCache.set(cacheKey(category, window), { data: result, fetchedAt: Date.now() })
+  return result
 }
 
 // Editorial-card view of /ladder · same MV ordering, full Project rows.
@@ -112,7 +160,7 @@ export async function fetchLadderProjects(
   category: LadderCategory,
   window:   LadderWindow,
   limit = 50,
-): Promise<{ project: import('./supabase').Project; rank: number }[]> {
+): Promise<{ project: Project; rank: number }[]> {
   const rankCol = RANK_COLUMN[window]
   const { data: ids, error: idsErr } = await supabase
     .from('ladder_rankings_mv')
@@ -136,12 +184,13 @@ export async function fetchLadderProjects(
     rankMap.set(r.project_id, r[rankCol] as number)
   }
   // Preserve MV order
-  type P = import('./supabase').Project
-  const projectMap = new Map<string, P>((projects as unknown as P[]).map(p => [p.id, p]))
-  return idList
+  const projectMap = new Map<string, Project>((projects as unknown as Project[]).map(p => [p.id, p]))
+  const result = idList
     .map(id => projectMap.get(id))
-    .filter((p): p is P => !!p)
+    .filter((p): p is Project => !!p)
     .map(p => ({ project: p, rank: rankMap.get(p.id) ?? 0 }))
+  projectCache.set(cacheKey(category, window), { data: result, fetchedAt: Date.now() })
+  return result
 }
 
 // Per-category counts for the chip strip ("SaaS · 47 ranked").
@@ -160,5 +209,6 @@ export async function fetchLadderCounts(window: LadderWindow): Promise<Record<La
   for (const row of data as unknown as Array<{ category: LadderCategory }>) {
     if (row.category in empty) empty[row.category] = (empty[row.category] ?? 0) + 1
   }
+  countsCache.set(window, { data: empty, fetchedAt: Date.now() })
   return empty
 }

@@ -239,6 +239,9 @@ export function AnalysisResultCard({
     setRerunBusy(true); setRerunError(null)
     try {
       const next = await analyzeProject(projectId, 'resubmit')
+      // Score may have changed · drop ladder cache so the user sees the
+      // updated rank without waiting 30s for TTL.
+      void import('../lib/ladder').then(m => m.invalidateLadderCache())
       onReanalyzed?.(next)
       // Scroll to the top so the creator sees the fresh result from the
       // headline down (the modal covered whatever was underneath, so the

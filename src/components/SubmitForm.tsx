@@ -241,6 +241,10 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     // DiscoveryPanel picks up inserted rows via its own fetch/realtime.
     triggerMDDiscovery(inserted.id)
 
+    // Drop ladder cache so the user's new audit shows up next time they
+    // hit /ladder — instead of waiting for the 30s TTL to expire.
+    void import('../lib/ladder').then(m => m.invalidateLadderCache())
+
     onComplete?.(inserted.id)
   }
 

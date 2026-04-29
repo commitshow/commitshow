@@ -19,7 +19,11 @@ import {
   type LadderWindow,
   type Project,
 } from '../lib/supabase'
-import { fetchLadder, fetchLadderCounts, fetchLadderProjects, type LadderRow } from '../lib/ladder'
+import {
+  fetchLadder, fetchLadderCounts, fetchLadderProjects,
+  getCachedLadder, getCachedLadderProjects, getCachedCounts,
+  type LadderRow,
+} from '../lib/ladder'
 import { fetchCreatorsByIds, fetchApplaudCounts, type CreatorIdentity } from '../lib/projectQueries'
 import { ProjectCardEditorial } from '../components/ProjectCardEditorial'
 import { FeaturedLanes } from '../components/FeaturedLanes'
@@ -61,7 +65,31 @@ export function LadderPage() {
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
+
+    // SWR-style: paint cached data immediately if fresh, then always
+    // refetch in the background. invalidateLadderCache() (called from
+    // /admin re-audit success) wipes both maps so the next mount goes
+    // straight to network.
+    const cachedCounts = getCachedCounts(window)
+    if (cachedCounts) setCounts(cachedCounts)
+
+    if (view === 'cards') {
+      const cachedCards = getCachedLadderProjects(category, window)
+      if (cachedCards) {
+        setCardRows(cachedCards)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
+    } else {
+      const cachedRows = getCachedLadder(category, window)
+      if (cachedRows) {
+        setRows(cachedRows)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
+    }
 
     const dataPromise = view === 'cards'
       ? fetchLadderProjects(category, window, 50)
@@ -287,13 +315,26 @@ function LadderRowItem({ row, onOpen }: { row: LadderRow; onOpen: () => void }) 
       <button
         type="button"
         onClick={onOpen}
-        className="w-full px-4 md:px-5 py-3 flex items-center gap-4 text-left"
+        className="w-full px-4 md:px-5 py-3 flex items-center gap-3 md:gap-4 text-left"
         style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(240,192,64,0.04)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
-        <div className="font-mono font-medium tabular-nums text-base flex-shrink-0 text-center" style={{ color: rankTone, width: 36 }}>
+        <div className="font-mono font-medium tabular-nums text-base flex-shrink-0 text-center" style={{ color: rankTone, width: 28 }}>
           {row.rank}
+        </div>
+        {/* Thumbnail · 16:9 mini · falls back to a faint mono initial when absent */}
+        <div className="flex-shrink-0 overflow-hidden" style={{
+          width: 64, height: 36, background: 'var(--navy-800)',
+          border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px',
+        }}>
+          {row.thumbnail_url ? (
+            <img src={row.thumbnail_url} alt="" loading="lazy" className="w-full h-full" style={{ objectFit: 'cover' }} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
+              {(row.project_name || '·').slice(0, 1).toUpperCase()}
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-display font-bold text-base truncate" style={{ color: 'var(--cream)' }}>

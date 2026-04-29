@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { invalidateLadderCache } from '../lib/ladder'
 
 const ADMIN_TOKEN_KEY = 'commitshow.admin.token'
 
@@ -118,10 +119,14 @@ export function AdminPage() {
   const [userList, setUserList]     = useState<UserRow[]>([])
   const [loadErr, setLoadErr]       = useState<string | null>(null)
 
-  // 강제 재감사 폼
+  // 강제 재감사 · 글로벌 폼 (Tools 탭) + 행별 진행 상태 (Audits / CLI 탭)
   const [refreshUrl, setRefreshUrl] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [refreshOut, setRefreshOut] = useState<string | null>(null)
+  // 행별 in-flight URL set + 결과 메시지 (URL 키 기준).
+  // 한 번에 여러 행 재감사 가능하게 Set + Map 으로 분리.
+  const [rowBusy, setRowBusy] = useState<Set<string>>(new Set())
+  const [rowOut, setRowOut]   = useState<Map<string, { kind: 'ok' | 'err' | 'done'; msg: string }>>(new Map())
 
   // 권한 토글
   const [grantBusyId, setGrantBusyId]     = useState<string | null>(null)
@@ -329,10 +334,48 @@ export function AdminPage() {
     setRecent(mapped)
   }
 
-  async function handleForceRefresh(githubUrl: string) {
-    if (!token) { setRefreshOut('관리자 토큰이 필요합니다 · 도구 탭에서 입력'); return }
-    setRefreshing(true)
-    setRefreshOut(null)
+  async function handleForceRefresh(githubUrl: string, opts?: { perRow?: boolean }) {
+    const perRow = opts?.perRow === true
+    if (!token) {
+      const msg = '관리자 토큰이 필요합니다 · 도구 탭에서 입력'
+      if (perRow) setRowOut(prev => new Map(prev).set(githubUrl, { kind: 'err', msg }))
+      else        setRefreshOut(msg)
+      return
+    }
+
+    if (perRow) {
+      setRowBusy(prev => { const n = new Set(prev); n.add(githubUrl); return n })
+      setRowOut(prev => { const n = new Map(prev); n.set(githubUrl, { kind: 'ok', msg: '트리거 중…' }); return n })
+    } else {
+      setRefreshing(true)
+      setRefreshOut(null)
+    }
+
+    // Capture baseline · the latest snapshot's created_at for THIS project
+    // (matched via github_url ilike) so we can detect when a new snapshot
+    // lands. If no project exists yet (first audit), baseline stays null.
+    let baselineSnapAt: string | null = null
+    let baselineProjectId: string | null = null
+    {
+      const { data: pj } = await supabase
+        .from('projects')
+        .select('id')
+        .ilike('github_url', `${githubUrl}%`)
+        .limit(1)
+        .maybeSingle()
+      baselineProjectId = (pj as { id?: string } | null)?.id ?? null
+      if (baselineProjectId) {
+        const { data: snap } = await supabase
+          .from('analysis_snapshots')
+          .select('created_at')
+          .eq('project_id', baselineProjectId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        baselineSnapAt = (snap as { created_at?: string } | null)?.created_at ?? null
+      }
+    }
+
     try {
       const res = await fetch(`${(supabase as any).supabaseUrl}/functions/v1/audit-preview`, {
         method: 'POST',
@@ -345,17 +388,67 @@ export function AdminPage() {
         body: JSON.stringify({ github_url: githubUrl, force: true }),
       })
       const body = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setRefreshOut(`✅ 트리거됨 · status: ${body.status} · project_id: ${body.project_id?.slice(0, 8)}`)
-        // 60초 후 자동 새로고침
-        setTimeout(() => { void loadRecent() }, 60_000)
-      } else {
-        setRefreshOut(`❌ 실패: ${body.error ?? res.status} · ${body.message ?? ''}`)
+      if (!res.ok) {
+        const msg = `❌ 실패: ${body.error ?? res.status} · ${body.message ?? ''}`
+        if (perRow) setRowOut(prev => new Map(prev).set(githubUrl, { kind: 'err', msg }))
+        else        setRefreshOut(msg)
+        return
+      }
+
+      const triggered = `✅ 트리거됨 · pid ${body.project_id?.slice(0, 8) ?? '?'} · 결과 폴링 중…`
+      if (perRow) setRowOut(prev => new Map(prev).set(githubUrl, { kind: 'ok', msg: triggered }))
+      else        setRefreshOut(triggered)
+
+      const projectId = (body.project_id as string | undefined) ?? baselineProjectId
+      if (projectId) {
+        // Poll up to 150s for a new snapshot strictly newer than baseline.
+        // analyze-project takes 60-120s typically.
+        const startedAt = Date.now()
+        const deadline  = startedAt + 150_000
+        let resolved   = false
+        while (Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 5000))
+          const { data: snap } = await supabase
+            .from('analysis_snapshots')
+            .select('id, created_at, score_total, rich_analysis')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          const fresh = snap as { id?: string; created_at?: string; score_total?: number; rich_analysis?: { error?: unknown } } | null
+          if (fresh?.created_at && fresh.created_at !== baselineSnapAt) {
+            const elapsed = Math.round((Date.now() - startedAt) / 1000)
+            const err     = fresh.rich_analysis?.error
+            const score   = fresh.score_total ?? 0
+            const done    = err
+              ? `⚠ 새 snapshot 받았으나 분석 에러 · ${elapsed}s`
+              : `✅ 완료 · score ${score}/100 · ${elapsed}s`
+            if (perRow) setRowOut(prev => new Map(prev).set(githubUrl, { kind: err ? 'err' : 'done', msg: done }))
+            else        setRefreshOut(done)
+            resolved = true
+            // Invalidate ladder cache so next /ladder visit shows the new score
+            invalidateLadderCache()
+            await loadRecent()
+            await loadCliUsage()
+            break
+          }
+        }
+        if (!resolved) {
+          const msg = '⏰ 폴링 타임아웃 · 백그라운드에서 진행 중일 수 있음 · 새로고침 권장'
+          if (perRow) setRowOut(prev => new Map(prev).set(githubUrl, { kind: 'err', msg }))
+          else        setRefreshOut(msg)
+        }
       }
     } catch (e: any) {
-      setRefreshOut(`❌ 오류: ${String(e?.message ?? e)}`)
+      const msg = `❌ 오류: ${String(e?.message ?? e)}`
+      if (perRow) setRowOut(prev => new Map(prev).set(githubUrl, { kind: 'err', msg }))
+      else        setRefreshOut(msg)
     } finally {
-      setRefreshing(false)
+      if (perRow) {
+        setRowBusy(prev => { const n = new Set(prev); n.delete(githubUrl); return n })
+      } else {
+        setRefreshing(false)
+      }
     }
   }
 
@@ -571,8 +664,8 @@ export function AdminPage() {
 
         {tab === 'overview' && <Overview userStats={userStats} auditStats={auditStats} cliUsage={cliUsage} onNavigate={setTab} />}
         {tab === 'users'    && <UsersTab stats={userStats} list={userList} currentUserId={user.id} onToggleAdmin={handleToggleAdmin} grantBusyId={grantBusyId} grantOut={grantOut} hasToken={!!token} />}
-        {tab === 'audits'   && <AuditsTab stats={auditStats} recent={recent} onForceRefresh={handleForceRefresh} refreshing={refreshing} refreshOut={refreshOut} />}
-        {tab === 'cli'      && <CliTab usage={cliUsage} />}
+        {tab === 'audits'   && <AuditsTab stats={auditStats} recent={recent} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
+        {tab === 'cli'      && <CliTab usage={cliUsage} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
         {tab === 'tools'    && (
           <ToolsTab
             token={token}
@@ -749,12 +842,13 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
   )
 }
 
-function AuditsTab({ stats, recent, onForceRefresh, refreshing, refreshOut }: {
+function AuditsTab({ stats, recent, onForceRefresh, rowBusy, rowOut, hasToken }: {
   stats: AuditStats | null
   recent: RecentAudit[]
   onForceRefresh: (url: string) => void
-  refreshing: boolean
-  refreshOut: string | null
+  rowBusy: Set<string>
+  rowOut: Map<string, { kind: 'ok' | 'err' | 'done'; msg: string }>
+  hasToken: boolean
 }) {
   if (!stats) return <Loading />
   return (
@@ -766,9 +860,9 @@ function AuditsTab({ stats, recent, onForceRefresh, refreshing, refreshOut }: {
         <Stat label="실패 (24h)"    value={stats.failed24h}  sub="" tone={stats.failed24h > 0 ? 'warn' : 'ok'} />
       </div>
 
-      {refreshOut && (
-        <div className="p-3 font-mono text-xs" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff' }}>
-          {refreshOut}
+      {!hasToken && (
+        <div className="p-3 font-mono text-xs" style={{ background: 'rgba(248,120,113,0.08)', border: '1px solid rgba(248,120,113,0.25)', color: '#F88771', borderRadius: '2px' }}>
+          ⚠ 관리자 토큰 미저장 — 재감사 버튼은 도구 탭에서 ADMIN_TOKEN 입력 후 사용 가능
         </div>
       )}
 
@@ -776,44 +870,64 @@ function AuditsTab({ stats, recent, onForceRefresh, refreshing, refreshOut }: {
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 최근 30 audit</div>
         <div className="space-y-1">
           {recent.length === 0 && <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>(빈 결과)</div>}
-          {recent.map(r => (
-            <div key={r.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center px-3 py-2 text-xs" style={{
-              background: r.has_error ? 'rgba(200,16,46,0.06)' : 'rgba(255,255,255,0.02)',
-              border:     r.has_error ? '1px solid rgba(200,16,46,0.25)' : '1px solid rgba(255,255,255,0.04)',
-              borderRadius: '2px',
-            }}>
-              <div className="min-w-0">
-                <div className="font-mono truncate" style={{ color: '#fff' }}>
-                  {r.project_name}
-                  {r.has_error && <span className="ml-2" style={{ color: 'var(--scarlet)' }}>· 에러: {r.error_msg}</span>}
+          {recent.map(r => {
+            const busy = !!r.github_url && rowBusy.has(r.github_url)
+            const out  = r.github_url ? rowOut.get(r.github_url) : undefined
+            return (
+              <div key={r.id} style={{
+                background: r.has_error ? 'rgba(200,16,46,0.06)' : 'rgba(255,255,255,0.02)',
+                border:     r.has_error ? '1px solid rgba(200,16,46,0.25)' : '1px solid rgba(255,255,255,0.04)',
+                borderRadius: '2px',
+              }}>
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center px-3 py-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-mono truncate" style={{ color: '#fff' }}>
+                      {r.project_name}
+                      {r.has_error && <span className="ml-2" style={{ color: 'var(--scarlet)' }}>· 에러: {r.error_msg}</span>}
+                    </div>
+                    <div className="font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.github_url ?? ''}</div>
+                  </div>
+                  <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : '#fff' }}>{r.score_total}</span>
+                  <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.trigger_type}</span>
+                  <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{new Date(r.created_at).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}</span>
+                  <button
+                    disabled={busy || !r.github_url || !hasToken}
+                    onClick={() => r.github_url && onForceRefresh(r.github_url)}
+                    className="font-mono text-[10px] tracking-wide px-2 py-1 inline-flex items-center gap-1.5"
+                    style={{
+                      background: 'var(--gold-500)', color: 'var(--navy-900)',
+                      border: 'none', borderRadius: '2px',
+                      cursor: busy || !r.github_url || !hasToken ? 'not-allowed' : 'pointer',
+                      opacity: busy || !r.github_url || !hasToken ? 0.4 : 1,
+                    }}
+                  >
+                    {busy && <span className="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true" />}
+                    {busy ? '진행중' : '재감사'}
+                  </button>
                 </div>
-                <div className="font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.github_url ?? ''}</div>
+                {out && (
+                  <div className="px-3 pb-2 font-mono text-[11px]" style={{
+                    color: out.kind === 'err' ? '#F88771' : out.kind === 'done' ? '#00D4AA' : 'var(--gold-500)',
+                  }}>
+                    {out.msg}
+                  </div>
+                )}
               </div>
-              <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : '#fff' }}>{r.score_total}</span>
-              <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.trigger_type}</span>
-              <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{new Date(r.created_at).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}</span>
-              <button
-                disabled={refreshing || !r.github_url}
-                onClick={() => r.github_url && onForceRefresh(r.github_url)}
-                className="font-mono text-[10px] tracking-wide px-2 py-1"
-                style={{
-                  background: 'var(--gold-500)', color: 'var(--navy-900)',
-                  border: 'none', borderRadius: '2px',
-                  cursor: refreshing || !r.github_url ? 'not-allowed' : 'pointer',
-                  opacity: refreshing || !r.github_url ? 0.4 : 1,
-                }}
-              >
-                재감사
-              </button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
-function CliTab({ usage }: { usage: CliUsage | null }) {
+function CliTab({ usage, onForceRefresh, rowBusy, rowOut, hasToken }: {
+  usage: CliUsage | null
+  onForceRefresh: (url: string) => void
+  rowBusy: Set<string>
+  rowOut: Map<string, { kind: 'ok' | 'err' | 'done'; msg: string }>
+  hasToken: boolean
+}) {
   if (!usage) return <Loading />
   return (
     <div className="space-y-6">
@@ -844,27 +958,59 @@ function CliTab({ usage }: { usage: CliUsage | null }) {
 
       <div>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 최근 CLI 호출 10개 (walk-on)</div>
+        {!hasToken && (
+          <div className="mb-2 p-2 font-mono text-[11px]" style={{ background: 'rgba(248,120,113,0.08)', border: '1px solid rgba(248,120,113,0.2)', color: '#F88771', borderRadius: '2px' }}>
+            ⚠ 재감사는 ADMIN_TOKEN 필요 · 도구 탭에서 입력
+          </div>
+        )}
         <div className="space-y-1">
           {usage.recentCalls.length === 0 && <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>(아직 없음)</div>}
-          {usage.recentCalls.map(r => (
-            <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-xs" style={{
-              background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
-              borderRadius: '2px',
-            }}>
-              <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                {fmtRelative(r.created_at)}
-              </span>
-              <span className="font-mono truncate flex-1 min-w-0" style={{ color: '#fff' }} title={r.github_url ?? r.project_name}>
-                {r.project_name}
-              </span>
-              <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                {r.trigger_type}
-              </span>
-              <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--gold-500)' }}>
-                {r.score_total}/100
-              </span>
-            </div>
-          ))}
+          {usage.recentCalls.map(r => {
+            const busy = !!r.github_url && rowBusy.has(r.github_url)
+            const out  = r.github_url ? rowOut.get(r.github_url) : undefined
+            return (
+              <div key={r.id} style={{
+                background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+                borderRadius: '2px',
+              }}>
+                <div className="flex items-center gap-3 px-3 py-2 text-xs">
+                  <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    {fmtRelative(r.created_at)}
+                  </span>
+                  <span className="font-mono truncate flex-1 min-w-0" style={{ color: '#fff' }} title={r.github_url ?? r.project_name}>
+                    {r.project_name}
+                  </span>
+                  <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    {r.trigger_type}
+                  </span>
+                  <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--gold-500)' }}>
+                    {r.score_total}/100
+                  </span>
+                  <button
+                    disabled={busy || !r.github_url || !hasToken}
+                    onClick={() => r.github_url && onForceRefresh(r.github_url)}
+                    className="font-mono text-[10px] tracking-wide px-2 py-1 inline-flex items-center gap-1.5 whitespace-nowrap"
+                    style={{
+                      background: 'var(--gold-500)', color: 'var(--navy-900)',
+                      border: 'none', borderRadius: '2px',
+                      cursor: busy || !r.github_url || !hasToken ? 'not-allowed' : 'pointer',
+                      opacity: busy || !r.github_url || !hasToken ? 0.4 : 1,
+                    }}
+                  >
+                    {busy && <span className="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true" />}
+                    {busy ? '진행중' : '재감사'}
+                  </button>
+                </div>
+                {out && (
+                  <div className="px-3 pb-2 font-mono text-[11px]" style={{
+                    color: out.kind === 'err' ? '#F88771' : out.kind === 'done' ? '#00D4AA' : 'var(--gold-500)',
+                  }}>
+                    {out.msg}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
