@@ -10,13 +10,13 @@ export function SubmitPage() {
       <div className="max-w-2xl mx-auto pt-8">
         <div className="text-center mb-12">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>
-            // AUDITION · SEASON ZERO
+            // AUDIT YOUR BUILD
           </div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-3">
-            Audition your product
+            Get on the ladder
           </h2>
           <p className="font-light" style={{ color: 'rgba(248,245,238,0.4)' }}>
-            Four steps · engine-extracted brief · multi-axis audit in ~90s
+            Four steps · engine-extracted brief · multi-axis audit in ~90s · ranked the moment it finishes
           </p>
         </div>
 

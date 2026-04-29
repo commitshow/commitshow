@@ -73,7 +73,7 @@ export function Hero(_props: HeroProps) {
             }}
           >
             <span className="pulse-dot w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-            SEASON ZERO · NOW OPEN<span className="hidden sm:inline"> · CLASS OF 2026</span>
+            LADDER LIVE<span className="hidden sm:inline"> · CLASS OF 2026</span>
           </div>
 
           <TypedH1 />

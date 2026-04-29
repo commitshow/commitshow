@@ -97,7 +97,7 @@ export default function App() {
           <a href="/rulebook"  style={{ color: 'inherit', textDecoration: 'none' }}>Rulebook</a>
         </div>
         <p className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
-          Vibe Coding League · Season Zero · US Launch 2026 · All scores algorithmically determined
+          Vibe Coding Ladder · US Launch 2026 · All scores algorithmically determined
         </p>
       </footer>
     </div>

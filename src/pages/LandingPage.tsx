@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Hero } from '../components/Hero'
 import { LadderTopStrip } from '../components/LadderTopStrip'
 import { SeasonProgressBar } from '../components/SeasonProgress'
 import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
 import { useHeroStats } from '../lib/heroStats'
+import { loadCurrentSeason } from '../lib/season'
+import type { Season } from '../lib/supabase'
 
 // Simple monochrome line icons — inherit stroke from currentColor.
 // Kept small and editorial so the gold accent is the only color in the set.
@@ -66,6 +69,12 @@ const UNLOCK_DATA = [
 
 export function LandingPage() {
   const stats = useHeroStats()
+  const [currentQuarterly, setCurrentQuarterly] = useState<Season | null>(null)
+  useEffect(() => {
+    let alive = true
+    loadCurrentSeason().then(s => { if (alive) setCurrentQuarterly(s) })
+    return () => { alive = false }
+  }, [])
 
   return (
     <div className="relative min-h-screen">
@@ -87,7 +96,8 @@ export function LandingPage() {
           </h2>
           <p className="font-light max-w-xl mb-14" style={{ color: 'rgba(248,245,238,0.45)' }}>
             Two layers. The ladder runs the whole year — every audited project ranks against its category.
-            Quarterly events stack a Scout-Forecast layer on top and end in a graduation tier.
+            Quarterly events drop in on the admin's schedule, stack a Scout-Forecast layer on top, and end
+            in a graduation tier.
           </p>
 
           <div className="grid md:grid-cols-2 gap-5 mb-16">
@@ -125,7 +135,9 @@ export function LandingPage() {
                 Rookie Circle and come back next season.
               </p>
               <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                Season Zero · auditioning now
+                {currentQuarterly
+                  ? `${currentQuarterly.name} · ${currentQuarterly.status === 'active' ? 'auditioning now' : currentQuarterly.status === 'upcoming' ? 'opens soon' : 'closed'}`
+                  : 'No quarterly running · ladder is open'}
               </div>
             </div>
           </div>
