@@ -45,61 +45,63 @@ export async function fetchLadder(
 ): Promise<LadderRow[]> {
   const rankCol = RANK_COLUMN[window]
 
-  const { data, error } = await supabase
+  // Two-step instead of embedded join: PostgREST won't auto-infer the
+  // ladder_rankings_mv ↔ projects relationship (MV has no FK constraints,
+  // so PGRST200 'no relationship found' is what came back). Pull MV rows
+  // first, then fetch the matching projects in a separate query.
+  const { data: mvRows, error } = await supabase
     .from('ladder_rankings_mv')
-    .select(`
-      project_id, category, score_total, score_auto, audit_count,
-      audited_at, commit_sha,
-      ${rankCol},
-      projects!inner(project_name, github_url, thumbnail_url, status, creator_id, creator_name)
-    `)
+    .select(`project_id, category, score_total, score_auto, audit_count, audited_at, commit_sha, ${rankCol}`)
     .eq('category', category)
     .not(rankCol, 'is', null)
     .order(rankCol, { ascending: true })
     .limit(limit)
+  if (error || !mvRows || mvRows.length === 0) return []
 
-  // MV may not exist yet (Migration A pending). Treat any error as empty
-  // and let the page render its empty state.
-  if (error || !data) return []
-
-  type Raw = {
-    project_id: string
-    category: LadderCategory
+  type MvRaw = {
+    project_id:  string
+    category:    LadderCategory
     score_total: number
-    score_auto: number
+    score_auto:  number
     audit_count: number
-    audited_at: string | null
-    commit_sha: string | null
-    rank_today?: number | null
-    rank_week?: number | null
-    rank_month?: number | null
-    rank_all_time?: number | null
-    projects: {
-      project_name: string
-      github_url:   string | null
-      thumbnail_url: string | null
-      status:       string
-      creator_id:   string | null
-      creator_name: string | null
-    } | null
+    audited_at:  string | null
+    commit_sha:  string | null
+    [k: string]: unknown
   }
 
-  return (data as unknown as Raw[]).map(r => ({
-    project_id:    r.project_id,
-    rank:          (r[rankCol as keyof Raw] as number) ?? 0,
-    category:      r.category,
-    score_total:   r.score_total,
-    score_auto:    r.score_auto,
-    audit_count:   r.audit_count,
-    audited_at:    r.audited_at,
-    commit_sha:    r.commit_sha,
-    project_name:  r.projects?.project_name ?? '—',
-    github_url:    r.projects?.github_url ?? null,
-    thumbnail_url: r.projects?.thumbnail_url ?? null,
-    status:        r.projects?.status ?? 'active',
-    creator_id:    r.projects?.creator_id ?? null,
-    creator_name:  r.projects?.creator_name ?? null,
-  }))
+  const ids = (mvRows as unknown as MvRaw[]).map(r => r.project_id)
+  const { data: pj } = await supabase
+    .from('projects')
+    .select('id, project_name, github_url, thumbnail_url, status, creator_id, creator_name')
+    .in('id', ids)
+  type ProjRow = {
+    id: string; project_name: string; github_url: string | null
+    thumbnail_url: string | null; status: string
+    creator_id: string | null; creator_name: string | null
+  }
+  const pmap = new Map<string, ProjRow>(
+    ((pj as unknown as ProjRow[]) ?? []).map(p => [p.id, p])
+  )
+
+  return (mvRows as unknown as MvRaw[]).map(r => {
+    const p = pmap.get(r.project_id)
+    return {
+      project_id:    r.project_id,
+      rank:          (r[rankCol] as number) ?? 0,
+      category:      r.category,
+      score_total:   r.score_total,
+      score_auto:    r.score_auto,
+      audit_count:   r.audit_count,
+      audited_at:    r.audited_at,
+      commit_sha:    r.commit_sha,
+      project_name:  p?.project_name ?? '—',
+      github_url:    p?.github_url ?? null,
+      thumbnail_url: p?.thumbnail_url ?? null,
+      status:        p?.status ?? 'active',
+      creator_id:    p?.creator_id ?? null,
+      creator_name:  p?.creator_name ?? null,
+    }
+  })
 }
 
 // Editorial-card view of /ladder · same MV ordering, full Project rows.
