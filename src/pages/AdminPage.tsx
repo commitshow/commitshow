@@ -44,6 +44,15 @@ interface CliUsage {
   uniqueIps:         number
   topRepos:          Array<{ url: string; count: number }>
   globalRemaining:   number | null
+  recentCalls:       Array<{
+    id:           string
+    project_id:   string | null
+    project_name: string
+    github_url:   string | null
+    score_total:  number
+    trigger_type: string
+    created_at:   string
+  }>
 }
 
 interface RecentAudit {
@@ -252,9 +261,16 @@ export function AdminPage() {
 
   async function loadCliUsage() {
     const today = new Date().toISOString().slice(0, 10)
-    const [allRes, globalRes] = await Promise.all([
+    const [allRes, globalRes, recentRes] = await Promise.all([
       supabase.from('preview_rate_limits').select('ip_hash, count').eq('day', today).limit(500),
       supabase.from('preview_rate_limits').select('count').eq('ip_hash', 'global').eq('day', today).maybeSingle(),
+      // §11-NEW.7 admin · latest 10 CLI calls = snapshots whose project is
+      // status='preview' (the walk-on bucket). Inner join via embedded select.
+      supabase.from('analysis_snapshots')
+        .select('id, project_id, score_total, trigger_type, created_at, projects!inner(project_name, github_url, status)')
+        .eq('projects.status', 'preview')
+        .order('created_at', { ascending: false })
+        .limit(10),
     ])
     const rows = (allRes.data ?? []) as Array<{ ip_hash: string; count: number }>
     const ips    = rows.filter(r => r.ip_hash.startsWith('ip:'))
@@ -265,11 +281,26 @@ export function AdminPage() {
       .slice(0, 10)
       .map(r => ({ url: r.ip_hash.replace(/^url:/, ''), count: r.count }))
     const globalCount = (globalRes.data as { count?: number } | null)?.count ?? 0
+    type RecentRaw = {
+      id: string; project_id: string | null
+      score_total: number | null; trigger_type: string | null; created_at: string
+      projects: { project_name: string; github_url: string | null } | null
+    }
+    const recentCalls = ((recentRes.data as unknown as RecentRaw[]) ?? []).map(r => ({
+      id:           r.id,
+      project_id:   r.project_id,
+      project_name: r.projects?.project_name ?? '(unknown)',
+      github_url:   r.projects?.github_url ?? null,
+      score_total:  r.score_total ?? 0,
+      trigger_type: r.trigger_type ?? '?',
+      created_at:   r.created_at,
+    }))
     setCliUsage({
       totalToday,
       uniqueIps: ips.length,
       topRepos,
       globalRemaining: 800 - globalCount,
+      recentCalls,
     })
   }
 
@@ -810,8 +841,45 @@ function CliTab({ usage }: { usage: CliUsage | null }) {
           ※ url 은 djb2 해시로 익명화 저장 (원본 URL 비노출)
         </div>
       </div>
+
+      <div>
+        <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 최근 CLI 호출 10개 (walk-on)</div>
+        <div className="space-y-1">
+          {usage.recentCalls.length === 0 && <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>(아직 없음)</div>}
+          {usage.recentCalls.map(r => (
+            <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-xs" style={{
+              background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+              borderRadius: '2px',
+            }}>
+              <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                {fmtRelative(r.created_at)}
+              </span>
+              <span className="font-mono truncate flex-1 min-w-0" style={{ color: '#fff' }} title={r.github_url ?? r.project_name}>
+                {r.project_name}
+              </span>
+              <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                {r.trigger_type}
+              </span>
+              <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--gold-500)' }}>
+                {r.score_total}/100
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
+}
+
+function fmtRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(ms / 60_000)
+  if (min < 1)  return 'just now'
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24)  return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  return `${day}d ago`
 }
 
 function ToolsTab({
