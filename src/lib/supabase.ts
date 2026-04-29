@@ -15,6 +15,48 @@ export type SeasonStatus = 'upcoming' | 'active' | 'applaud' | 'completed'
 export type HealthStatus = 'healthy' | 'degraded' | 'down' | 'unknown'
 export type UnlockLevel = 0 | 3 | 5 | 10 | 20
 
+// §11-NEW · v3 Ladder + Events (Migration A · 2026-04-29)
+export type EventTemplateType =
+  | 'quarterly'           // seasons absorbed here
+  | 'tool_challenge'
+  | 'theme_sprint'
+  | 'quality_bar'
+  | 'sponsored_showcase'
+  | 'open_bounty'
+
+export type EventStatus = 'draft' | 'live' | 'closed' | 'frozen'
+
+export type LadderCategory = 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other'
+export type LadderWindow   = 'today' | 'week' | 'month' | 'all_time'
+
+export type MilestoneType =
+  | 'first_top_100'
+  | 'first_top_10'
+  | 'first_number_one'
+  | 'streak_100_days'
+  | 'climb_100_steps_in_30_days'
+  | 'all_categories_top_50'
+
+export const LADDER_CATEGORIES: LadderCategory[] = [
+  'saas', 'tool', 'ai_agent', 'game', 'library', 'other',
+]
+
+export const LADDER_CATEGORY_LABELS: Record<LadderCategory, string> = {
+  saas:     'SaaS',
+  tool:     'Tools',
+  ai_agent: 'AI Agents',
+  game:     'Games',
+  library:  'Libraries',
+  other:    'Other',
+}
+
+export const LADDER_WINDOW_LABELS: Record<LadderWindow, string> = {
+  today:    'Today',
+  week:     'This week',
+  month:    'This month',
+  all_time: 'All time',
+}
+
 export type MDCategory =
   | 'Scaffold'
   | 'Prompt Library'
@@ -48,6 +90,93 @@ export type Season = {
   status: SeasonStatus
   graduation_results: Record<string, unknown> | null
   created_at: string
+}
+
+// §11-NEW · Event = superset of Season. Quarterly events absorb seasons.
+// During Migration A, both `seasons` and `events` tables coexist with shared
+// UUIDs (events backfilled from seasons with id preserved). Read paths should
+// migrate to `events`; write paths follow once Migration B drops `seasons`.
+export type CommitEvent = {
+  id:                   string
+  template_type:        EventTemplateType
+  name:                 string
+  slug:                 string
+  status:               EventStatus
+  starts_at:            string | null
+  ends_at:              string | null
+  has_graduation:       boolean
+  has_hall_of_fame:     boolean
+  graduation_tiers:     string[] | null
+  graduation_threshold: string | null
+  graduation_results:   Record<string, unknown> | null
+  applaud_end:          string | null
+  graduation_date:      string | null
+  category_filter:      LadderCategory[] | null
+  tool_filter:          string[] | null
+  sponsor_name:         string | null
+  sponsor_logo_url:     string | null
+  prize_pool:           number | null
+  rules_md:             string | null
+  scoring_method:       'audit_only' | 'audit_scout' | 'audit_community' | 'audit_scout_community'
+  winner_count:         number
+  bounty_md:            string | null
+  acceptance_criteria:  string[] | null
+  reward_amount:        number | null
+  bounty_funded_by:     'commit_show' | 'sponsor_direct' | 'credits' | null
+  verification_method:  'auto' | 'manual_admin' | 'sponsor_review' | 'community_vote' | null
+  first_to_solve:       boolean
+  created_by:           string | null
+  created_at:           string
+}
+
+export type EventEntryStatus = 'eligible' | 'entered'
+
+export type EventEntry = {
+  id:                  string
+  project_id:          string
+  event_id:            string
+  entry_status:        EventEntryStatus
+  frozen_snapshot_id:  string | null
+  entered_at:          string | null
+  eligibility_seen_at: string
+  notified_at:         string | null
+  created_at:          string
+}
+
+export type LadderRanking = {
+  project_id:    string
+  category:      LadderCategory
+  score_total:   number
+  score_auto:    number
+  audit_count:   number
+  audited_at:    string | null
+  commit_sha:    string | null
+  rank_today:    number | null
+  rank_week:     number | null
+  rank_month:    number | null
+  rank_all_time: number
+}
+
+export type LadderStreak = {
+  id:                    string
+  project_id:            string
+  category:              LadderCategory
+  window:                LadderWindow
+  current_streak_start:  string | null
+  current_top_n:         number | null
+  longest_streak_days:   number
+  longest_top_n:         number | null
+  total_days_in_top_50:  number
+  last_calculated_at:    string
+}
+
+export type LadderMilestone = {
+  id:             string
+  project_id:     string
+  milestone_type: MilestoneType
+  category:       LadderCategory | null
+  achieved_at:    string
+  evidence:       Record<string, unknown> | null
 }
 
 // Column lists for .select() — keep email + creator_email OUT of the

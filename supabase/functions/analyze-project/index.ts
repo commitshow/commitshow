@@ -1578,6 +1578,62 @@ function scoreActivity(gh: GitHubInfo): {
   return { pts, breakdown: { recent_commit, momentum } }
 }
 
+// §11-NEW.1.1 · auto-detect ladder business_category. Conservative — when
+// signals are mixed we default to 'other' rather than misroute to the
+// wrong leaderboard. Order matters: more specific detectors first.
+function detectBusinessCategory(input: {
+  formFactor:  string
+  isSaas:      boolean
+  techLayers:  string[]
+  pkgName:     string
+  description: string
+}): 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other' {
+  const desc  = input.description.toLowerCase()
+  const name  = input.pkgName.toLowerCase()
+  const layers = new Set(input.techLayers)
+  const blob  = `${name} ${desc}`
+
+  // 1. Game — engine signature wins regardless of form factor.
+  if (/\bphaser\b|\bbabylonjs?\b|three\.js|godot|unity\b|gamedev|gameplay|playerinput|@react-three/.test(blob)) {
+    return 'game'
+  }
+
+  // 2. AI agent — runtime AI SDK + agent-style description (chat / agent /
+  //    assistant / RAG). AI tech_layer alone isn't enough — many SaaS
+  //    products call AI APIs. Look for agent-style language too.
+  const hasAi = layers.has('ai')
+  if (hasAi && /\bagent\b|\bassistant\b|\bchatbot\b|\brag\b|\bllm\b|conversational|autopilot/.test(blob)) {
+    return 'ai_agent'
+  }
+
+  // 3. Library — explicit library form factor.
+  if (input.formFactor === 'library') return 'library'
+
+  // 4. Tool — CLI / scaffold / template. Includes single-file utilities.
+  if (input.formFactor === 'cli' || input.formFactor === 'scaffold') return 'tool'
+  if (/\bcli\b|\bcommand[- ]line\b|scaffold|starter|template|boilerplate/.test(blob) && !input.isSaas) {
+    return 'tool'
+  }
+
+  // 5. SaaS — explicit SaaS sub-form (api + db + auth + live URL).
+  if (input.isSaas) return 'saas'
+
+  // 6. App with backend+auth signals → SaaS.
+  if (input.formFactor === 'app' && layers.has('backend') && layers.has('database')) {
+    if (/\bauth\b|signup|signin|sign-in|login|account|dashboard|billing|subscription/.test(blob)) {
+      return 'saas'
+    }
+  }
+
+  // 7. AI-only app (e.g. wrapper UI) → ai_agent fallback.
+  if (input.formFactor === 'app' && hasAi) return 'ai_agent'
+
+  // 8. Plain web app utility → tool.
+  if (input.formFactor === 'app') return 'tool'
+
+  return 'other'
+}
+
 function scoreTechLayers(langs: Record<string, number>, stack: string[]): { pts: number; layers: string[] } {
   const L = new Set<string>()
   const frontendLangs = ['TypeScript', 'JavaScript', 'HTML', 'CSS', 'Svelte', 'Vue']
@@ -2601,7 +2657,7 @@ Deno.serve(async (req) => {
   // Load project + brief
   const { data: project, error: projErr } = await admin
     .from('projects')
-    .select('id, project_name, description, github_url, live_url, creator_id, status')
+    .select('id, project_name, description, github_url, live_url, creator_id, status, business_category, audit_count')
     .eq('id', projectId)
     .single()
   if (projErr || !project) return json({ error: 'project not found' }, 404)
@@ -3099,25 +3155,86 @@ Deno.serve(async (req) => {
   }]).select('id').single()
   if (snapErr) console.error('snapshot insert failed', snapErr)
 
+  // §11-NEW.1.1 · auto-detect ladder business_category. Hybrid policy:
+  // we always write detected_category; business_category is only stamped
+  // if the project has none yet (Creator override wins · respected on
+  // re-audits). Thresholds biased toward conservative inference — when
+  // uncertain we default to 'other' rather than mis-bucket.
+  const detectedCategory = detectBusinessCategory({
+    formFactor: gh.form_factor,
+    isSaas:     gh.signals.is_saas,
+    techLayers: tech.layers,
+    pkgName:    project.project_name ?? '',
+    description: (project.description ?? '') + ' ' + (claude.headline ?? ''),
+  })
+  const audit_count_increment = (project.audit_count ?? 0) + 1
+
   // Update denormalized latest on projects
-  await admin
-    .from('projects')
-    .update({
-      lh_performance:    lh.performance,
-      lh_accessibility:  lh.accessibility,
-      lh_best_practices: lh.bestPractices,
-      lh_seo:            lh.seo,
-      github_accessible: gh.accessible,
-      score_auto,
-      score_total:       scoreTotal,
-      tech_layers:       tech.layers,
-      verdict:           claude.tldr || claude.headline || '',
-      claude_insight:    claude.honest_evaluation || '',
-      unlock_level:      0,
-      last_analysis_at:  new Date().toISOString(),
-      updated_at:        new Date().toISOString(),
-    })
-    .eq('id', projectId)
+  const projectUpdate: Record<string, unknown> = {
+    lh_performance:    lh.performance,
+    lh_accessibility:  lh.accessibility,
+    lh_best_practices: lh.bestPractices,
+    lh_seo:            lh.seo,
+    github_accessible: gh.accessible,
+    score_auto,
+    score_total:       scoreTotal,
+    tech_layers:       tech.layers,
+    verdict:           claude.tldr || claude.headline || '',
+    claude_insight:    claude.honest_evaluation || '',
+    unlock_level:      0,
+    last_analysis_at:  new Date().toISOString(),
+    updated_at:        new Date().toISOString(),
+    detected_category: detectedCategory,
+    audit_count:       audit_count_increment,
+  }
+  // Only stamp business_category on first audit (Creator override wins)
+  if (!project.business_category) {
+    projectUpdate.business_category = detectedCategory
+  }
+  await admin.from('projects').update(projectUpdate).eq('id', projectId)
+
+  // §11-NEW.2 · permanent milestones. Compute the project's all-time
+  // category rank from current scores (cheap window-function query),
+  // INSERT any newly hit milestones. UNIQUE (project_id, milestone_type)
+  // makes this idempotent — re-firing won't duplicate. Failures are
+  // swallowed because tables may be missing pre-Migration A.
+  try {
+    // Compute all-time rank within the new category from current scores.
+    // Cheap in practice — projects table is small and score_total > 0 filters
+    // out walk-ons that haven't gone through the full audit.
+    const { data: peers } = await admin
+      .from('projects')
+      .select('id, score_total, score_auto, audit_count, created_at')
+      .eq('business_category', detectedCategory)
+      .gt('score_total', 0)
+      .order('score_total',  { ascending: false })
+      .order('score_auto',   { ascending: false })
+      .order('audit_count',  { ascending: true  })
+      .order('created_at',   { ascending: true  })
+    let allTimeRank: number | null = null
+    if (peers && Array.isArray(peers)) {
+      const idx = peers.findIndex((p: { id: string }) => p.id === projectId)
+      if (idx >= 0) allTimeRank = idx + 1
+    }
+    if (allTimeRank !== null) {
+      const milestones: Array<{ type: string; achieved: boolean; evidence: Record<string, unknown> }> = [
+        { type: 'first_top_100',    achieved: allTimeRank <= 100, evidence: { rank: allTimeRank, category: detectedCategory } },
+        { type: 'first_top_10',     achieved: allTimeRank <= 10,  evidence: { rank: allTimeRank, category: detectedCategory } },
+        { type: 'first_number_one', achieved: allTimeRank === 1,  evidence: { rank: allTimeRank, category: detectedCategory } },
+      ]
+      for (const m of milestones) {
+        if (!m.achieved) continue
+        await admin.from('ladder_milestones').insert({
+          project_id:     projectId,
+          milestone_type: m.type,
+          category:       detectedCategory,
+          evidence:       m.evidence,
+        })  // unique constraint silently rejects re-firings
+      }
+    }
+  } catch (e) {
+    console.error('[ladder milestones]', (e as Error)?.message ?? String(e))
+  }
 
   // MD Discovery moved to a dedicated Edge Function (discover-mds) so this
   // handler finishes under the 150s idle timeout. Client invokes it after

@@ -34,7 +34,11 @@ PRD 버전: v2 (2026-04-24) — v1 통합 기획서 (2026-04-19 + Creator Commun
 3. **Applaud polymorphic target** — `applauds` 테이블 (`member_id`, `target_type`, `target_id`) 로 재설계. `target_type` ∈ {product, comment, build_log, stack, brief, recommit}. 기존 `UNIQUE (member_id, season_id)` 제약 제거 → `UNIQUE (member_id, target_type, target_id)`. 자기 콘텐츠 applaud 금지 (이해충돌).
 4. **Creator Community 4 메뉴 V1 Day 1 필수** — Build Logs · Stacks · Asks · Office Hours. Reddit/Indie Hackers 이탈 방지 + LinkedIn-for-Vibecoders 장기 비전의 기초 증거. §13-B 신설.
 5. **Rookie Circle 톤 엄격 유지** — "낙제 · 실패 · 탈락 · 패자 · 루저 · Loser · Failed · 미달 · 미흡" UI · 코드 · 약관 · 에러 메시지 · Claude 프롬프트 **전 레이어 금지**. 허용: "Rookie Circle · Try Again · 다음 Commit · Retry · Next season".
-6. **브랜드 verb 체계 (업데이트 2026-04-24)** — Creator 액션 = **Audition**, AI 레이어 = **Audit** (둘은 라틴어 audīre 형제어). Hero CTA: `Audition your product →`. "Commit" 은 브랜드 wordmark·도메인·Hall of Fame 메타포로만 유지 ("commit.show" · "Every commit, on stage"). "Score your project" / "Submit" / "Register" / "Apply" UI 금지. **"AI" 단어 사용자 노출 금지** — "AI analysis" → "Audit report" 식으로 치환 (§19 rule 11).
+6. **브랜드 verb 3-체계 (업데이트 2026-04-29)** — 라틴어 audīre 어원 공유, 본질 다른 행위에 다른 verb:
+   - **Audit** (default · ladder) — Creator 의 객관 측정 요청. 매 등록·재분석에 사용. Hero CTA: `Audit your build →`.
+   - **Audition** (event entry) — Creator 가 이벤트 무대 등판. 이벤트 entry 시 사용. `Audition for <event_name>`.
+   - **Audited** (passive · result) — 측정 완료된 상태. "Audited on commit.show", "Audit report".
+   AI 레이어 = "Audit" (외부 노출은 항상 "Audit / Audit report"). "Commit" 은 브랜드 wordmark·도메인·Hall of Fame 메타포로만 유지 ("commit.show" · "Every commit, on stage"). "Submit" / "Register" / "Apply" / "Score your project" UI 금지. **"AI" 단어 사용자 노출 금지** — "AI analysis" → "Audit report" 식으로 치환 (§19 rule 11).
 7. **Audit 5+3 비대칭 유지** — 사용자 노출 명칭 "Audit report" (내부 기술 레이어 = Claude 호출 · §3). 장점 5 / 우려 3. 5+5 대칭 형식 **금지** (아첨 인지 편향 + Creator 방어 부담 완화).
 
 ### 1-B. 참조 문서
@@ -71,7 +75,7 @@ PRD 버전: v2 (2026-04-24) — v1 통합 기획서 (2026-04-19 + Creator Commun
 - Forecast 용어만: Predict · Bet · Wager · Gamble 금지 (CFTC · 도박법 리스크)
 - "리그 진척률" 표현만: Bonding Curve 언급 금지 (Pump.fun 연상)
 - Rookie Circle 톤: 낙제 · 실패 · 탈락 · 패자 · Loser · Failed · 미달 전 레이어 금지 (§1-A ⑤)
-- 브랜드 verb: Creator 액션 = **Audition** / AI 레이어 = **Audit** (§1-A ⑥ 업데이트 · 2026-04-24). "Commit" 은 도메인·브랜드 메타포로만 유지 (Commit Archive 등). "Score your project" / "Submit" / "Register" / "Apply" 전부 UI 에서 금지.
+- 브랜드 verb 3-체계 (§1-A ⑥ 2026-04-29): **Audit** (ladder default) · **Audition** (event entry) · **Audited** (passive result). 라틴어 audīre 어원 공유 · 본질 다른 행위에 다른 verb. AI 레이어 = "Audit". "Commit" 은 도메인·브랜드 메타포만. "Submit" / "Register" / "Apply" / "Score your project" UI 금지.
 - **"AI" 단어 사용자 노출 금지**: "AI analysis" / "AI score" / "AI feedback" 전부 → **Audit / Audit report / Audit findings** 로 치환. 이유: 슬롭 연상 + 제품 본질과 거리 + Audit 이 더 정확. 예외: Creator 가 빌드에 쓴 도구를 묘사할 때 "AI-assisted development" · "with Cursor · Claude · Lovable" 같은 서술은 허용 (바이브코딩 맥락). 내부 코드·함수·주석엔 "AI" 사용 무관.
 - 수익·금융 연상 금지: 배당 · ROI · 베팅 · 투자수익 · 본드 커브 · Paid Membership (§17 §20.6)
 
@@ -601,63 +605,264 @@ applauds (v2 재설계 · polymorphic · §7.5)
 
 ---
 
-## 11. 3주 시즌 구조 · 2단계 이양 (v1.7)
+## 11-NEW. Ladder + Events (시즌 통합 단일 시스템 · 2026-04-29 PRD v3 lock)
 
-### 11.1 시즌 실행 주기 — Phase A → Phase B
+§11 (3-week season) 단독 구조 폐기. 모든 리그 단위는 **events** 의 한 row 로 통합 — `template_type='quarterly'` 가 시즌. 사용자에겐 "season" 단어 마케팅으로 유지 가능, 코드/스키마/문서는 events 일원화.
 
+### 11-NEW.1 Ladder (Layer 1 · 영구)
+
+모든 등록 프로젝트 자동 진입 · 카테고리 ranking + 시간 윈도우 · 영구 milestone.
+
+#### 11-NEW.1.1 카테고리 분류 (hybrid)
+- `business_category` enum: `saas · tool · ai_agent · game · library · other`
+- Hybrid 정책:
+  - 자동 detection (form_factor + tech_layers + AI lib 휴리스틱) → `detected_category` 컬럼
+  - Creator 수동 선택 → `business_category` (override 가능, 일 1회 cap)
+  - Lock 정책: event entry 시점에 freeze · event 종료 후 다시 변경 가능
+- "Other" 함정 차단:
+  - Other 선택 시 추가 설명 텍스트 필수
+  - Detector confidence 높을 때 Other 선택 → admin review queue 자동 진입
+  - UI 에서 "Misc / Experimental" 라벨 (정통 카테고리보다 시각 무게 ↓)
+
+#### 11-NEW.1.2 시간 윈도우
+- `today` · `week` · `month` · `all-time` 4종
+- URL: `/ladder?cat=saas&window=week`
+- 기본값: `cat=saas&window=week`
+
+#### 11-NEW.1.3 정렬 + 5단 tiebreaker
 ```
-Phase A (V1 런칭 · 초기 안정화 단계):
-  3주에 1개 리그 실행. 초반 Creator 풀이 작고 Scout 습관화 전.
-  효과: 지평 평평함 없이 한 리그에 집중 → 드라마 뚜렷 · 미디어 리소스 집중
-  이유: 매주 롤링 시 빈 리그·광고 효과 약화 리스크
-  상금/ROI 디테일: INTERNAL.md §1
-  전환 지표 (Phase B 전환 조건):
-    ☐ 누적 앱 등록 100+
-    ☐ MAU 5,000+
-    ☐ 이번 Phase A 리그에 Creator 30+ 도달
-    ☐ 평균 Forecast 참여 Scout 수 50+
-  위 4개 중 3개 이상 충족 시 Phase B 전환.
+1. score_total desc
+2. commit_sha 의 가장 최근 commit 날짜 desc (실제 코드 변화)
+3. score_auto desc (deterministic 부분 우선)
+4. audit_count asc (적은 audit 으로 도달 = "효율" 시그널)
+5. project.created_at asc (선등록 우대)
+```
+audit_count 가 핵심 — 무제한 re-audit 으로 운빨 점수 짜내는 어뷰징 자연 차단.
 
-Phase B (매주 롤링 · 성숙기):
-  매주 월요일 신규 리그 ON. 최대 3개 리그 병렬 진행 (주차 차이 3주 → 동시 3개)
-  이유: 지속 참여 리듬 · 기다림 최소화 · Creator 유입 확장
-  월간 상금 풀 디테일: INTERNAL.md §1
+#### 11-NEW.1.4 Live ranking (audit 종료 즉시 · M3 tier 1)
+audit 종료 trigger 안에서 atomic:
+- `projects.score_total` UPDATE
+- 해당 (category, window) ranking 1건 즉시 재계산
+- `ladder_streaks` UPDATE (top_n 변동 시)
+- `ladder_milestones` INSERT (UNIQUE 제약으로 이중 발급 차단)
+- 본인 `/me` · `/projects/<own-id>` · audit result 페이지는 **실시간** (projects 직접 query)
+
+#### 11-NEW.1.5 Materialized view (타인 view · M3 tier 2)
+```
+ladder_rankings_mv
+  refresh: 5min (today/week) · 1h (month/all-time)
+  cols: project_id · category · window · rank · score · last_audit_at
+```
+다른 사용자가 보는 leaderboard / 남의 profile / admin dashboard 는 mv (5분 지연 OK).
+
+### 11-NEW.2 Streak + Milestone 배지
+
+#### 11-NEW.2.1 Schema
+```sql
+ladder_streaks
+  project_id · category · window
+  current_streak_start · current_top_n · longest_streak_days · longest_top_n
+  total_days_in_top_50 · last_calculated_at
+
+ladder_milestones
+  project_id · milestone_type · achieved_at
+  milestone_type enum:
+    'first_top_100' · 'first_top_10' · 'first_number_one'
+    'streak_100_days' · 'climb_100_steps_in_30_days'
+    'all_categories_top_50'
+  UNIQUE (project_id, milestone_type)  -- 이중 발급 차단
 ```
 
-### 11.2 한 리그의 주차 구조 (Phase A · Phase B 공통)
+#### 11-NEW.2.2 Streak 정의
+- **3일 grace period**: Top 50 이탈 후 3일 이내 재진입 → streak 유지. 그 이상 → reset.
+- 변경 시에만 update (저장 비용 0). 변동 없으면 row 그대로.
+- 일별 cron 이 rank 변동 감지 시 trigger.
 
+### 11-NEW.3 Events (Layer 2 · 단일 events 테이블)
+
+#### 11-NEW.3.1 events schema
+template_type 으로 6 종류 분기:
 ```
-Week 1 (Day 1-7):   수치 숨김 · 단계 라벨만 · 분석 언락 시작 · Early Spotter 기회
-Week 2 (Day 8-14):  상대값 공개 ("상위 X%") · AI 2차 재평가 · 피드백 1차 전달
-Week 3 (Day 15-21): 구체 수치 · 6h 지연 스냅샷 · AI 3차 재평가 · Vote 집중 · 마감 임박 드라마
-Day 22-28:          Graduation Week — season-end 상대평가 엔진 실행
-                    · 상위 20% 산정 · Hall of Fame 등재 준비
-                    · Build Brief Phase 2 자동 공개 (Valedictorian)
-                    · 공식 @commitshow X 영상 게재 · 미디어 배포
-                    · Build Log 자동 씨앗 생성 (§13-B)
-Day 29:             Graduation Day · 환급 지급 · 배지 · 상금 (금액은 INTERNAL.md §1)
-                    · Alumni Brief 오픈 · Rookie Circle 커뮤니티 연결
+quarterly · tool_challenge · theme_sprint · quality_bar · sponsored_showcase · open_bounty
 ```
 
-v1.8 의 "Applaud Week" 제거. Applaud 는 §7.5 로 상시 활성화.
-
-### 11.3 Creator 참여 모드 (v1.7 신규)
-
+#### 11-NEW.3.2 6 템플릿 + 변수 surface
 ```
-기본 = 자동 진행 모드:
-  Creator 가 등록 + Core Intent 만 내고 방치해도 OK.
-  AI 재평가 매주 자동 · 집계 피드백 자동 이메일 · 심사·졸업 자격 동등 (가점/가중치 없음).
-  → Scout 시장에서 "Creator 방치" 로 리그가 멈추는 리스크 제거.
+Quarterly (시즌 흡수)
+  duration: 3 weeks (default)
+  has_graduation: true · has_hall_of_fame: true
+  graduation_tiers: [valedictorian · honors · graduate]
+  graduation_threshold: top_20_percent
+  scoring_method: audit + scout_vote + community_signal
 
-적극 참여 모드 (보너스 레이어):
-  Week 2·3 에서 우려사항 방어 · 앱 개선 · 답변 · MD 보강 수행 시:
-    · 환급 +5% (졸업한 경우)
-    · Creator AP 가산
-    · 카테고리 피드 상단 노출 가중
-  → 이어뷰징 회피하면서 참여 인센티브 구조.
+Tool Challenge
+  duration: 30 days (default)
+  tool_filter: ['cursor' · 'claude-code' · 'lovable' · ...]
+  has_graduation: false · winner_count: 3
+  scoring_method: audit_only
 
-미참여 플래그: Week 1 하드게이트 미통과 시 실격 (등록비 환불 규정은 별도).
+Theme Sprint
+  duration: 7 days (default)
+  theme_md (markdown 주제 설명)
+  scoring_method: audit + community_signal
+
+Quality Bar
+  min_score_threshold: 80 (default)
+  vibe_concerns_required: [webhook_idempotency · rls_coverage · ...]
+  scoring_method: audit_only · 자동 검증
+
+Sponsored Showcase
+  sponsor_name · sponsor_logo_url · prize_pool
+  eligible_categories · entry_criteria
+  has_hall_of_fame: false (default · admin 승인 필요 · §11-NEW.7.4)
+  scoring_method: audit + scout_vote
+
+Open Bounty (§11-NEW.6 별도)
+  bounty_md · acceptance_criteria · reward_amount · first_to_solve
+  bounty_funded_by: commit_show / sponsor_direct / credits
+  verification_method: auto / manual_admin / sponsor_review / community_vote
 ```
+
+#### 11-NEW.3.3 3-tier entry 시스템
+| Tier | 누가 | 효과 |
+|---|---|---|
+| **Ladder** | 모든 등록 프로젝트 (자동) | 카테고리 ranking |
+| **Eligible** | event 매칭 자동 후보 (자동) | 알림만 · ranking/우승 후보 X |
+| **Entered** | Creator 명시 클릭 | 정식 참가 · ranking + 우승 후보 |
+
+손해 시나리오 (sponsor 풀이 작아짐) 차단 + privacy 보존.
+
+#### 11-NEW.3.4 Eligibility 알림 정책
+```
+event_notifications jsonb {
+  in_app: 'all' | 'sponsored_only' | 'none'    -- 기본값 all
+  email:  'all' | 'sponsored_only' | 'none'    -- 기본값 sponsored_only
+  push:   'all' | 'sponsored_only' | 'none'    -- 기본값 none (V1.5)
+}
+milestone_notifications jsonb (같은 구조 · 별도)
+weekly_digest boolean (기본 true)
+```
+
+#### 11-NEW.3.5 Single-snapshot freeze + UI hierarchy
+- entry 시점의 `frozen_snapshot_id` 박음 · 종료까지 변경 불가
+- "freeze 는 freeze, 다음 이벤트 노려" — 비교 가능성 > 개별 유연성
+- UI: Live ladder = 골드 (큰 영역), Frozen = 은색/회색 (보조 카드), "locked Apr 22" 시간 표시
+
+#### 11-NEW.3.6 종료 + 우승자
+- `status: live → closed` (자동 · ends_at 도달)
+- scoring_method 따라 평가 → 결과 freeze
+- 영구 배지 자동 부여 + X 자동 공유 카드
+
+### 11-NEW.4 Scout in ladder vs events
+
+#### 11-NEW.4.1 Ladder 점수
+**Audit 70% + Community 30%** (Scout 30% 없음). Ladder 는 "자동 평가" 무대.
+
+#### 11-NEW.4.2 Event scoring_method 옵션
+```
+audit_only             — Quality Bar · Tool Challenge · Open Bounty (auto verify)
+audit + scout_vote     — Quarterly · Sponsored Showcase
+audit + community_signal — Theme Sprint
+audit + scout + community — Quarterly default (전통적 100pt 분배)
+```
+
+#### 11-NEW.4.3 Scout ballot wallet
+- 월별 quota (Bronze 20 · Silver 40 · Gold 60 · Platinum 80)
+- 각 이벤트마다 별도 할당 (한 이벤트에 몰빵 허용 · ×N)
+
+#### 11-NEW.4.4 Scout 적중률
+- event 종료 후 `votes.is_correct` 산정
+- 적중률 → AP + Scout tier 승급 (§9 기존 정책 유지)
+
+### 11-NEW.5 Quarterly 템플릿 디테일 (시즌 흡수)
+
+#### 11-NEW.5.1 기본 attribute
+```
+duration: 3 weeks
+has_graduation: true · has_hall_of_fame: true
+graduation_tiers: [valedictorian · honors · graduate · rookie_circle]
+graduation_threshold: top_20_percent
+scoring_method: audit + scout_vote + community_signal (100pt 전통적)
+```
+
+#### 11-NEW.5.2 Hall of Fame 시즌별 계층화
+- "Hall of Fame · Spring 2026" 처럼 cohort 별
+- Quarterly 우승자 자동 등재 (1년 4명 페이스)
+- 인플레이션 방지 + 정서적 무게 보존 (Olympic gold 메타포)
+
+#### 11-NEW.5.3 기존 §11 메커니즘 보존
+- Week 1 수치 숨김 · Week 2 percentile reveal · Week 3 구체 수치
+- Day 22-28 graduation week · Day 29 graduation day
+- 환급 정책 (INTERNAL.md §1) · Build Log 자동 씨앗
+
+### 11-NEW.6 Open Bounty 정책
+
+#### 11-NEW.6.1 Funding (V1)
+```
+bounty_funded_by enum:
+  'commit_show'    — Hans 부담 · 내부 promotion 용 · 작은 bounty
+  'sponsor_direct' — sponsor → winner 직접 송금 · commit.show 매개 X
+  'credits'        — commit.show internal credit · 다음 audit · promo 코드 등 (V1 추가)
+```
+Escrow (Stripe 매개) 는 V2 (KYC + tax 인프라 같이).
+
+#### 11-NEW.6.2 Verification method
+```
+verification_method enum:
+  'auto'           — detector 가 7 framework 자동 검증 (예: webhook idempotency)
+  'manual_admin'   — Hans 가 직접 검증
+  'sponsor_review' — sponsor 가 직접 검증
+  'community_vote' — Scout 들이 vote (Quality Bar 와 유사)
+```
+각 bounty 마다 명시 필수.
+
+#### 11-NEW.6.3 acceptance_criteria · first_to_solve
+- text[] 명시
+- first_to_solve: true → 선착순 1명만 / false → 충족자 전부
+
+### 11-NEW.7 Admin 운영 (/admin/events)
+
+#### 11-NEW.7.1 Template 별 cookie-cutter form
+- Step 1: Template 선택 (6 카드 grid)
+- Step 2: Template 별 변수 form · 기본값 prefilled
+- Step 3: Preview (사용자가 보게 될 이벤트 페이지)
+- Step 4: Publish (status: draft → live)
+
+#### 11-NEW.7.2 진행 모니터링 dashboard
+- 진행 중 events 의 entry 수 · participant rank · 분쟁 신호
+
+#### 11-NEW.7.3 결과 freeze + 우승 발표 + X 카드
+- ends_at 도달 → status flip cron
+- 우승자 결정 (scoring_method) → 결과 freeze
+- X 자동 공유 카드 (winner + sponsor 로고 · 30초 지연 OK · 별도 worker)
+
+#### 11-NEW.7.4 Sponsored has_hall_of_fame 승인 게이트
+- Sponsored event 의 sponsor 가 has_hall_of_fame 요청 시 Hans 명시 승인 필요
+- Hall of Fame 의 commit.show 정체성과 일치하는 경우만 (큰 sponsor 1회성 OK · 작은 sponsor X)
+
+### 11-NEW.8 Migration · seasons → events
+
+#### 11-NEW.8.1 Migration A (now)
+- events 테이블 생성 (seasons 의 superset)
+- INSERT INTO events SELECT FROM seasons (id 보존 · template_type='quarterly')
+- FK 컬럼들 rename: season_id → event_id (analysis_snapshots · votes · hall_of_fame 등)
+- 코드 PR 동시 deploy (`from('seasons')` → `from('events').eq('template_type','quarterly')`)
+
+#### 11-NEW.8.2 Migration B (1주 모니터링 후)
+- seasons 테이블 DROP
+- 별도 migration 으로 분리 · 문제 시 rollback 가능
+
+### 11-NEW.9 Phasing (6 단계)
+```
+P1 (1.5w) · 영구 ladder + 카테고리 + tiebreaker + Live ranking + MV
+P2 (1w)   · streak/milestone + 배지 발급 (3일 grace · UNIQUE 제약)
+P3 (1.5w) · Quality Bar 단일 템플릿 (자동 검증 · 가장 단순)
+P4 (1.5w) · Tool Challenge + Theme Sprint (수동 평가 추가)
+P5 (1.5w) · Sponsored Showcase + Open Bounty (외부 연동)
+P6 (1w)   · Quarterly 흡수 (가장 무거움 · 마지막 · 다른 5 운영 경험 후)
+```
+
+P1 은 §11-NEW.1 + §11-NEW.2 minimal viable. P6 가 §11-NEW.5 (시즌 흡수) — 가장 늦게.
 
 ---
 
@@ -688,22 +893,53 @@ Phase 2 (졸업 후 공개 — v2 구조화 프롬프트):
 ```sql
 members             -- 회원 (tier · activity_points · creator_grade · x_handle · github_handle · trust_level)
                        auth.users 트리거로 자동 생성
-seasons             -- 시즌 메타 (3주 시즌 상태머신 · status: upcoming|active|graduation|completed)
+                       · event_notifications jsonb · milestone_notifications jsonb (§11-NEW.3.4)
+events              -- v3 신규 · seasons 흡수 · 모든 리그 단위
+                       · template_type ∈ {quarterly · tool_challenge · theme_sprint ·
+                                          quality_bar · sponsored_showcase · open_bounty}
+                       · status ∈ {draft · live · closed · frozen}
+                       · has_graduation · has_hall_of_fame · graduation_tiers jsonb
+                       · sponsor_name · sponsor_logo_url · prize_pool
+                       · bounty_funded_by · verification_method · acceptance_criteria
+                       · created_by · created_at
+event_entries       -- v3 신규 · 3-tier entry (§11-NEW.3.3)
+                       · project_id · event_id · entry_status (eligible|entered)
+                       · frozen_snapshot_id · entered_at
 projects            -- 앱 등록 · 최신 점수/상태 (denormalized latest)
+                       · business_category · detected_category · category_locked_until
 build_briefs        -- Phase 1 (공개) + Phase 2 (v1.2 구조화 6섹션)
 analysis_snapshots  -- 모든 분석 시점 시계열 (initial · resubmit · weekly · season_end)
                        · commit_sha · brief_sha · model_version (불변 증거)
-ballot_wallets      -- v2 신규 · 월별 Vote 권 지갑 (member_id · month · total · used · reserved)
-votes               -- Scout Forecast (member_id · project_id · count · season_id)
+                       · event_id (was season_id · §11-NEW.8 rename)
+ballot_wallets      -- 월별 Vote 권 지갑 (member_id · month · total · used · reserved)
+                       · event_allocations jsonb (이벤트별 할당 · §11-NEW.4.3)
+votes               -- Scout Forecast (member_id · project_id · count · event_id)
                        · ×N 몰빵 허용 · 가중치 없음 · 자기 앱 금지
-applauds            -- v2 재설계 · polymorphic (member_id · target_type · target_id)
+applauds            -- polymorphic (member_id · target_type · target_id)
                        · target_type ∈ {product, comment, build_log, stack, brief, recommit}
                        · UNIQUE (member_id, target_type, target_id)
                        · 자기 콘텐츠 금지 (DB 트리거)
 comments            -- 댓글 (member_id · project_id · parent_id · text · upvote_count · simhash)
-comment_upvotes     -- v2 신규 · 댓글 업보트 (comment_id · member_id · UNIQUE)
-hall_of_fame        -- 졸업 프로젝트 영구 아카이브
+comment_upvotes     -- 댓글 업보트 (comment_id · member_id · UNIQUE)
+hall_of_fame        -- 영구 아카이브 · event_id (시즌별 계층화 · §11-NEW.5.2)
 members_grade_history -- Creator grade 변경 audit log
+
+ladder_rankings_mv  -- v3 신규 · Materialized view (§11-NEW.1.5)
+                       · refresh: 5min (today/week) · 1h (month/all-time)
+                       · cols: project_id · category · window · rank · score · last_audit_at
+                       · PK: (category, window, rank)
+ladder_streaks      -- v3 신규 · streak 추적 (§11-NEW.2.1)
+                       · project_id · category · window
+                       · current_streak_start · current_top_n
+                       · longest_streak_days · longest_top_n
+                       · total_days_in_top_50 · last_calculated_at
+                       · 변경 시에만 update (저장 비용 0)
+ladder_milestones   -- v3 신규 · 영구 milestone 발급 기록 (§11-NEW.2.1)
+                       · project_id · milestone_type · achieved_at
+                       · milestone_type ∈ {first_top_100 · first_top_10 · first_number_one ·
+                                           streak_100_days · climb_100_steps_in_30_days ·
+                                           all_categories_top_50}
+                       · UNIQUE (project_id, milestone_type)  -- 이중 발급 차단
 ```
 
 ### 13.2 Activity Point · 정산
