@@ -355,10 +355,40 @@ export function AdminPage() {
       const { end_date, applaud_end, graduation_date } = computeSeasonDates(seasonStart)
       // Single-quote escape for SQL literal — name comes from admin input.
       const safeName = seasonName.trim().replace(/'/g, "''")
+      // §11-NEW.8 · dual-write: every quarterly season is also an event row
+      // with the SAME UUID (the v3 ladder/events code reads from `events`,
+      // legacy code still reads `seasons`). Atomic via CTE — events INSERT
+      // failure rolls back the seasons INSERT, so the two tables can never
+      // diverge for newly created seasons.
+      const eventStatus =
+        seasonStatus === 'upcoming' || seasonStatus === 'active' || seasonStatus === 'applaud' ? 'live'
+        : seasonStatus === 'completed' ? 'closed' : 'draft'
       const sql = `
-        insert into seasons (name, start_date, end_date, applaud_end, graduation_date, status)
-        values ('${safeName}', '${seasonStart}', '${end_date}', '${applaud_end}', '${graduation_date}', '${seasonStatus}')
-        returning id, name, start_date, end_date, applaud_end, graduation_date, status;
+        with new_season as (
+          insert into seasons (name, start_date, end_date, applaud_end, graduation_date, status)
+          values ('${safeName}', '${seasonStart}', '${end_date}', '${applaud_end}', '${graduation_date}', '${seasonStatus}')
+          returning id, name, start_date, end_date, applaud_end, graduation_date, status
+        ),
+        new_event as (
+          insert into events (
+            id, template_type, name, slug, status,
+            starts_at, ends_at,
+            has_graduation, has_hall_of_fame, graduation_tiers, graduation_threshold,
+            applaud_end, graduation_date,
+            scoring_method, winner_count
+          )
+          select
+            id, 'quarterly', name, name, '${eventStatus}',
+            start_date::timestamptz, applaud_end::timestamptz,
+            true, true,
+            '["valedictorian","honors","graduate","rookie_circle"]'::jsonb,
+            'top_20_percent',
+            applaud_end, graduation_date,
+            'audit_scout_community', 1
+          from new_season
+          returning id
+        )
+        select id, name, start_date, end_date, applaud_end, graduation_date, status from new_season;
       `
       const res = await fetch(`${(supabase as any).supabaseUrl}/functions/v1/admin-run`, {
         method: 'POST',
