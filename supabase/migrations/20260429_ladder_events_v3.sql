@@ -305,6 +305,10 @@ ranked AS (
   FROM projects p
   LEFT JOIN latest_snapshot ls ON ls.project_id = p.id
   WHERE p.score_total > 0
+    -- §11-NEW.1.5 · ladder is real-registration only · walk-on (CLI preview)
+    -- audits stay out of the public ranking. They still surface in the hero
+    -- terminal demo via recentAudits.ts.
+    AND p.status IN ('active', 'graduated', 'valedictorian')
 )
 SELECT
   project_id, category, score_total, score_auto, audit_count,

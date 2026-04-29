@@ -3218,6 +3218,8 @@ Deno.serve(async (req) => {
       .select('id, score_total, score_auto, audit_count, created_at')
       .eq('business_category', detectedCategory)
       .gt('score_total', 0)
+      // Walk-on previews stay out of milestone ranking · matches MV filter
+      .in('status', ['active', 'graduated', 'valedictorian'])
       .order('score_total',  { ascending: false })
       .order('score_auto',   { ascending: false })
       .order('audit_count',  { ascending: true  })
