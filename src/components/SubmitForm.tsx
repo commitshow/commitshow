@@ -152,11 +152,11 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       setError(verdict.message); setStep(2); return
     }
     if (verdict.kind === 'taken_by_other') {
-      setError('This GitHub repo is already auditioning under another creator. If this is your repo, contact support.')
+      setError('This GitHub repo is already audited under another creator. If this is your repo, contact support.')
       setStep(2); return
     }
     if (verdict.kind === 'already_yours') {
-      setError(`You're already auditioning this repo. View it at /projects/${verdict.projectId}.`)
+      setError(`You've already audited this repo. View it at /projects/${verdict.projectId}.`)
       setStep(2); return
     }
 
@@ -281,8 +281,8 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           Free quota used.
         </h3>
         <p className="font-light mb-2" style={{ color: 'rgba(248,245,238,0.6)' }}>
-          You've already auditioned {eligibility.priorCount} products. The first {FREE_REGISTRATIONS_PER_MEMBER} per
-          member are free — your next audition needs the $${priceDollars} discovery · exposure · fandom fee
+          You've already audited {eligibility.priorCount} products. The first {FREE_REGISTRATIONS_PER_MEMBER} per
+          member are free — your next audit needs the $${priceDollars} discovery · exposure · fandom fee
           (conditional refund on graduation).
         </p>
         <div className="mt-6 mb-4 px-4 py-3 font-mono text-xs tracking-wide" style={{
@@ -292,7 +292,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           STRIPE CHECKOUT · COMING SOON
         </div>
         <p className="font-mono text-xs" style={{ color: 'rgba(248,245,238,0.4)' }}>
-          Payment integration is the final piece of V0.5. Until Stripe is live, additional auditions
+          Payment integration is the final piece of V0.5. Until Stripe is live, additional audits
           are paused for accounts past the free quota.
         </p>
       </div>
@@ -349,7 +349,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           color: '#00D4AA',
           borderRadius: '2px',
         }}>
-          FREE AUDITION · {eligibility.remainingFree} of {FREE_REGISTRATIONS_PER_MEMBER} remaining
+          FREE AUDIT · {eligibility.remainingFree} of {FREE_REGISTRATIONS_PER_MEMBER} remaining
         </div>
       )}
 

@@ -160,7 +160,7 @@ export function ProjectPreviewModal({ project: p, onClose, creator: creatorProp,
             <div className="grid grid-cols-3 gap-2">
               <PreviewStat label="Forecasts"  value={String(p.score_forecast ?? 0)} />
               <PreviewStat label="Applauds"   value={String(applaudCount ?? 0)} />
-              <PreviewStat label="Auditioned" value={timeAgo(p.created_at)} />
+              <PreviewStat label="Audited"    value={timeAgo(p.created_at)} />
             </div>
 
             {/* Tech tags */}

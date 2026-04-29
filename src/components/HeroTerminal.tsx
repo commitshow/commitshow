@@ -336,7 +336,7 @@ function LineRow({
       <div className="flex items-baseline" style={{ paddingLeft: '2em' }}>
         <span style={{ color: 'rgba(248,245,238,0.55)', minWidth: '5em' }}>{line.label}</span>
         <span style={{ color: 'rgba(248,245,238,0.4)', minWidth: '4.5em' }}>{line.value}</span>
-        <span style={{ color: 'rgba(248,245,238,0.3)', letterSpacing: '0.04em' }}>─ audition unlocks ─</span>
+        <span style={{ color: 'rgba(248,245,238,0.3)', letterSpacing: '0.04em' }}>─ audit unlocks ─</span>
       </div>
     )
   }

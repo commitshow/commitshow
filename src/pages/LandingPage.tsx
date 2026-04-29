@@ -136,7 +136,7 @@ export function LandingPage() {
               </p>
               <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
                 {currentQuarterly
-                  ? `${currentQuarterly.name} · ${currentQuarterly.status === 'active' ? 'auditioning now' : currentQuarterly.status === 'upcoming' ? 'opens soon' : 'closed'}`
+                  ? `${currentQuarterly.name} · ${currentQuarterly.status === 'active' ? 'running now' : currentQuarterly.status === 'upcoming' ? 'opens soon' : 'closed'}`
                   : 'No quarterly running · ladder is open'}
               </div>
             </div>

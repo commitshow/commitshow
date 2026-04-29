@@ -171,7 +171,7 @@ export function ThumbnailPicker({ value, onChange, required = false }: Thumbnail
 
       {required && !value && !error && (
         <div className="mt-2 font-mono text-xs" style={{ color: 'rgba(248,245,238,0.35)' }}>
-          Required to audition. Thumbnails appear on the project feed and on graduation cards.
+          Required to audit. Thumbnails appear on the project feed and on graduation cards.
         </div>
       )}
     </div>

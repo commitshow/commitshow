@@ -15,10 +15,10 @@ export const EDGE_SUB_PHASES: Array<{ label: string; estMs: number }> = [
 export const EDGE_TOTAL_MS = EDGE_SUB_PHASES.reduce((s, p) => s + p.estMs, 0)
 
 export const SUBMIT_OUTER_STEPS = [
-  'Filing your application',
+  'Filing your audit request',
   'Filing your Build Brief dossier',
-  'Convening the audition panel',
-  'Issuing your evaluation snapshot',
+  'Convening the audit panel',
+  'Issuing your audit snapshot',
 ]
 
 export type AnalysisVariant = 'initial' | 'reanalyze'
@@ -69,7 +69,7 @@ export function AnalysisProgressModal({
 
   const heading = title ?? (variant === 'initial'
     ? 'Deep multi-axis analysis in progress'
-    : 'Re-analyzing · rolling the next audition round')
+    : 'Re-analyzing · rolling the next audit')
   const sub = subtitle ?? 'Takes 60–120s · don\'t close this tab'
 
   return (

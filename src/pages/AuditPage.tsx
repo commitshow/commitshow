@@ -271,8 +271,8 @@ function AuditPageContent() {
           </P>
           <Table
             rows={[
-              ['Walk-on',  'CLI · `npx commitshow@latest audit` · status="preview"', 'Audit-only score, normalized to /47 (52 hard - 5 brief slot inaccessible). Scout + Community pillars structurally absent — shown as "audition unlocks". Score derived deterministically from score_auto, no Claude qualitative override.'],
-              ['League',   'Auditioned project · status="active" · brief filled', 'Full 50 + 30 + 20 = 100. Claude reads all evidence, calibrates a final score with bonuses + deductions per the SCORE FORMATION rules. Brief Integrity slot accessible.'],
+              ['Walk-on',  'CLI · `npx commitshow@latest audit` · status="preview"', 'Audit-only score, normalized to /47 (52 hard - 5 brief slot inaccessible). Scout + Community pillars structurally absent — shown as "audit unlocks". Score derived deterministically from score_auto, no Claude qualitative override.'],
+              ['Full',     'Audited project · status="active" · brief filled',     'Full 50 + 30 + 20 = 100. Claude reads all evidence, calibrates a final score with bonuses + deductions per the SCORE FORMATION rules. Brief Integrity slot accessible.'],
             ]}
           />
           <P>
@@ -329,8 +329,8 @@ function AuditPageContent() {
           <P>
             CLI output is identical to the cached snapshot view — same big-digit
             ASCII, same 3-axis bar (Audit shown raw, Scout / Community shown as
-            "audition unlocks"), same 3 strengths + 2 concerns. The terminal
-            bar is the same data the league projects render in their detail
+            "audit unlocks"), same 3 strengths + 2 concerns. The terminal
+            bar is the same data the ladder projects render in their detail
             page.
           </P>
         </Section>
@@ -403,7 +403,7 @@ function AuditPageContent() {
             <Bullet><B>Enable TS strict</B> (`compilerOptions.strict: true`) → +1 pt.</Bullet>
             <Bullet><B>Commit lockfile + LICENSE</B> → +2 pts.</Bullet>
             <Bullet><B>Polish 10/10 completeness</B> (og:image, manifest, apple-touch, etc) → +2 pts.</Bullet>
-            <Bullet><B>Audition</B> (fill the brief at <Link to="/submit" className="underline" style={{ color: 'var(--gold-500)' }}>commit.show/submit</Link>) → +5 pts (Brief Integrity slot becomes accessible) plus Scout + Community pillars open up.</Bullet>
+            <Bullet><B>Run a full audit</B> (fill the brief at <Link to="/submit" className="underline" style={{ color: 'var(--gold-500)' }}>commit.show/submit</Link>) → +5 pts (Brief Integrity slot becomes accessible) plus Scout + Community pillars open up.</Bullet>
           </ul>
           <P>
             <B>Hardest 5 pts to get</B>: 90+ Lighthouse Performance on a real

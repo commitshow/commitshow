@@ -221,27 +221,27 @@ export function ProfilePage() {
         {/* ── Graduation explainer ── */}
         <GraduationExplainer currentGrade={grade} graduatedCount={stats?.graduated_count ?? 0} />
 
-        {/* ── My Auditions ── */}
+        {/* ── My Audits ── */}
         <div className="mb-8">
           <div className="flex items-baseline justify-between mb-3">
             <div>
-              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY AUDITIONS</div>
+              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY AUDITS</div>
               <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                Every product you've auditioned · click to open its dashboard
+                Every product you've audited · click to open its dashboard
               </div>
             </div>
             <NavLink to="/submit" className="font-mono text-xs font-medium tracking-wide px-3 py-1.5"
               style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}>
-              AUDITION A NEW PRODUCT →
+              AUDIT A NEW PRODUCT →
             </NavLink>
           </div>
           {loading ? (
             <div className="card-navy p-8 font-mono text-xs text-center" style={{ color: 'var(--text-muted)', borderRadius: '2px' }}>
-              Loading your auditions…
+              Loading your audits…
             </div>
           ) : applications.length === 0 ? (
             <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
-              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No auditions yet</div>
+              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No audits yet</div>
               <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
                 Audit your first product to open the dashboard.
               </p>
@@ -424,7 +424,7 @@ function YourStackSection() {
             We match Library items to your stack so you see artifacts that plug into what you already use.
             {' '}
             <span style={{ color: 'var(--text-secondary)' }}>
-              Default is auto-derived from your auditioned projects — override anytime.
+              Default is auto-derived from your audited projects — override anytime.
             </span>
           </p>
 
@@ -457,7 +457,7 @@ function YourStackSection() {
               color: 'var(--text-muted)',
               borderRadius: '2px',
             }}>
-              No stack detected yet. Add a chip below, or audition a project to let us infer it automatically.
+              No stack detected yet. Add a chip below, or audit a project to let us infer it automatically.
             </div>
           ) : (
             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -536,7 +536,7 @@ function GraduationExplainer({ currentGrade, graduatedCount }: { currentGrade: s
             // WHAT "GRADUATION" MEANS
           </div>
           <div className="font-display font-bold text-lg mt-1" style={{ color: 'var(--cream)' }}>
-            A project graduates when it clears the audition bar
+            A project graduates when it clears the quarterly bar
           </div>
           {!open && next && (
             <div className="mt-1 font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>

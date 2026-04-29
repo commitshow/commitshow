@@ -70,7 +70,7 @@ export function BackstagePanel({ project }: Props) {
           <p className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
             {unlocked
               ? 'Frozen at season-end · permanent record · the data nobody else captures.'
-              : 'Filed at audition. Unlocks publicly when this project graduates.'}
+              : 'Filed at audit. Unlocks publicly when this project graduates.'}
           </p>
         </div>
         {unlocked ? (

@@ -146,7 +146,7 @@ export function Nav() {
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--gold-400)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
           >
-            Audition
+            Audit
           </button>
 
           {user && <NotificationBell recipientId={user.id} />}
@@ -236,7 +236,7 @@ export function Nav() {
                       </div>
                     ) : (
                       <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-                        Cast on any auditioning project
+                        Cast on any audited project
                       </div>
                     )}
                   </NavLink>
@@ -384,7 +384,7 @@ export function Nav() {
                     </span>
                   </div>
                   <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-                    {remaining === 0 ? `Depleted · refills in ${daysUntilNextReset()}d` : 'Cast on any auditioning project'}
+                    {remaining === 0 ? `Depleted · refills in ${daysUntilNextReset()}d` : 'Cast on any audited project'}
                   </div>
                 </div>
 

@@ -121,7 +121,7 @@ export function ProjectImagesPicker({ value, onChange, max = MAX_IMAGES_DEFAULT,
         max 1200×630 and convert to WebP automatically — anything off-ratio gets letterboxed by the cards, so design
         for 1200×630 if you can.
         {required && value.length === 0 && (
-          <> · <span style={{ color: 'var(--scarlet)' }}>At least one image is required to audition.</span></>
+          <> · <span style={{ color: 'var(--scarlet)' }}>At least one image is required to audit.</span></>
         )}
       </div>
     </div>

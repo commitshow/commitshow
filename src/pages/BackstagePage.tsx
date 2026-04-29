@@ -21,7 +21,7 @@ export function BackstagePage() {
             Document what no one else captures
           </h1>
           <p className="font-light text-base" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            Backstage is the prompt-extraction layer of every commit.show audition.
+            Backstage is the prompt-extraction layer of every commit.show audit.
             Stack scrapers tell the world <em>what</em> you built. Backstage records
             the parts that live only in your head and your AI chat — the failures, the
             decisions, the delegation, the next wall. This is the data the next
@@ -65,7 +65,7 @@ export function BackstagePage() {
 
         <Section title="What earning Backstage looks like" anchor="how">
           <P>
-            Auditioning a project includes a one-step prompt extraction. You copy
+            Auditing a project includes a one-step prompt extraction. You copy
             a block from <Link to="/submit" className="underline" style={{ color: 'var(--gold-500)' }}>
             commit.show/submit</Link> into your AI coding agent (Claude Code, Cursor,
             Windsurf — anywhere with chat history). The agent reads the chat, the repo,
@@ -79,8 +79,8 @@ export function BackstagePage() {
           </ul>
           <P>
             Walk-ons (CLI users) get a code-only audit. Backstage opens once you
-            audition. The friction is the filter — it&rsquo;s why the data is worth
-            anything.
+            run a full audit through commit.show/submit. The friction is the
+            filter — it&rsquo;s why the data is worth anything.
           </P>
         </Section>
 
@@ -116,7 +116,7 @@ export function BackstagePage() {
                 Ready to put it on the record?
               </div>
               <div className="font-light text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Audition opens Backstage. Five minutes of honest writing earns it.
+                A full audit opens Backstage. Five minutes of honest writing earns it.
               </div>
             </div>
             <Link

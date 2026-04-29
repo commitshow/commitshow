@@ -44,9 +44,9 @@ export function ScoreTimeline({ points }: Props) {
     const p = points[0]
     return (
       <div className="card-navy p-5" style={{ borderRadius: '2px' }}>
-        <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// AUDITION TIMELINE · {rounds[0]}</div>
+        <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// AUDIT TIMELINE · {rounds[0]}</div>
         <div className="font-light text-sm" style={{ color: 'rgba(248,245,238,0.55)' }}>
-          First audition round locked in — <strong style={{ color: 'var(--cream)' }}>{p.score_total}/100</strong> on{' '}
+          First audit locked in — <strong style={{ color: 'var(--cream)' }}>{p.score_total}/100</strong> on{' '}
           {new Date(p.created_at).toLocaleDateString()}. Ship improvements and Re-analyze to see the score climb.
         </div>
       </div>
@@ -73,7 +73,7 @@ export function ScoreTimeline({ points }: Props) {
     <div className="card-navy p-5" style={{ borderRadius: '2px' }}>
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
-          // AUDITION TIMELINE
+          // AUDIT TIMELINE
         </div>
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <span style={{ color: 'rgba(248,245,238,0.4)' }}>{points.length} rounds</span>
