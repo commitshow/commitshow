@@ -163,18 +163,18 @@ CREATE TABLE IF NOT EXISTS ladder_streaks (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id            uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   category              text NOT NULL,                  -- saas / tool / ai_agent / game / library / other
-  window                text NOT NULL,                  -- today / week / month / all_time
+  time_window           text NOT NULL,                  -- today / week / month / all_time (renamed from `window` · reserved word)
   current_streak_start  timestamptz,
   current_top_n         int,                            -- 10 / 50 / 100 (현재 어느 Top 안)
   longest_streak_days   int NOT NULL DEFAULT 0,
   longest_top_n         int,                            -- 가장 깊이 들어간 Top
   total_days_in_top_50  int NOT NULL DEFAULT 0,
   last_calculated_at    timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (project_id, category, window)
+  UNIQUE (project_id, category, time_window)
 );
 
 CREATE INDEX IF NOT EXISTS ladder_streaks_project_idx ON ladder_streaks (project_id);
-CREATE INDEX IF NOT EXISTS ladder_streaks_category_window_idx ON ladder_streaks (category, window);
+CREATE INDEX IF NOT EXISTS ladder_streaks_category_window_idx ON ladder_streaks (category, time_window);
 
 ALTER TABLE ladder_streaks ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Anyone can read streaks" ON ladder_streaks;

@@ -161,7 +161,7 @@ export type LadderStreak = {
   id:                    string
   project_id:            string
   category:              LadderCategory
-  window:                LadderWindow
+  time_window:           LadderWindow
   current_streak_start:  string | null
   current_top_n:         number | null
   longest_streak_days:   number
