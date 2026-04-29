@@ -31,6 +31,7 @@ function daysUntilNextReset(): number {
 }
 
 const PRIMARY_LINKS: Array<{ to: string; label: string }> = [
+  { to: '/ladder',    label: 'Ladder'    },
   { to: '/projects',  label: 'Projects'  },
   { to: '/community', label: 'Community' },
   { to: '/library',   label: 'Library'   },

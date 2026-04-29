@@ -82,6 +82,8 @@ export default function App() {
           commit<span style={{ color: 'rgba(248,245,238,0.4)' }}>.show</span>
         </div>
         <div className="flex items-center justify-center gap-4 mb-3 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <a href="/ladder"    style={{ color: 'inherit', textDecoration: 'none' }}>Ladder</a>
+          <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
           <a href="/projects"  style={{ color: 'inherit', textDecoration: 'none' }}>Projects</a>
           <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
           <a href="/community" style={{ color: 'inherit', textDecoration: 'none' }}>Community</a>
