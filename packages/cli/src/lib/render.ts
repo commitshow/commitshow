@@ -161,10 +161,40 @@ export function renderAudit(view: AuditView): string {
   lines.push('  ' + c.bold(c.cream(name)) + '   ' + c.muted(slug))
   lines.push('')
 
+  // ── 3 strengths + 2 concerns box · errors-first reorder (2026-04-30) ──
+  // CONCERNS render before STRENGTHS · the value prop is "what your AI
+  // missed", so they lead. Score follows as the receipt below.
+  const strengths = asStringArray(snapshot?.rich_analysis?.scout_brief?.strengths, 3)
+  const concerns  = asStringArray(snapshot?.rich_analysis?.scout_brief?.weaknesses, 2)
+  if (strengths.length > 0 || concerns.length > 0) {
+    const bulletWidth = CONTENT_W - 2
+    lines.push('  ' + boxTop())
+    // Heading row inside the box · "What this build missed" lead.
+    if (concerns.length > 0) {
+      const heading = 'What this build missed'
+      lines.push('  ' + boxRow(heading.length, c.bold(c.scarlet(heading))))
+    }
+    for (const s of concerns) {
+      const txt = truncate(s, bulletWidth)
+      lines.push('  ' + boxRow(2 + txt.length, c.scarlet('↓ ') + c.cream(txt)))
+    }
+    if (strengths.length > 0) {
+      if (concerns.length > 0) lines.push('  ' + boxBlank())
+      const heading = 'What it got right'
+      lines.push('  ' + boxRow(heading.length, c.bold(c.teal(heading))))
+    }
+    for (const s of strengths) {
+      const txt = truncate(s, bulletWidth)
+      lines.push('  ' + boxRow(2 + txt.length, c.teal('↑ ') + c.cream(txt)))
+    }
+    lines.push('  ' + boxBottom())
+    lines.push('')
+  }
+
   // Hero score · big-digit ASCII for X-share screenshots.
-  // Always brand gold (slightly deeper tone for screenshot legibility) so
-  // the wordmark + score read as one cohesive brand mark. Band info is
-  // surfaced in the small caption underneath instead of via color.
+  // Now positioned AFTER concerns/strengths · the score is the receipt
+  // for the findings above, not the lead. Always brand gold for cohesive
+  // wordmark + score brand mark.
   const bigRows  = bigText(String(total))
   const bigWidth = bigRows[0].length
   const leftPad  = Math.floor((58 - bigWidth) / 2)
@@ -212,27 +242,7 @@ export function renderAudit(view: AuditView): string {
   }
   lines.push('')
 
-  // 3 strengths + 2 concerns from scout_brief · §15-C.2 content contract.
-  // Web surfaces the full 5+3; the CLI keeps it tight for terminal screenshots.
-  const strengths = asStringArray(snapshot?.rich_analysis?.scout_brief?.strengths, 3)
-  const concerns  = asStringArray(snapshot?.rich_analysis?.scout_brief?.weaknesses, 2)
-  if (strengths.length > 0 || concerns.length > 0) {
-    // strengths/concerns each render as `↑ ` (2 visible) + truncated line.
-    // Total visible-line budget inside the box is CONTENT_W chars; reserve
-    // 2 for the arrow + space, leaving CONTENT_W - 2 for the bullet text.
-    const bulletWidth = CONTENT_W - 2
-    lines.push('  ' + boxTop())
-    for (const s of strengths) {
-      const txt = truncate(s, bulletWidth)
-      lines.push('  ' + boxRow(2 + txt.length, c.teal('↑ ') + c.cream(txt)))
-    }
-    for (const s of concerns) {
-      const txt = truncate(s, bulletWidth)
-      lines.push('  ' + boxRow(2 + txt.length, c.scarlet('↓ ') + c.cream(txt)))
-    }
-    lines.push('  ' + boxBottom())
-    lines.push('')
-  }
+  // (concerns/strengths block moved above the score · errors-first 2026-04-30)
 
   // ─── Vibe Coder Checklist · 7-category framework ───
   // Render only the categories that produced an actionable status (fail /
@@ -411,6 +421,21 @@ export function renderMarkdown(view: AuditView): string {
   lines.push(`**${p.project_name}**`)
   if (p.github_url) lines.push(`_${p.github_url}_`)
   lines.push('')
+
+  // errors-first markdown order (2026-04-30) · concerns + strengths
+  // BEFORE the score so the AI agent reading audit.md picks up the
+  // actionable items in its first pass.
+  if (concerns.length > 0) {
+    lines.push(`## What this build missed`)
+    for (const s of concerns) lines.push(`- ${s}`)
+    lines.push('')
+  }
+  if (strengths.length > 0) {
+    lines.push(`## What it got right`)
+    for (const s of strengths) lines.push(`- ${s}`)
+    lines.push('')
+  }
+
   lines.push(`## Score · ${p.score_total} / 100`)
   lines.push('')
   lines.push(`- Audit:      ${p.score_auto}/50`)
@@ -423,18 +448,9 @@ export function renderMarkdown(view: AuditView): string {
     lines.push(`- Ranked #${standing.rank} of ${standing.total_in_season} — projected **${standing.projected_tier ?? '—'}** (top ${Math.round(standing.percentile)}%)`)
   }
   lines.push('')
-  if (strengths.length > 0) {
-    lines.push(`## Strengths`)
-    for (const s of strengths) lines.push(`- ${s}`)
-    lines.push('')
-  }
-  if (concerns.length > 0) {
-    lines.push(`## Concerns`)
-    for (const s of concerns) lines.push(`- ${s}`)
-    lines.push('')
-  }
+
   lines.push(`---`)
-  lines.push(`Auditioned on commit.show · https://commit.show/projects/${p.id}`)
+  lines.push(`Audited on commit.show · https://commit.show/projects/${p.id}`)
   lines.push('')
   return lines.join('\n')
 }

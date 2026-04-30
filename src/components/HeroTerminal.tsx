@@ -76,20 +76,29 @@ function sequenceForDemo(d: AuditDemo): Line[] {
   const ratio = Math.max(0, Math.min(1, d.auditPts / 45))
   const filled = Math.round(ratio * FILL_CELLS)
   const bar = '▰'.repeat(filled) + '▱'.repeat(FILL_CELLS - filled)
+  // errors-first cycle (2026-04-30 pivot) · concerns lead after the
+  // bars, score caption gets a "N concerns" tail so the screenshot
+  // pairs the number with the value prop ("82 · 2 to fix"). Strengths
+  // come last as the counter-balance.
+  const concernCount = d.concerns.length
+  const captionPost  = concernCount > 0
+    ? ` · ${d.band} · ${concernCount} to fix`
+    : ` · ${d.band}`
   return [
     { kind: 'prompt', text: `npx commitshow@latest audit github.com/${d.slug}` },
     { kind: 'spacer' },
-    { kind: 'note',   text: `Refreshing audit for ${d.slug}…` },
+    { kind: 'note',   text: `Auditing ${d.slug}… catching what your AI missed.` },
     { kind: 'spacer' },
     { kind: 'big',    score: String(d.score) },
-    { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: ` · ${d.band}` },
+    { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: captionPost },
     { kind: 'spacer' },
     { kind: 'bar',       label: 'Audit', value: `${d.auditPts}/45`, bar, color: '#00D4AA' },
     { kind: 'lockedBar', label: 'Scout', value: '—/30' },
     { kind: 'lockedBar', label: 'Comm.', value: '—/20' },
     { kind: 'spacer' },
+    // concerns (↓) lead the bullet section · errors-first.
+    ...d.concerns.map((t): Line => ({ kind: 'arrow', dir: 'down', text: t })),
     ...d.strengths.map((t): Line => ({ kind: 'arrow', dir: 'up',   text: t })),
-    ...d.concerns .map((t): Line => ({ kind: 'arrow', dir: 'down', text: t })),
   ]
 }
 

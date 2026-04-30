@@ -351,6 +351,19 @@ export function AnalysisResultCard({
         </div>
       )}
 
+      {/* errors-first lead (2026-04-30 pivot) · SCOUT BRIEF moved here from
+          its old position below the score · "what your AI missed" surfaces
+          BEFORE the score because that's the value prop. Score becomes
+          the receipt that follows. */}
+      {!blindVisitor && r.scout_brief && (
+        <ScoutBriefSection
+          brief={r.scout_brief}
+          hasFullAccess={hasFullAccess}
+          viewerTier={viewerTier}
+          isOwner={isOwner}
+        />
+      )}
+
       {/* ── SCORE + METRIC CARDS (hidden from visitors on Week 1) ── */}
       {!blindVisitor && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -429,15 +442,9 @@ export function AnalysisResultCard({
         return null
       })()}
 
-      {/* ── SCOUT BRIEF · 5 strengths + 5 weaknesses (visibility-gated) ── */}
-      {!blindVisitor && r.scout_brief && (
-        <ScoutBriefSection
-          brief={r.scout_brief}
-          hasFullAccess={hasFullAccess}
-          viewerTier={viewerTier}
-          isOwner={isOwner}
-        />
-      )}
+      {/* errors-first reorder (2026-04-30 pivot): SCOUT BRIEF moved
+          up · see block right after role chip. This slot kept empty
+          to preserve flow markers for /rulebook references. */}
 
       {/* ── GITHUB FINDINGS (Platinum · owner only) ── */}
       {!blindVisitor && hasFullAccess && r.github_findings.length > 0 && (
@@ -874,23 +881,25 @@ function ScoutBriefSection({
       </div>
       <p className="text-xs font-light mb-4" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.7 }}>
         {isOwner
-          ? 'The same 5-and-5 distillation Scouts use to forecast — useful for you to see what signal they get.'
-          : 'Ten bullets distilled from the full audit. Scout this before you forecast.'}
+          ? 'Things to fix first · then strengths to keep. The score below is the receipt; this is the work.'
+          : 'What this build missed · what it got right. Scouts read this before forecasting.'}
       </p>
 
+      {/* errors-first column order (2026-04-30 pivot) · weaknesses lead,
+          strengths balance. Mobile stacks weaknesses on top. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <ScoutBulletColumn
-          label="STRENGTHS"
-          glyph="+"
-          accent="#3FA874"
-          bullets={strengths}
-        />
-        <ScoutBulletColumn
-          label="WEAKNESSES"
+          label="WHAT TO FIX"
           glyph="−"
           accent="#C8102E"
           bullets={visibleWeaknesses}
           lockedCount={hiddenCount}
+        />
+        <ScoutBulletColumn
+          label="WHAT WORKS"
+          glyph="+"
+          accent="#3FA874"
+          bullets={strengths}
         />
       </div>
     </div>
