@@ -252,7 +252,10 @@ export function ProjectDetailPage() {
                     </span>
                   )}
                 </div>
-                <h1 className="font-display font-black text-3xl md:text-4xl leading-tight mb-2" style={{ color: 'var(--cream)', letterSpacing: '-0.01em' }}>
+                {/* letter-spacing intentionally unspecified · CLAUDE.md §4
+                    rule for h1 3xl/4xl Playfair (browser default · prevents
+                    serif character collisions). */}
+                <h1 className="font-display font-black text-3xl md:text-4xl leading-tight mb-2" style={{ color: 'var(--cream)' }}>
                   {project.project_name}
                 </h1>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
