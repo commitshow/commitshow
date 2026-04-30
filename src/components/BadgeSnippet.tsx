@@ -126,13 +126,18 @@ function SnippetRow({ label, value, copied, onCopy }: {
         </button>
       </div>
       <pre
-        className="font-mono text-[11px] px-3 py-2 overflow-x-auto"
+        className="font-mono text-[11px] px-3 py-2 overflow-x-auto max-w-full"
         style={{
           background: 'rgba(6,12,26,0.6)',
           color: 'var(--text-primary)',
           border: '1px solid rgba(255,255,255,0.06)',
           borderRadius: '2px',
           whiteSpace: 'pre',
+          // pre + whiteSpace:pre + no max-width was expanding its parent
+          // grid column on the project detail page (own-project view only,
+          // because BadgeSnippet only renders for isOwner). max-width: 100%
+          // pins the box to the column · overflow-x-auto scrolls inside.
+          maxWidth: '100%',
         }}
       >
         {value}

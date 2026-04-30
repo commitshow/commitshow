@@ -359,7 +359,12 @@ export function ProjectDetailPage() {
         />
 
         {/* ── Sections ──────────────────────────────────────── */}
-        <div className="grid gap-10">
+        {/* grid-cols-1 + min-w-0: explicit single-column 1fr so any
+            child with unbounded intrinsic width (e.g. <pre whitespace:pre>
+            in BadgeSnippet) can't push the column wider than the
+            parent · earlier symptom: own-project view layout broke
+            on the right because of the badge snippet pre. */}
+        <div className="grid grid-cols-1 gap-10 min-w-0">
           {/* OVERVIEW */}
           <section id="overview" className="scroll-mt-28">
             <SectionHeader label="OVERVIEW" />
