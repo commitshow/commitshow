@@ -2,10 +2,14 @@
 // transparent scoring; publishing these rules is both marketing AND legal
 // evidence (CLAUDE.md §2 core principle, §17 legal notes).
 //
-// Last meaningful rewrite: 2026-04-29 — reflects v3.1 form-aware
-// calibration · walk-on max 95 · vibe-coder 7-category framework ·
-// %-based graduation. No pricing details (those live in
-// /backstage and project-level UI).
+// 2026-04-30 rewrite — restructured around §11-NEW Ladder + Events PRD:
+//   · Ladder is the primary surface (always-on)
+//   · 7 use-case categories (productivity / niche SaaS / creator / dev
+//     tools / AI agents / consumer / games)
+//   · Events (incl. quarterly = season) are admin-created drops
+//   · Quarterly events still produce graduation tiers
+//   · Form factor / stage / pricing are orthogonal filters, not categories
+// No pricing details (live on each project's audit page).
 
 import { useNavigate } from 'react-router-dom'
 
@@ -29,58 +33,105 @@ export function RulebookPage() {
 
         <header className="mb-10">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-            // RULEBOOK · v3.1
+            // RULEBOOK · v3
           </div>
           <h1 className="font-display font-black text-3xl md:text-4xl mb-3" style={{ color: 'var(--cream)' }}>
             How commit.show judges a project
           </h1>
           <p className="font-light text-base" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            Every rule that shapes a score or a grade lives here. No secret sauce,
-            no human ringmaster with a thumb on the scale. If a Scout, Creator,
-            or lawyer ever asks "why did this project graduate?", the answer is
-            on this page.
+            Every rule that shapes a score, a rank, or a graduation tier lives
+            here. No secret sauce, no human ringmaster with a thumb on the
+            scale. If a Scout, Creator, or lawyer ever asks "why is this
+            project ranked above that one?", the answer is on this page.
           </p>
         </header>
 
-        <Section title="1 · The season" anchor="season">
+        <Section title="1 · The Ladder · always live" anchor="ladder">
           <P>
-            Every project runs a <B>3-week season</B>. The season is divided into
-            revelation phases that determine what a public viewer can see at any
-            moment.
+            The ladder is commit.show's primary surface. Every audited project
+            ranks against its peers in <B>one of seven use-case categories</B>,
+            across <B>four time windows</B>. There is no off-season — the
+            moment an audit finishes, the project's rank updates.
           </P>
           <Table
             rows={[
-              ['Week 1 · Days 1-7',   'Blind stage',      'Scores hidden to the public. Creators iterate without pressure.'],
-              ['Week 2 · Days 8-14',  'Percentile reveal','Projects surface as relative bands ("top X%"). First rounds of Scout feedback.'],
-              ['Week 3 · Days 15-21', 'Scores go live',   'Concrete numbers visible with a 6-hour snapshot delay. Forecasting intensifies.'],
-              ['Days 22-28',          'Graduation Week',  'Top 20% computed across the season. Brief Phase 2 auto-published for the Valedictorian.'],
-              ['Day 29',              'Graduation Day',   'Results confirmed · badges + Hall of Fame entries dispatched · Alumni Briefs open · Build Logs auto-seeded.'],
+              ['Categories',  '7 use-case buckets',
+                'Productivity & Personal · Niche SaaS · Creator & Media · Dev Tools · AI Agents & Chat · Consumer & Lifestyle · Games & Playful. Picked by the Creator (auto-detected suggestion at submit time).'],
+              ['Windows',     'Today · Week · Month · All-time',
+                'Today/Week refresh every 5 minutes. Month / All-time every hour. Switch the chip at the top of /ladder.'],
+              ['Tiebreaker',  '5-stage',
+                'Score total · last-audit recency · Audit pillar score · audit count (fewer = better — lucky-roll deterrent) · project creation date.'],
+              ['Coverage',    'Active + graduated',
+                'Walk-on / preview audits stay out of the ladder · they appear only in the hero terminal demo. Categories with zero entries simply hide.'],
             ]}
           />
+          <P>
+            <B>Ranks are public · scores are public.</B> No hidden multipliers,
+            no editorial reshuffles. If a project rank surprises you, the
+            tiebreaker columns explain why.
+          </P>
         </Section>
 
-        <Section title="2 · The score · 100 points" anchor="score">
+        <Section title="2 · The score · two layers" anchor="score">
           <P>
-            A project's total score is the sum of three pillars, each with its
-            own cap and method of collection.
+            commit.show runs <B>two scoring layers</B>. The ladder layer is
+            always live; the events layer kicks in only when the admin runs
+            a quarterly event or other showcase.
           </P>
           <Table
             rows={[
-              ['50 pts', 'Audit pillar',     'Deterministic code analysis · live URL signals · production-readiness signals · structured failure-mode checks. The half a code analyzer can reach.'],
-              ['30 pts', 'Scout Forecast',   'Predictions from verified Scouts. Every forecast vote is uniform weight 1.0. Tier differentiates the monthly quota and how early a Scout sees deeper analysis.'],
-              ['20 pts', 'Community Signal', 'Views · comment depth · shares · return visits. Quality-weighted, not raw counts. Bot-clusters score zero.'],
+              ['Ladder · always',
+                'Audit 70% + Community 30%',
+                'No Scout-Forecast pillar. Pure code-evidence + community reaction signal. This is what every project is ranked on by default.'],
+              ['Quarterly event',
+                'Audit 50 + Scout 30 + Community 20',
+                'Only during a 3-week quarterly. Adds a Scout-Forecast pillar that lets verified Scouts predict project performance. Drives the graduation cut.'],
+              ['Other event templates',
+                'Per-template scoring',
+                'Tool Challenge / Theme Sprint / Quality Bar / Sponsored Showcase / Open Bounty — each picks its own scoring method (audit-only, audit+community, etc).'],
             ]}
           />
           <P>
             <B>Walk-on score caps at 95 / 100.</B> Walk-on is the CLI track —
-            a public preview audit that only evaluates the Audit pillar. The
-            final 5 points are reserved for Scout + Community signals only an
-            actual audition produces. Even a perfect walk-on never reads as
-            "100" because half the surface wasn't measured.
+            <code> npx commitshow audit github.com/owner/repo</code> — that
+            evaluates only the Audit pillar with no brief and no Scout signals.
+            The remaining 5 points are reserved for the parts only a full
+            commit.show submission produces.
           </P>
         </Section>
 
-        <Section title="3 · The Audit pillar · 52 points hard, normalized to 50" anchor="audit">
+        <Section title="3 · Categories · 7 use-case buckets" anchor="categories">
+          <P>
+            Categories describe <B>what the project does</B>, not how it's
+            built. Form factor (web / mobile / CLI), maturity stage, and
+            free-vs-paid live as orthogonal filters elsewhere.
+          </P>
+          <Table
+            rows={[
+              ['Productivity & Personal', 'Personal productivity', 'Notes · dashboards · automation · personal utilities · internal tools.'],
+              ['Niche SaaS',              'Vertical / role micro-SaaS', 'Industry-specific or role-specific SaaS with auth + billing.'],
+              ['Creator & Media',         'Creative tooling', 'Design · video · image · writing · generative media · creator-economy.'],
+              ['Dev Tools',               'Built for developers', 'CLI · libraries · IDE plugins · coding agents · SDKs · scaffolds.'],
+              ['AI Agents & Chat',        'Agentic / conversational', 'Autonomous agents · chatbots · automation workers · RAG products.'],
+              ['Consumer & Lifestyle',    'Mass-consumer', 'Health · finance · travel · learning · social · everyday consumer.'],
+              ['Games & Playful',         'Games + interactive', 'Games · interactive fiction · playful experiments.'],
+            ]}
+          />
+          <P>
+            <B>Auto-detector suggests, Creator picks.</B> On every audit a
+            keyword + form-factor + tech-layer detector writes a suggestion
+            into <code>detected_category</code>. The Creator then confirms or
+            overrides at audit-result time (or via the project EDIT form at
+            any time). The picked category is what determines ladder
+            placement; the auto-suggestion is a hint with a "SUGGESTED" badge.
+          </P>
+          <P>
+            If the Creator never picks one, the auto-suggestion is used as a
+            fallback so the project doesn't disappear from the ladder.
+          </P>
+        </Section>
+
+        <Section title="4 · The Audit pillar · 52 points hard, normalized to 50" anchor="audit">
           <P>
             The Audit pillar is split across 7 slots. Slot <B>weights</B> are
             constant across all projects; slot <B>semantics</B> adapt to the
@@ -126,7 +177,7 @@ export function RulebookPage() {
           </P>
         </Section>
 
-        <Section title="4 · Vibe-coder 7-category framework" anchor="vibe-checklist">
+        <Section title="5 · Vibe-coder 7-category framework" anchor="vibe-checklist">
           <P>
             The seven systematic failure modes that ~70% of AI-assisted
             projects ship to production without. A generic linter doesn't
@@ -160,18 +211,57 @@ export function RulebookPage() {
           </P>
         </Section>
 
-        <Section title="5 · Graduation · top 20% relative" anchor="graduation">
+        <Section title="6 · Events · admin-curated drops" anchor="events">
           <P>
-            Graduation is <B>relative</B>, not absolute. At the end of the
-            season the league is ranked by total score. The top 20% earn a
-            graduation tier; the rest move to the Rookie Circle and come back.
+            Beyond the always-on ladder, the admin can launch <B>events</B> on
+            its own schedule. Six templates, each with its own rules:
           </P>
           <Table
             rows={[
-              ['Valedictorian', '≈0.5% · 1 per season',           'Hall of Fame · permanent archive · official @commitshow video · Build Brief Phase 2 auto-published.'],
-              ['Honors',        'Top 5% (excl. Valedictorian)',   'Hall of Fame · certified badge · featured · NFT.'],
-              ['Graduate',      'Top 20% (excl. Honors)',         'Graduation badge · full Build Brief publicly revealed · MD Library publishing rights.'],
-              ['Rookie Circle', 'Everyone else',                  'Audit findings + Scout commentary preserved. Brief stays private if you choose. Try again next season.'],
+              ['Quarterly',           '3-week season',
+                'Adds Scout Forecast pillar · ends in graduation cut (top 20%) · Hall of Fame entry for Valedictorian.'],
+              ['Tool Challenge',      'Per-tool 30-day',
+                'Audit-only scoring · entries filtered by tool used (Cursor / Claude / Lovable / etc) · 3 winners.'],
+              ['Theme Sprint',        '7-day theme',
+                'Audit + community signal · all entries must address the announced theme.'],
+              ['Quality Bar',         'Threshold-gated',
+                'Auto-validated by detectors (e.g. webhook idempotency · RLS coverage · 7-cat framework). Pass-or-fail.'],
+              ['Sponsored Showcase',  'Sponsor-funded',
+                'Sponsor brings the prize pool · admin-approved · scoring method per agreement.'],
+              ['Open Bounty',         'Spec-to-solution',
+                'A documented problem with acceptance criteria · first to solve (or all who solve) gets the reward.'],
+            ]}
+          />
+          <P>
+            Entry into an event is <B>opt-in</B>. The 3-tier model:
+          </P>
+          <Table
+            rows={[
+              ['Ladder',   'Auto · everyone',         'Every audited project ranks on the ladder by default. No event involvement.'],
+              ['Eligible', 'Auto · matches filter',   'Project matches an event\'s eligibility (category / tool / score threshold) · gets a notification · NOT yet competing.'],
+              ['Entered',  'Manual · explicit click', 'Creator confirms entry · project is now on the event leaderboard with a frozen snapshot.'],
+            ]}
+          />
+          <P>
+            "Eligible" never auto-promotes to "Entered". A small sponsor pool
+            never gets diluted by every passing project.
+          </P>
+        </Section>
+
+        <Section title="7 · Graduation · only during quarterly events" anchor="graduation">
+          <P>
+            Graduation only happens during a <B>Quarterly event</B>. The
+            always-on ladder doesn't graduate anyone — it just ranks. When a
+            quarterly closes, the top 20% of <B>entered</B> projects earn a
+            graduation tier; the rest move to the Rookie Circle and can
+            re-enter next quarterly.
+          </P>
+          <Table
+            rows={[
+              ['Valedictorian', '≈0.5% · 1 per quarterly',         'Hall of Fame (Spring/Summer/Fall/Winter cohort) · permanent archive · official @commitshow video · Build Brief Phase 2 auto-published.'],
+              ['Honors',        'Top 5% (excl. Valedictorian)',    'Hall of Fame · certified badge · featured · NFT.'],
+              ['Graduate',      'Top 20% (excl. Honors)',          'Graduation badge · full Build Brief publicly revealed · MD Library publishing rights.'],
+              ['Rookie Circle', 'Everyone else',                   'Audit findings + Scout commentary preserved. Brief stays private if you choose. Try again next quarterly.'],
             ]}
           />
           <P>
@@ -180,13 +270,34 @@ export function RulebookPage() {
           </P>
           <ul className="pl-0 space-y-2 mb-4">
             <Bullet>Live URL <B>health check passes</B> (HTTP 200 + valid SSL) — production readiness minimum.</Bullet>
-            <Bullet>At least <B>2 audit snapshots</B> recorded across the season — single-shot luck doesn't graduate.</Bullet>
+            <Bullet>At least <B>2 audit snapshots</B> recorded across the quarterly — single-shot luck doesn't graduate.</Bullet>
             <Bullet>Build Brief Phase 1 <B>Core Intent submitted</B> (problem · features · target user).</Bullet>
-            <Bullet><B>No abuse adjudication</B> during the season (see §8).</Bullet>
+            <Bullet><B>No abuse adjudication</B> during the quarterly (see §11).</Bullet>
           </ul>
         </Section>
 
-        <Section title="6 · Creator grade · career track" anchor="grade">
+        <Section title="8 · Streaks + milestones · permanent badges" anchor="streaks">
+          <P>
+            Two flavors of recognition track ladder progress year-round:
+          </P>
+          <Table
+            rows={[
+              ['Streaks',
+                'Live · resets',
+                'How long a project has held a Top-10 / Top-50 / Top-100 spot in its category. 3-day grace period (a brief drop doesn\'t reset). Surfaces as a "47-day streak" badge.'],
+              ['Milestones',
+                'One-shot · permanent',
+                'Crossing a threshold for the first time issues a permanent badge: first Top-100 · first Top-10 · first #1 · 100-day streak · 100-spot climb in 30 days · all-categories-Top-50.'],
+            ]}
+          />
+          <P>
+            Milestones can never un-happen. Streaks are a "how is the project
+            doing right now?" signal; milestones are a "what has it
+            accomplished?" trophy case.
+          </P>
+        </Section>
+
+        <Section title="9 · Creator grade · career track" anchor="grade">
           <P>
             Creator Grade is your cumulative career tier across seasons. It
             only advances through graduated projects — a single great project
@@ -204,14 +315,19 @@ export function RulebookPage() {
           />
         </Section>
 
-        <Section title="7 · Scout tier · activity track" anchor="scout">
+        <Section title="10 · Scout tier · activity track" anchor="scout">
           <P>
-            Scout Tier measures how engaged you are as a critic — not the quality
-            of your own projects. Tier comes from Activity Points earned by voting
-            and applauding, <B>or</B> from your Forecast accuracy (OR condition).
-            Every Forecast vote counts the same across all tiers — tier
-            differentiation is carried by the monthly forecast quota and by
-            early access to deeper analysis.
+            Scout Tier measures how engaged you are as a critic — not the
+            quality of your own projects. Tier comes from Activity Points
+            earned by voting / applauding, <B>or</B> from your Forecast
+            accuracy (OR condition). Every Forecast vote counts the same
+            across all tiers — tier differentiation is carried by the monthly
+            forecast quota and by early access to deeper analysis.
+          </P>
+          <P>
+            <B>Forecasts only fire during quarterly events.</B> The always-on
+            ladder uses Audit + Community only — no Scout pillar — so Scouts
+            queue their forecasts for the next quarterly when it opens.
           </P>
           <Table
             rows={[
@@ -229,7 +345,7 @@ export function RulebookPage() {
           </P>
         </Section>
 
-        <Section title="8 · Evidence integrity" anchor="integrity">
+        <Section title="11 · Evidence integrity" anchor="integrity">
           <P>
             Four sources of evidence are weighed, ranked by trust (lowest to highest).
           </P>
@@ -247,7 +363,7 @@ export function RulebookPage() {
           </P>
         </Section>
 
-        <Section title="9 · Anti-abuse guardrails" anchor="abuse">
+        <Section title="12 · Anti-abuse guardrails" anchor="abuse">
           <Table
             rows={[
               ['Comment rate limit',         '≤ 50 / month per member'],
@@ -262,7 +378,7 @@ export function RulebookPage() {
           />
         </Section>
 
-        <Section title="10 · About this score" anchor="about-this-score">
+        <Section title="13 · About this score" anchor="about-this-score">
           <P>
             Audit pillar measures things we can detect with code analysis:
             RLS coverage, webhook integrity, query indexes, error tracking.
@@ -283,10 +399,11 @@ export function RulebookPage() {
         </Section>
 
         <div className="mt-12 pt-6 font-mono text-[11px]" style={{ borderTop: '1px solid rgba(240,192,64,0.15)', color: 'var(--text-muted)', lineHeight: 1.65 }}>
-          These rules are binding for the current season. Material changes are
-          announced at least two weeks before they take effect and do not apply
-          retroactively to projects already in-season. Pricing and refund
-          mechanics live on each project's audition page, not here.
+          These rules are binding for the active ladder and any in-flight
+          event. Material changes are announced at least two weeks before
+          they take effect and do not apply retroactively to projects already
+          ranked or entered. Pricing and refund mechanics live on each
+          project's audit page, not here.
         </div>
       </div>
     </section>
