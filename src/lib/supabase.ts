@@ -26,7 +26,16 @@ export type EventTemplateType =
 
 export type EventStatus = 'draft' | 'live' | 'closed' | 'frozen'
 
-export type LadderCategory = 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other'
+// 7-category use-case taxonomy (2026-04-30 redesign · was 6 form-factor
+// buckets). Form factor / stage / pricing now live as orthogonal filters.
+export type LadderCategory =
+  | 'productivity_personal'
+  | 'niche_saas'
+  | 'creator_media'
+  | 'dev_tools'
+  | 'ai_agents_chat'
+  | 'consumer_lifestyle'
+  | 'games_playful'
 export type LadderWindow   = 'today' | 'week' | 'month' | 'all_time'
 
 export type MilestoneType =
@@ -38,16 +47,35 @@ export type MilestoneType =
   | 'all_categories_top_50'
 
 export const LADDER_CATEGORIES: LadderCategory[] = [
-  'saas', 'tool', 'ai_agent', 'game', 'library', 'other',
+  'productivity_personal',
+  'niche_saas',
+  'creator_media',
+  'dev_tools',
+  'ai_agents_chat',
+  'consumer_lifestyle',
+  'games_playful',
 ]
 
 export const LADDER_CATEGORY_LABELS: Record<LadderCategory, string> = {
-  saas:     'SaaS',
-  tool:     'Tools',
-  ai_agent: 'AI Agents',
-  game:     'Games',
-  library:  'Libraries',
-  other:    'Other',
+  productivity_personal: 'Productivity & Personal',
+  niche_saas:            'Niche SaaS',
+  creator_media:         'Creator & Media',
+  dev_tools:             'Dev Tools',
+  ai_agents_chat:        'AI Agents & Chat',
+  consumer_lifestyle:    'Consumer & Lifestyle',
+  games_playful:         'Games & Playful',
+}
+
+// Short hint shown in pickers · helps users self-classify when the
+// detector's suggestion isn't obviously right.
+export const LADDER_CATEGORY_HINTS: Record<LadderCategory, string> = {
+  productivity_personal: 'Personal productivity · notes · dashboards · automation',
+  niche_saas:            'Vertical / role-specific micro-SaaS',
+  creator_media:         'Design · video · image · writing · generative media',
+  dev_tools:             'CLI · libraries · IDE plugins · coding agents',
+  ai_agents_chat:        'Agents · chatbots · automation workers',
+  consumer_lifestyle:    'Health · finance · travel · learning · everyday consumer',
+  games_playful:         'Games · interactive · playful',
 }
 
 export const LADDER_WINDOW_LABELS: Record<LadderWindow, string> = {

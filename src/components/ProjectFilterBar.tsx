@@ -12,16 +12,17 @@ const STATUS_TABS: Array<{ value: NonNullable<ProjectFilters['status']>; label: 
   { value: 'retry',     label: 'Rookie Circle' },
 ]
 
-// §11-NEW.1.1 ladder category chip strip — sits right above the search row
-// so the category dimension is hard to miss. 'any' is the leftmost (default).
+// §11-NEW.1.1 · 7-category use-case taxonomy chip strip (2026-04-30 redesign).
+// Form factor (web/mobile/CLI) / stage / pricing are orthogonal filters now.
 const CATEGORY_TABS: Array<{ value: NonNullable<ProjectFilters['category']>; label: string }> = [
-  { value: 'any',      label: 'All categories' },
-  { value: 'saas',     label: 'SaaS'           },
-  { value: 'tool',     label: 'Tools'          },
-  { value: 'ai_agent', label: 'AI Agents'      },
-  { value: 'game',     label: 'Games'          },
-  { value: 'library',  label: 'Libraries'      },
-  { value: 'other',    label: 'Other'          },
+  { value: 'any',                   label: 'All'                    },
+  { value: 'productivity_personal', label: 'Productivity & Personal' },
+  { value: 'niche_saas',            label: 'Niche SaaS'             },
+  { value: 'creator_media',         label: 'Creator & Media'        },
+  { value: 'dev_tools',             label: 'Dev Tools'              },
+  { value: 'ai_agents_chat',        label: 'AI Agents & Chat'       },
+  { value: 'consumer_lifestyle',    label: 'Consumer & Lifestyle'   },
+  { value: 'games_playful',         label: 'Games & Playful'        },
 ]
 
 const SORTS: Array<{ value: NonNullable<ProjectFilters['sort']>; label: string }> = [

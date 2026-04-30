@@ -156,7 +156,15 @@ export interface GridFilters {
   minScore?: number
   sort?: 'newest' | 'score' | 'forecasts'
   // §11-NEW.1.1 ladder category filter · 'any' = no filter
-  category?: 'any' | 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other'
+  category?:
+    | 'any'
+    | 'productivity_personal'
+    | 'niche_saas'
+    | 'creator_media'
+    | 'dev_tools'
+    | 'ai_agents_chat'
+    | 'consumer_lifestyle'
+    | 'games_playful'
 }
 
 export async function fetchProjectsFiltered(

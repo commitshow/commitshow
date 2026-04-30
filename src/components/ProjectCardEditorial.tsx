@@ -99,7 +99,7 @@ export function ProjectCardEditorial({
         )}
         {/* §11-NEW.1.1 ladder category + rank · grouped pill. Category sits
             on the left, rank ('#3') trails to the right when present. */}
-        {p.business_category && p.business_category !== 'other' && (
+        {p.business_category && (
           <span className={`absolute ${isGraduated ? 'bottom-3' : 'top-3'} left-3 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5`} style={{
             background: 'rgba(15,32,64,0.7)',
             color: 'var(--cream)',

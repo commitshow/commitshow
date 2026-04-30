@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
-import { supabase, PUBLIC_PROJECT_COLUMNS, type Project, type ProjectImage } from '../lib/supabase'
+import {
+  supabase, PUBLIC_PROJECT_COLUMNS,
+  LADDER_CATEGORIES, LADDER_CATEGORY_LABELS, LADDER_CATEGORY_HINTS,
+  type Project, type ProjectImage, type LadderCategory,
+} from '../lib/supabase'
 import { ProjectImagesPicker } from './ProjectImagesPicker'
 
 interface Props {
@@ -24,6 +28,13 @@ export function EditProjectModal({ project, onClose, onSaved }: Props) {
   const [images,      setImages]        = useState<ProjectImage[]>(project.images ?? [])
   const [techInput,   setTechInput]     = useState('')
   const [techLayers,  setTechLayers]    = useState<string[]>(project.tech_layers ?? [])
+  // 7-category use-case taxonomy (2026-04-30 redesign · §11-NEW.1.1).
+  // Auto-detector now SUGGESTS via project.detected_category; the user
+  // confirms or overrides here. Defaults to existing business_category
+  // first, then detector's suggestion.
+  const [category,    setCategory]      = useState<LadderCategory | ''>(
+    (project.business_category ?? project.detected_category ?? '') as LadderCategory | ''
+  )
   const [busy, setBusy]   = useState(false)
   const [error, setError] = useState('')
 
@@ -65,6 +76,7 @@ export function EditProjectModal({ project, onClose, onSaved }: Props) {
       images,                  // DB trigger syncs thumbnail_url / thumbnail_path
       tech_layers:   techLayers,
       updated_at:    new Date().toISOString(),
+      ...(category ? { business_category: category } : {}),
     }
     const { data, error: err } = await supabase
       .from('projects')
@@ -190,6 +202,58 @@ export function EditProjectModal({ project, onClose, onSaved }: Props) {
               PROJECT IMAGES · UP TO 3
             </span>
             <ProjectImagesPicker value={images} onChange={setImages} max={3} required />
+          </div>
+
+          {/* Category — auto-detector suggests, user picks final */}
+          <div>
+            <span className="block font-mono text-[11px] tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+              CATEGORY · LADDER PLACEMENT
+            </span>
+            <p className="font-mono text-[11px] mb-3" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              Pick the use-case that best describes your project — this determines which leaderboard
+              you compete on. {project.detected_category && project.detected_category !== category && (
+                <>The auto-detector suggested <strong style={{ color: 'var(--gold-500)' }}>
+                  {LADDER_CATEGORY_LABELS[project.detected_category as LadderCategory]}
+                </strong>, but the call is yours.</>
+              )}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {LADDER_CATEGORIES.map(c => {
+                const active = category === c
+                const suggested = project.detected_category === c
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCategory(c)}
+                    className="text-left px-3 py-2.5 transition-colors"
+                    style={{
+                      background:  active ? 'rgba(240,192,64,0.10)' : 'rgba(255,255,255,0.02)',
+                      border:      `1px solid ${active ? 'rgba(240,192,64,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                      borderRadius: '2px',
+                      cursor:      'pointer',
+                    }}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-mono text-xs font-medium" style={{ color: active ? 'var(--gold-500)' : 'var(--cream)' }}>
+                        {LADDER_CATEGORY_LABELS[c]}
+                      </span>
+                      {suggested && !active && (
+                        <span className="font-mono text-[9px] tracking-widest px-1.5 py-0.5" style={{
+                          background: 'rgba(240,192,64,0.08)', color: 'var(--gold-500)',
+                          border: '1px solid rgba(240,192,64,0.25)', borderRadius: '2px',
+                        }}>
+                          SUGGESTED
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      {LADDER_CATEGORY_HINTS[c]}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {error && (

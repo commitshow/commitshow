@@ -202,7 +202,13 @@ export async function fetchLadderCounts(window: LadderWindow): Promise<Record<La
     .not(rankCol, 'is', null)
 
   const empty: Record<LadderCategory, number> = {
-    saas: 0, tool: 0, ai_agent: 0, game: 0, library: 0, other: 0,
+    productivity_personal: 0,
+    niche_saas:            0,
+    creator_media:         0,
+    dev_tools:             0,
+    ai_agents_chat:        0,
+    consumer_lifestyle:    0,
+    games_playful:         0,
   }
   if (error || !data) return empty
 

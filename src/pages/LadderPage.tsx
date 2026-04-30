@@ -47,7 +47,7 @@ export function LadderPage() {
   const { user }    = useAuth()
   const [params, setParams] = useSearchParams()
 
-  const category: LadderCategory = isCategory(params.get('cat'))    ? params.get('cat') as LadderCategory : 'saas'
+  const category: LadderCategory = isCategory(params.get('cat'))    ? params.get('cat') as LadderCategory : 'productivity_personal'
   const window:   LadderWindow   = isWindow(params.get('window'))   ? params.get('window') as LadderWindow : 'week'
   const view:     ViewMode       = isView(params.get('view'))       ? params.get('view') as ViewMode : 'list'
 
@@ -59,7 +59,13 @@ export function LadderPage() {
   const [applauds, setApplauds] = useState<Record<string, number>>({})
 
   const [counts, setCounts] = useState<Record<LadderCategory, number>>({
-    saas: 0, tool: 0, ai_agent: 0, game: 0, library: 0, other: 0,
+    productivity_personal: 0,
+    niche_saas:            0,
+    creator_media:         0,
+    dev_tools:             0,
+    ai_agents_chat:        0,
+    consumer_lifestyle:    0,
+    games_playful:         0,
   })
   const [loading, setLoading] = useState(true)
 

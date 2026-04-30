@@ -1578,71 +1578,94 @@ function scoreActivity(gh: GitHubInfo): {
   return { pts, breakdown: { recent_commit, momentum } }
 }
 
-// §11-NEW.1.1 · auto-detect ladder business_category. Conservative — when
-// signals are mixed we default to 'other' rather than misroute to the
-// wrong leaderboard. Order matters: more specific detectors first.
+// §11-NEW.1.1 · auto-detect a SUGGESTED ladder category. As of 2026-04-30
+// this writes ONLY to detected_category — the user picks the canonical
+// business_category at audit-result time (or via the project EDIT form).
+// Use-case taxonomy (7): productivity_personal · niche_saas · creator_media
+// · dev_tools · ai_agents_chat · consumer_lifestyle · games_playful.
+// Order matters · specific detectors first, generic fallbacks last.
+type LadderCategory =
+  | 'productivity_personal'
+  | 'niche_saas'
+  | 'creator_media'
+  | 'dev_tools'
+  | 'ai_agents_chat'
+  | 'consumer_lifestyle'
+  | 'games_playful'
+
 function detectBusinessCategory(input: {
   formFactor:  string
   isSaas:      boolean
   techLayers:  string[]
   pkgName:     string
   description: string
-}): 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other' {
+}): LadderCategory {
   const desc  = input.description.toLowerCase()
   const name  = input.pkgName.toLowerCase()
   const layers = new Set(input.techLayers)
   const blob  = `${name} ${desc}`
 
-  // 1. Game — engine signature wins regardless of form factor.
-  if (/\bphaser\b|\bbabylonjs?\b|three\.js|godot|unity\b|gamedev|gameplay|playerinput|@react-three/.test(blob)) {
-    return 'game'
+  // 1. Games — engine signature dominates regardless of form factor.
+  if (/\bphaser\b|\bbabylonjs?\b|three\.js|godot|unity\b|gamedev|gameplay|playerinput|@react-three|playable|interactive\s+fiction/.test(blob)) {
+    return 'games_playful'
   }
 
-  // 2. SaaS sub-form — OVERRIDES library detection (CLAUDE.md §6.1).
-  //    cal.com / supabase are monorepos that publish library packages but
-  //    the user-visible product is the auth-walled SaaS. Must come before
-  //    the library check below.
-  if (input.isSaas) return 'saas'
-
-  // 3. AI agent — runtime AI SDK + agent-style description (chat / agent /
-  //    assistant / RAG). AI tech_layer alone isn't enough — many SaaS
-  //    products call AI APIs. Look for agent-style language too.
+  // 2. AI Agents & Chat — runtime AI SDK + agent / chatbot language.
+  //    Pure SaaS that "uses AI" doesn't qualify · the product itself
+  //    has to BE the agent.
   const hasAi = layers.has('ai')
-  if (hasAi && /\bagent\b|\bassistant\b|\bchatbot\b|\brag\b|\bllm\b|conversational|autopilot/.test(blob)) {
-    return 'ai_agent'
+  if (hasAi && /\bagent\b|\bassistant\b|\bchatbot\b|\bchat\s*bot\b|\brag\b|\bllm\b|conversational|autopilot|copilot|automation\s+worker/.test(blob)) {
+    return 'ai_agents_chat'
   }
 
-  // 4. Library — explicit library form factor.
-  if (input.formFactor === 'library') return 'library'
-
-  // 5. Tool — CLI / scaffold / template. Includes single-file utilities.
-  if (input.formFactor === 'cli' || input.formFactor === 'scaffold') return 'tool'
-  if (/\bcli\b|\bcommand[- ]line\b|scaffold|starter|template|boilerplate/.test(blob)) {
-    return 'tool'
+  // 3. Creator & Media — design / video / image / writing / generative.
+  if (/\bdesign\b|\bvideo\b|\bvideos\b|\bimage\s+(?:gen|editor|maker)\b|\bphoto\b|\billustration\b|\bart\b|\bmusic\b|\baudio\b|\bwriting\b|\bcontent\s+creation\b|\bmedia\b|\bgenerative\s+(?:art|image|video|audio)\b|\bcreator\b|\bportfolio\b|\bpublishing\b/.test(blob)) {
+    return 'creator_media'
   }
 
-  // 6. App with backend+auth signals → SaaS (covers projects where the
-  //    is_saas detector missed but the layer signals are clear).
-  if (input.formFactor === 'app' && layers.has('backend') && layers.has('database')) {
-    if (/\bauth\b|signup|signin|sign-in|login|account|dashboard|billing|subscription/.test(blob)) {
-      return 'saas'
-    }
+  // 4. Dev Tools — CLI · library · IDE plugin · coding agent.
+  if (input.formFactor === 'library' || input.formFactor === 'cli' || input.formFactor === 'scaffold') {
+    return 'dev_tools'
+  }
+  if (/\bcli\b|\bcommand[- ]line\b|scaffold|starter|template|boilerplate|ide\s+(?:plugin|extension)|developer\s+tool|sdk\b|api\s+client|coding\s+(?:agent|assistant)|\bdebugger\b|\blinter\b|\bbundler\b/.test(blob)) {
+    return 'dev_tools'
   }
 
-  // 7. AI-only app (e.g. wrapper UI) → ai_agent fallback.
-  if (input.formFactor === 'app' && hasAi) return 'ai_agent'
-
-  // 8. Plain web app utility → tool.
-  if (input.formFactor === 'app') return 'tool'
-
-  // 9. Last-resort fallback — when form_factor is unknown but layers hint
-  //    at a published library (frontend-only TS package, no live URL).
-  //    Better than dumping into 'other' which is the misc bucket.
-  if (input.formFactor === 'unknown' && layers.has('frontend') && !layers.has('database')) {
-    return 'library'
+  // 5. Niche SaaS — vertical / role-specific micro-SaaS. Strong signal:
+  //    is_saas detector OR backend+db+auth+billing/subscription/dashboard/
+  //    industry-vertical language.
+  if (input.isSaas) return 'niche_saas'
+  if (
+    input.formFactor === 'app' &&
+    layers.has('backend') &&
+    layers.has('database') &&
+    /\bauth\b|signup|signin|sign-in|login|billing|subscription|dashboard|saas\b|b2b\b|workspace\b|tenant\b|admin\s+panel|crm\b|hr\s+tech|fintech|legal\s+tech|edtech|healthtech|prop\s*tech/.test(blob)
+  ) {
+    return 'niche_saas'
   }
 
-  return 'other'
+  // 6. Consumer & Lifestyle — health / finance / travel / learning / etc.
+  if (/\bhealth\b|\bfitness\b|\bwellness\b|\bmedical\b|\bfinance\b|\bbudget\b|\binvest\b|\bbanking\b|\btravel\b|\btourism\b|\blearning\b|\beducation\b|\blanguage\s+learning\b|\bcooking\b|\brecipe\b|\bshopping\b|\be-?commerce\b|\bsocial\s+(?:network|app)\b|\blifestyle\b|\bdating\b|\bnews\b|\breading\b|\bpodcast\b/.test(blob)) {
+    return 'consumer_lifestyle'
+  }
+
+  // 7. Productivity & Personal — notes / dashboards / automation / personal.
+  //    Catch-all for "internal / personal / utility tool" projects.
+  if (/\bnotes?\b|\btodo\b|\btask\b|\bdashboard\b|\bautomation\b|\bworkflow\b|\bpersonal\b|\binternal\s+tool\b|\bproductivity\b|\bcalendar\b|\bplanner\b|\btracker\b|\bclipboard\b|\bquick\s+look\b|\butility\b/.test(blob)) {
+    return 'productivity_personal'
+  }
+
+  // 8. AI-leaning fallback for unclassified app with AI layer.
+  if (input.formFactor === 'app' && hasAi) return 'ai_agents_chat'
+
+  // 9. Generic frontend-only without DB → likely a library/utility.
+  if ((input.formFactor === 'unknown' || input.formFactor === 'app') &&
+      layers.has('frontend') && !layers.has('database')) {
+    return 'dev_tools'
+  }
+
+  // 10. Last resort — Productivity & Personal as the broadest bucket.
+  return 'productivity_personal'
 }
 
 function scoreTechLayers(langs: Record<string, number>, stack: string[]): { pts: number; layers: string[] } {
@@ -3198,10 +3221,10 @@ Deno.serve(async (req) => {
     detected_category: detectedCategory,
     audit_count:       audit_count_increment,
   }
-  // Only stamp business_category on first audit (Creator override wins)
-  if (!project.business_category) {
-    projectUpdate.business_category = detectedCategory
-  }
+  // 2026-04-30 · auto-detector now writes ONLY to detected_category. The
+  // user picks the canonical business_category at audit-result time (or
+  // via the project EDIT form). This prevents the detector's wrong guess
+  // from sticking and forces a deliberate Creator choice.
   await admin.from('projects').update(projectUpdate).eq('id', projectId)
 
   // §11-NEW.2 · permanent milestones. Compute the project's all-time

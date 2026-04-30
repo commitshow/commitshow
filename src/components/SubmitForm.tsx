@@ -23,6 +23,7 @@ type Step = 1 | 2 | 3 | 4
 
 interface FormData {
   name: string; email: string; github: string; url: string; desc: string
+  category: import('../lib/supabase').LadderCategory | ''
 }
 
 interface SubmitFormProps {
@@ -56,6 +57,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   const [step, setStep] = useState<Step>(1)
   const [form, setForm] = useState<FormData>({
     name: '', email: user?.email ?? '', github: prefilledGithub, url: '', desc: '',
+    category: '',
   })
   const [brief, setBrief] = useState<ExtractedBrief | null>(null)
   const [briefRaw, setBriefRaw] = useState('')
@@ -176,6 +178,9 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       images,
       status:       'active' as const,
       season:       'season_zero' as const,
+      // 7-cat ladder placement (§11-NEW.1.1) · empty = let auto-detector
+      // suggest at audit time, user can confirm/override on the project page.
+      ...(form.category ? { business_category: form.category } : {}),
     }
 
     let insertedId: string
@@ -442,6 +447,45 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
             />
           </div>
 
+          {/* 7-cat ladder placement · optional · auto-detector fills if blank */}
+          <div>
+            <label className="block">
+              <span className="block font-mono text-[11px] tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+                CATEGORY · LADDER PLACEMENT (OPTIONAL)
+              </span>
+              <p className="font-mono text-[11px] mb-2" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Pick the use-case that best describes your project. Leave blank and we'll suggest one
+                from the audit · you can change it anytime.
+              </p>
+              <select
+                value={form.category}
+                onChange={(e) => setForm(f => ({ ...f, category: e.target.value as FormData['category'] }))}
+                className="w-full px-3 py-2.5 font-mono text-xs"
+                style={{
+                  background: 'rgba(6,12,26,0.6)',
+                  color: form.category ? 'var(--cream)' : 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '2px',
+                }}
+              >
+                <option value="">— Auto-detect (suggest after audit) —</option>
+                {(['productivity_personal','niche_saas','creator_media','dev_tools','ai_agents_chat','consumer_lifestyle','games_playful'] as const).map(c => (
+                  <option key={c} value={c}>
+                    {({
+                      productivity_personal: 'Productivity & Personal',
+                      niche_saas:            'Niche SaaS',
+                      creator_media:         'Creator & Media',
+                      dev_tools:             'Dev Tools',
+                      ai_agents_chat:        'AI Agents & Chat',
+                      consumer_lifestyle:    'Consumer & Lifestyle',
+                      games_playful:         'Games & Playful',
+                    } as const)[c]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           <button
             onClick={async () => { if (await validateStep1()) setStep(2) }}
             disabled={gateBusy}
@@ -489,7 +533,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           onReset={() => {
             setStep(1)
             setResult(null)
-            setForm({ name: '', email: user?.email ?? '', github: '', url: '', desc: '' })
+            setForm({ name: '', email: user?.email ?? '', github: '', url: '', desc: '', category: '' })
             setBrief(null)
             setBriefRaw('')
             setLastProjectId(null)
