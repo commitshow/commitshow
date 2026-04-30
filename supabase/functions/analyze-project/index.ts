@@ -170,6 +170,18 @@ interface GitHubInfo {
     has_f_droid:          boolean        // f-droid.org/packages link
     has_release_binary:   boolean        // README mentions APK / DMG / MSI / etc
     has_privacy_policy:   boolean        // privacy-policy URL in README
+    // ── Native-app footguns (extension · 2026-04-30) ──
+    native_permissions_overreach: {       // sensitive perms requested without justification
+      android_count:   number             // number of <uses-permission> entries
+      android_dangerous: string[]         // CAMERA · LOCATION · CONTACTS · etc
+      ios_keys:        string[]           // NS*UsageDescription keys present
+      ios_missing_descriptions: string[]  // entries used but no description
+    }
+    native_secrets_in_bundle: {           // API keys / tokens hardcoded in client native source
+      samples: Array<{ file: string; pattern: string }>
+      total:   number
+    }
+    has_privacy_manifest:  boolean       // iOS PrivacyInfo.xcprivacy (App Store 2024 gate)
     // ── Vibe Coder Checklist · 7-category framework (2026-04-28) ──
     // The systematic failure modes that ~70% of AI-coded projects miss
     // and generic linters / Cursor reviews don't catch. Surfaced as
@@ -381,6 +393,12 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_f_droid: false,
       has_release_binary: false,
       has_privacy_policy: false,
+      native_permissions_overreach: {
+        android_count: 0, android_dangerous: [],
+        ios_keys: [], ios_missing_descriptions: [],
+      },
+      native_secrets_in_bundle: { samples: [], total: 0 },
+      has_privacy_manifest: false,
       vibe_concerns: {
         webhook_idempotency: { handlers_seen: 0, idempotency_signal_seen: 0, gap: false, sample_files: [] },
         rls_gaps:            { tables: 0, policies: 0, writable_table_signals: 0, gap_estimate: 0, has_rls_intent: false },
@@ -1186,6 +1204,85 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const has_privacy_policy = /privacy[\s-]*policy|개인정보\s*처리방침/i.test(readmeRaw ?? '') &&
     /https?:\/\//.test(readmeRaw ?? '')
 
+  // ── Native-app footguns (extension · 2026-04-30) ──
+  // Three checks specific to mobile / desktop apps. Conservative scan
+  // budget: read at most one AndroidManifest + one Info.plist + a few
+  // native source files for hardcoded keys.
+  let android_perm_count = 0
+  const android_dangerous_perms: string[] = []
+  const ios_usage_keys:        string[] = []
+  const ios_missing_descs:     string[] = []
+  const native_secret_samples: Array<{ file: string; pattern: string }> = []
+
+  // AndroidManifest.xml — count <uses-permission> + flag dangerous ones
+  const androidManifestPath = paths.find(p => /AndroidManifest\.xml$/.test(p))
+  if (androidManifestPath) {
+    const xml = await readFile(androidManifestPath)
+    if (xml) {
+      const matches = xml.match(/<uses-permission[^>]+android:name="[^"]+"/g) ?? []
+      android_perm_count = matches.length
+      const DANGEROUS = [
+        'CAMERA', 'RECORD_AUDIO', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION',
+        'READ_CONTACTS', 'READ_CALL_LOG', 'READ_SMS', 'READ_MEDIA_IMAGES',
+        'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'BLUETOOTH_SCAN',
+        'BLUETOOTH_CONNECT', 'POST_NOTIFICATIONS', 'BODY_SENSORS',
+        'READ_PHONE_STATE', 'CALL_PHONE', 'SYSTEM_ALERT_WINDOW',
+      ]
+      for (const m of matches) {
+        const nameMatch = m.match(/android:name="([^"]+)"/)
+        if (nameMatch) {
+          const perm = nameMatch[1].split('.').pop() ?? ''
+          if (DANGEROUS.includes(perm) && !android_dangerous_perms.includes(perm)) {
+            android_dangerous_perms.push(perm)
+          }
+        }
+      }
+    }
+  }
+
+  // iOS Info.plist — list NS*UsageDescription keys; flag entries that
+  // look used elsewhere but missing description string.
+  const iosPlistPath = paths.find(p => /Info\.plist$/.test(p))
+  if (iosPlistPath) {
+    const plist = await readFile(iosPlistPath)
+    if (plist) {
+      const keyMatches = plist.match(/<key>NS\w+UsageDescription<\/key>\s*<string>([^<]*)<\/string>/g) ?? []
+      for (const km of keyMatches) {
+        const k = km.match(/<key>(NS\w+UsageDescription)<\/key>/)?.[1]
+        const v = km.match(/<string>([^<]*)<\/string>/)?.[1] ?? ''
+        if (k) {
+          ios_usage_keys.push(k)
+          if (v.trim().length === 0) ios_missing_descs.push(k)
+        }
+      }
+    }
+  }
+
+  // Privacy manifest (PrivacyInfo.xcprivacy) · iOS 17+ App Store gate (2024).
+  const has_privacy_manifest = paths.some(p => /PrivacyInfo\.xcprivacy$/.test(p))
+
+  // Hardcoded API keys / secrets in native source files (Swift / Kotlin /
+  // Java / Dart). Common AI footgun: Stripe live key, Google Maps key,
+  // Firebase API key embedded in source. We scan a small budget.
+  const nativeSourceFiles = paths.filter(p =>
+    /\.(swift|kt|java|dart|m|mm)$/.test(p) &&
+    !/\b(test|tests|__tests__|build|generated|node_modules)\b/i.test(p)
+  ).slice(0, 12)
+  for (const f of nativeSourceFiles) {
+    if (native_secret_samples.length >= 3) break
+    const text = await readFile(f)
+    if (!text) continue
+    // Patterns: pk_live_ · sk_live_ · sk_test_ · AKIA[A-Z0-9]{16} · AIza[0-9A-Za-z_-]{35} · "Bearer ey" jwt-style · googleAPIKey="…"
+    const m =
+      text.match(/(sk_(?:live|test)_[A-Za-z0-9]{20,})/) ||
+      text.match(/(pk_live_[A-Za-z0-9]{20,})/) ||
+      text.match(/(AKIA[A-Z0-9]{16})/) ||
+      text.match(/(AIza[0-9A-Za-z_-]{35})/) ||
+      text.match(/(eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/) ||
+      text.match(/["'](?:googleAPIKey|apiKey|API_KEY|stripeKey|firebaseApiKey)["']\s*[:=]\s*["']([^"'\s]{20,})["']/i)
+    if (m) native_secret_samples.push({ file: f, pattern: m[1].slice(0, 20) + '…' })
+  }
+
   // ── README depth analysis ── (uses readmeRaw already fetched above)
   const readmeFull = readmeRaw ?? ''
   const readme_line_count = readmeFull.split('\n').length
@@ -1335,6 +1432,17 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_f_droid,
       has_release_binary,
       has_privacy_policy,
+      native_permissions_overreach: {
+        android_count:            android_perm_count,
+        android_dangerous:        android_dangerous_perms,
+        ios_keys:                 ios_usage_keys,
+        ios_missing_descriptions: ios_missing_descs,
+      },
+      native_secrets_in_bundle: {
+        samples: native_secret_samples,
+        total:   native_secret_samples.length,
+      },
+      has_privacy_manifest,
       vibe_concerns,
     },
     readme_excerpt,

@@ -33,11 +33,30 @@ export interface NativeAppBreakdown {
   native_completeness?: NativeCompleteness | null
 }
 
-interface Props {
-  breakdown: NativeAppBreakdown
+// Native-specific footguns surface (extension · 2026-04-30). Read from
+// gh.signals so we don't duplicate detection · the native equivalent
+// of AI Coder Frames but specific to mobile/desktop apps.
+export interface NativeFootguns {
+  permissions: {
+    android_count:            number
+    android_dangerous:        string[]
+    ios_keys:                 string[]
+    ios_missing_descriptions: string[]
+  } | null
+  secrets_in_bundle: {
+    samples: Array<{ file: string; pattern: string }>
+    total:   number
+  } | null
+  has_privacy_manifest:       boolean
+  has_permissions_manifest:   boolean
 }
 
-export function NativeAppPanel({ breakdown }: Props) {
+interface Props {
+  breakdown: NativeAppBreakdown
+  footguns?: NativeFootguns | null
+}
+
+export function NativeAppPanel({ breakdown, footguns }: Props) {
   const dist = breakdown.native_distribution
   const compl = breakdown.native_completeness
 
@@ -110,6 +129,81 @@ export function NativeAppPanel({ breakdown }: Props) {
         )}
       </div>
 
+      {/* Native footguns · errors-first frames specific to native apps */}
+      {footguns && (
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <div className="font-mono text-[10px] tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+            NATIVE FOOTGUNS
+          </div>
+          <div className="space-y-3">
+            <FootgunRow
+              title="Permissions over-request"
+              status={(() => {
+                const p = footguns.permissions
+                if (!p) return 'na'
+                const danger = p.android_dangerous.length
+                const missing = p.ios_missing_descriptions.length
+                if (danger >= 4 || missing > 0) return 'warn'
+                return 'pass'
+              })()}
+              finding={(() => {
+                const p = footguns.permissions
+                if (!p) return 'No AndroidManifest / Info.plist found.'
+                const parts: string[] = []
+                if (p.android_count > 0) {
+                  parts.push(`${p.android_count} Android permission${p.android_count === 1 ? '' : 's'}${
+                    p.android_dangerous.length > 0 ? ` (${p.android_dangerous.length} sensitive)` : ''
+                  }`)
+                }
+                if (p.ios_keys.length > 0) {
+                  parts.push(`${p.ios_keys.length} iOS usage key${p.ios_keys.length === 1 ? '' : 's'}${
+                    p.ios_missing_descriptions.length > 0 ? ` · ${p.ios_missing_descriptions.length} missing descriptions` : ''
+                  }`)
+                }
+                return parts.length > 0 ? parts.join(' · ') : 'No permission entries detected.'
+              })()}
+              why="Each sensitive permission you request reduces App Store approval probability and user trust. AI tools tend to request superset perms ('just in case')."
+              evidence={[
+                ...(footguns.permissions?.android_dangerous ?? []).slice(0, 3).map(p => `Android · ${p}`),
+                ...(footguns.permissions?.ios_missing_descriptions ?? []).slice(0, 3).map(k => `iOS · ${k} (no description)`),
+              ]}
+            />
+            <FootgunRow
+              title="Secrets in native bundle"
+              status={
+                !footguns.secrets_in_bundle ? 'na'
+                : footguns.secrets_in_bundle.total > 0 ? 'fail'
+                : 'pass'
+              }
+              finding={
+                !footguns.secrets_in_bundle ? 'No native source files scanned.'
+                : footguns.secrets_in_bundle.total > 0
+                  ? `${footguns.secrets_in_bundle.total} hardcoded API key${footguns.secrets_in_bundle.total === 1 ? '' : 's'} in Swift / Kotlin / Dart source.`
+                  : 'No hardcoded API keys in native source.'
+              }
+              why="Native binaries are reverse-engineerable in minutes. Every key embedded in the IPA / APK leaks to anyone with the app. Use a server-side proxy or short-lived tokens instead."
+              evidence={(footguns.secrets_in_bundle?.samples ?? []).slice(0, 3).map(s => `${s.file} · ${s.pattern}`)}
+            />
+            <FootgunRow
+              title="iOS Privacy Manifest (PrivacyInfo.xcprivacy)"
+              status={
+                !footguns.has_permissions_manifest ? 'na'
+                : footguns.has_privacy_manifest ? 'pass'
+                : 'fail'
+              }
+              finding={
+                !footguns.has_permissions_manifest ? 'iOS not detected (no Info.plist).'
+                : footguns.has_privacy_manifest
+                  ? 'PrivacyInfo.xcprivacy present.'
+                  : 'No PrivacyInfo.xcprivacy file detected.'
+              }
+              why="Apple's 2024 App Store rule. Apps using common APIs (UserDefaults, file timestamps, system boot time, disk space) without a PrivacyInfo manifest get rejected at submission."
+              evidence={[]}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Distribution evidence */}
       <div className="px-5 py-4">
         <div className="font-mono text-[10px] tracking-widest mb-3 flex items-baseline justify-between" style={{ color: 'var(--text-muted)' }}>
@@ -149,6 +243,57 @@ export function NativeAppPanel({ breakdown }: Props) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+type FgStatus = 'pass' | 'warn' | 'fail' | 'na'
+
+function FootgunRow({ title, status, finding, why, evidence }: {
+  title:    string
+  status:   FgStatus
+  finding:  string
+  why:      string
+  evidence?: string[]
+}) {
+  const tone =
+    status === 'fail' ? '#F88771' :
+    status === 'warn' ? 'var(--gold-500)' :
+    status === 'pass' ? '#00D4AA' : 'var(--text-muted)'
+  const dot = status === 'fail' ? '✕' : status === 'warn' ? '⚠' : status === 'pass' ? '✓' : '·'
+
+  return (
+    <div className="pl-3 py-2.5 pr-3" style={{
+      borderLeft: `2px solid ${tone}`,
+      background: status === 'fail' ? 'rgba(248,120,113,0.04)'
+                : status === 'warn' ? 'rgba(240,192,64,0.04)'
+                : 'rgba(255,255,255,0.015)',
+      borderRadius: '0 2px 2px 0',
+    }}>
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="font-mono text-xs" style={{ color: 'var(--cream)' }}>
+          <span style={{ color: tone, marginRight: 8 }}>{dot}</span>
+          {title}
+        </div>
+        <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color: tone }}>
+          {status}
+        </span>
+      </div>
+      <div className="font-mono text-[11px] mt-1.5" style={{ color: status === 'pass' ? 'var(--text-secondary)' : 'var(--cream)' }}>
+        {finding}
+      </div>
+      <div className="font-light text-[11px] mt-1.5" style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
+        {why}
+      </div>
+      {evidence && evidence.length > 0 && (
+        <div className="mt-2 space-y-0.5">
+          {evidence.map((e, i) => (
+            <div key={i} className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              <span style={{ color: tone, marginRight: 6 }}>→</span>{e}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

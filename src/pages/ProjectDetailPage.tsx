@@ -17,7 +17,7 @@ import type { AnalysisResult } from '../lib/analysis'
 import { AnalysisResultCard } from '../components/AnalysisResultCard'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
-import { NativeAppPanel, type NativeAppBreakdown } from '../components/NativeAppPanel'
+import { NativeAppPanel, type NativeAppBreakdown, type NativeFootguns } from '../components/NativeAppPanel'
 import { ForecastModal } from '../components/ForecastModal'
 import { ApplaudButton } from '../components/ApplaudButton'
 import { EditProjectModal } from '../components/EditProjectModal'
@@ -42,6 +42,7 @@ export function ProjectDetailPage() {
   const [snapshotResult, setSnapshotResult] = useState<AnalysisResult | null>(null)
   const [vibeConcerns, setVibeConcerns] = useState<any>(null)
   const [nativeBreakdown, setNativeBreakdown] = useState<NativeAppBreakdown | null>(null)
+  const [nativeFootguns,  setNativeFootguns]  = useState<NativeFootguns | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [forecasts, setForecasts] = useState<ForecastRow[]>([])
   const [applauds, setApplauds] = useState<ApplaudRow[]>([])
@@ -93,12 +94,28 @@ export function ProjectDetailPage() {
 
       if (latest) {
         const lhRaw = (latest.lighthouse ?? {}) as { performance?: number; accessibility?: number; bestPractices?: number; seo?: number }
-        const ghSig = (latest.github_signals ?? {}) as { vibe_concerns?: unknown }
+        const ghSig = (latest.github_signals ?? {}) as {
+          vibe_concerns?: unknown
+          native_permissions_overreach?: NativeFootguns['permissions']
+          native_secrets_in_bundle?:     NativeFootguns['secrets_in_bundle']
+          has_privacy_manifest?:         boolean
+          has_permissions_manifest?:     boolean
+        }
         setVibeConcerns(ghSig.vibe_concerns ?? null)
         // Native-app distribution + permissions block (only present when
         // form_factor='native_app'). Pulled from rich_analysis.breakdown.
         const richBreakdown = (latest.rich_analysis as { breakdown?: NativeAppBreakdown } | null)?.breakdown ?? null
-        setNativeBreakdown(richBreakdown && richBreakdown.is_native_app ? richBreakdown : null)
+        const isNative = !!(richBreakdown && richBreakdown.is_native_app)
+        setNativeBreakdown(isNative ? richBreakdown : null)
+        // Native footguns surface (extension · 2026-04-30) · only render
+        // when the project IS native. Source of truth = github_signals
+        // (denormalized so UI doesn't have to walk rich_analysis).
+        setNativeFootguns(isNative ? {
+          permissions:              ghSig.native_permissions_overreach ?? null,
+          secrets_in_bundle:        ghSig.native_secrets_in_bundle ?? null,
+          has_privacy_manifest:     !!ghSig.has_privacy_manifest,
+          has_permissions_manifest: !!ghSig.has_permissions_manifest,
+        } : null)
         setSnapshotResult({
           score_auto:        latest.score_auto ?? 0,
           score_forecast:    proj.score_forecast ?? 0,
@@ -427,11 +444,12 @@ export function ProjectDetailPage() {
             )}
 
             {/* Native-app surface · only when latest snapshot detected
-                form_factor='native_app'. Shows store gates + distribution
-                evidence in lieu of Lighthouse / live URL probes. */}
+                form_factor='native_app'. Shows store gates + native
+                footguns + distribution evidence in lieu of Lighthouse
+                / live URL probes. */}
             {nativeBreakdown && (
               <div className="mt-8">
-                <NativeAppPanel breakdown={nativeBreakdown} />
+                <NativeAppPanel breakdown={nativeBreakdown} footguns={nativeFootguns} />
               </div>
             )}
           </section>
