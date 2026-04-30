@@ -70,7 +70,7 @@ export function ScoreTimeline({ points }: Props) {
   const totalMove = last.score_total - first.score_total
 
   return (
-    <div className="card-navy p-5" style={{ borderRadius: '2px' }}>
+    <div className="card-navy p-5 w-full max-w-full overflow-hidden" style={{ borderRadius: '2px' }}>
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
           // AUDIT TIMELINE
@@ -85,7 +85,11 @@ export function ScoreTimeline({ points }: Props) {
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {/* viewBox + preserveAspectRatio · max-h cap stops the chart from
+          stretching to absurd heights on 4K screens (W=600 H=160 → 3.75:1).
+          width 100% means it fills the card; max-w-full + parent
+          overflow-hidden keeps anything overflowing the card edge clipped. */}
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto', maxHeight: 280, display: 'block' }}>
         <defs>
           <linearGradient id="tlArea" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%"   stopColor="#F0C040" stopOpacity="0.25" />
