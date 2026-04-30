@@ -7,10 +7,26 @@
 // %-based graduation. No pricing details (those live in
 // /backstage and project-level UI).
 
+import { useNavigate } from 'react-router-dom'
+
 export function RulebookPage() {
+  const navigate = useNavigate()
   return (
     <section className="relative z-10 pt-20 pb-20 px-4 md:px-6 min-h-screen">
       <div className="max-w-3xl mx-auto">
+        {/* Back link · history.back() falls through to /ladder if user landed
+            here directly (no referrer in same-app history). */}
+        <button
+          type="button"
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/ladder'))}
+          className="mb-5 font-mono text-xs tracking-wide"
+          style={{ background: 'transparent', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer', padding: 0 }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+        >
+          ← BACK
+        </button>
+
         <header className="mb-10">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
             // RULEBOOK · v3.1
