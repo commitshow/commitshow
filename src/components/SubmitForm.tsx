@@ -131,6 +131,11 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   }
 
   async function handleSubmit(finalBrief: ExtractedBrief) {
+    // Clear any leftover banner from a prior failed attempt — otherwise a
+    // first-attempt failure (e.g. 42501) leaves the error banner visible
+    // even when a retry succeeds and lands on step 4.
+    setError('')
+
     // Re-check gate at submit time (someone may have opened two tabs).
     if (user?.id) {
       const recheck = await checkRegistrationEligibility(user.id)
