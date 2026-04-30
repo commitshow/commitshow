@@ -417,7 +417,7 @@ export function ProjectDetailPage() {
               <ScoreTimeline points={timeline} />
             </div>
 
-            {/* Vibe Coder Checklist · 7-category framework — sits between
+            {/* AI Coder 7 Frames · signature framework — sits between
                 score timeline and full Analysis card so beginners see the
                 most actionable failure-mode summary first. */}
             {vibeConcerns && (

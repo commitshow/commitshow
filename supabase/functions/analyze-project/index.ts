@@ -176,6 +176,7 @@ interface GitHubInfo {
     // structured signals so the UI can render a 7-card status panel
     // and Claude can speak to specific concerns instead of generic ones.
     vibe_concerns: {
+      // Core 7 Frames · the signature framework
       webhook_idempotency: { handlers_seen: number; idempotency_signal_seen: number; signature_verified_seen?: number; gap: boolean; sample_files: string[] }
       rls_gaps:            { tables: number; policies: number; writable_table_signals: number; gap_estimate: number; tables_uncovered?: string[]; has_rls_intent: boolean }
       secret_exposure:     { client_violations: Array<{ file: string; pattern: string; reason?: string }>; total: number }
@@ -183,6 +184,11 @@ interface GitHubInfo {
       observability:       { libs: string[]; detected: boolean; checked_subpackages?: number }
       rate_limit:          { lib_detected: string | null; middleware_detected: boolean; has_api_routes: boolean; needs_attention: boolean }
       prompt_injection:    { uses_ai_sdk: boolean; ai_evidence_files?: string[]; raw_input_to_prompt_files: string[]; sanitization_detected?: boolean; suspicious: boolean }
+      // Extension frames (8-11) · added 2026-04-30 · AI-template-copy footguns
+      hardcoded_urls:      { samples: Array<{ file: string; pattern: string }>; total: number }
+      mock_data:           { samples: Array<{ file: string; collection: string }>; total: number }
+      webhook_signature:   { handlers_seen: number; verified_seen: number; gap: boolean; sample_files: string[] }
+      cors_permissive:     { samples: Array<{ file: string; pattern: string }>; total: number }
     }
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
@@ -383,6 +389,10 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
         observability:       { libs: [], detected: false },
         rate_limit:          { lib_detected: null, middleware_detected: false, has_api_routes: false, needs_attention: false },
         prompt_injection:    { uses_ai_sdk: false, raw_input_to_prompt_files: [], suspicious: false },
+        hardcoded_urls:      { samples: [], total: 0 },
+        mock_data:           { samples: [], total: 0 },
+        webhook_signature:   { handlers_seen: 0, verified_seen: 0, gap: false, sample_files: [] },
+        cors_permissive:     { samples: [], total: 0 },
       },
     },
     readme_excerpt: null,
@@ -993,6 +1003,69 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const uses_ai_sdk = aiLibs.length > 0 || direct_ai_fetch_detected || ai_evidence_files.length > 0
   const prompt_injection_suspicious = raw_input_to_prompt_files.length > 0 && !sanitization_detected
 
+  // ── Extension frames 8-11 (added 2026-04-30) · AI-template-copy footguns
+  // We piggyback on apiHandlerFiles + a small additional scan set to keep
+  // network cost low. Each frame returns top-3 evidence samples.
+  const extScanFiles = paths.filter(p =>
+    /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(p) &&
+    !/\b(node_modules|\.next|dist|build|coverage|\.test\.|\.spec\.|__tests__|fixtures?|mocks?|scripts?\/)\b/i.test(p)
+  ).slice(0, 30)
+
+  // 8. HARDCODED URLs · localhost · 127.0.0.1 · explicit production API
+  // bases that should be env-driven.
+  const hardcoded_url_samples: Array<{ file: string; pattern: string }> = []
+  // 9. MOCK DATA · arrays of inline object literals in app paths.
+  const mock_data_samples: Array<{ file: string; collection: string }> = []
+  // 10. WEBHOOK SIGNATURE · separate from idempotency. Webhook handlers
+  // present but no signature verification.
+  let webhook_sig_handlers = 0
+  let webhook_sig_verified = 0
+  const webhook_sig_evidence: string[] = []
+  // 11. CORS PERMISSIVE · `origin: '*'` or `Access-Control-Allow-Origin: *`.
+  const cors_perm_samples: Array<{ file: string; pattern: string }> = []
+
+  for (const f of extScanFiles) {
+    if (
+      hardcoded_url_samples.length >= 3 &&
+      mock_data_samples.length >= 3 &&
+      cors_perm_samples.length >= 3
+    ) break
+    const text = await readFile(f)
+    if (!text) continue
+
+    if (hardcoded_url_samples.length < 3) {
+      const hcMatch = text.match(/['"](https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^'"\s]*)['"]/i)
+      if (hcMatch) hardcoded_url_samples.push({ file: f, pattern: hcMatch[1] })
+    }
+    if (mock_data_samples.length < 3) {
+      // Pattern: `const <name> = [{ ... }, { ... }, { ... }]` (3+ object literals)
+      const mdMatch = text.match(/const\s+(\w+)\s*=\s*\[\s*\{[^}]+\}\s*,\s*\{[^}]+\}\s*,\s*\{/i)
+      if (mdMatch) mock_data_samples.push({ file: f, collection: mdMatch[1] })
+    }
+    if (cors_perm_samples.length < 3) {
+      const corsMatch = text.match(/cors\s*\(\s*\{[^}]*origin\s*:\s*['"]\*['"]/i)
+                     ?? text.match(/['"]Access-Control-Allow-Origin['"]\s*:\s*['"]\*['"]/i)
+                     ?? text.match(/cors\s*\(\s*\{[^}]*origin\s*:\s*true\b/i)
+      if (corsMatch) cors_perm_samples.push({ file: f, pattern: corsMatch[0].slice(0, 80) })
+    }
+  }
+
+  // Webhook signature: scan webhook handler files for HMAC / lib verifier patterns.
+  for (const f of webhook_evidence_files.slice(0, 6)) {
+    const text = await readFile(f)
+    if (!text) continue
+    webhook_sig_handlers++
+    const hasSig =
+      /constructEvent|stripeWebhook|verifyWebhookSignature/i.test(text) ||
+      /createHmac\s*\(\s*['"](?:sha256|sha1)/i.test(text) ||
+      /x-hub-signature|x-slack-signature|x-github-(?:event|delivery|signature)|stripe-signature/i.test(text)
+    if (hasSig) {
+      webhook_sig_verified++
+      if (webhook_sig_evidence.length < 3) webhook_sig_evidence.push(f)
+    }
+  }
+  const webhook_sig_gap = webhook_sig_handlers > 0 && webhook_sig_verified === 0
+
   // Aggregate vibe_concerns object — surfaced both to Claude evidence pack
   // and persisted in github_signals for UI rendering. Each category now
   // ships an `evidence_files` array so the UI can show specific paths.
@@ -1039,6 +1112,25 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       raw_input_to_prompt_files,
       sanitization_detected,
       suspicious: prompt_injection_suspicious,
+    },
+    // Extension frames (8-11) · 2026-04-30
+    hardcoded_urls: {
+      samples: hardcoded_url_samples,
+      total:   hardcoded_url_samples.length,
+    },
+    mock_data: {
+      samples: mock_data_samples,
+      total:   mock_data_samples.length,
+    },
+    webhook_signature: {
+      handlers_seen: webhook_sig_handlers,
+      verified_seen: webhook_sig_verified,
+      gap:           webhook_sig_gap,
+      sample_files:  webhook_sig_evidence,
+    },
+    cors_permissive: {
+      samples: cors_perm_samples,
+      total:   cors_perm_samples.length,
     },
   }
 

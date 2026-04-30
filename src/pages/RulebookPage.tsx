@@ -177,37 +177,55 @@ export function RulebookPage() {
           </P>
         </Section>
 
-        <Section title="5 · Vibe-coder 7-category framework" anchor="vibe-checklist">
+        <Section title="5 · AI Coder 7 Frames · signature framework" anchor="ai-coder-7-frames">
           <P>
-            The seven systematic failure modes that ~70% of AI-assisted
-            projects ship to production without. A generic linter doesn't
-            check these; Cursor's inline review doesn't either. We probe
-            specifically for them on every audit and surface a 7-card
-            checklist alongside the score.
+            Our differentiator. Seven systematic failure modes AI coding
+            tools ship to production without — the patterns Cursor /
+            Copilot / Claude Code don't catch in their inline review and
+            generic linters can't see (the issues are runtime / system
+            design, not AST). On every audit we probe for each frame and
+            surface a 7-card checklist alongside the score.
+          </P>
+          <P>
+            <B>Why these seven specifically:</B> AI tools train on GitHub
+            stars-weighted corpora. Tutorial / sample code dominates that
+            corpus and rarely demonstrates idempotency, RLS, rate limiting,
+            or signature verification. So the AI gets fluent at the happy
+            path and silent on the production path. Each frame below is a
+            "default off" footgun whose absence ships invisibly.
           </P>
           <Table
             rows={[
-              ['1', 'Webhook idempotency',
-                'Stripe / Slack / GitHub retry webhooks on non-2xx. Without an idempotency-key check, a payment can charge twice.'],
-              ['2', 'RLS coverage (Supabase)',
-                'RLS is OFF by default. Tables without `enable row level security` + matching `create policy` are open to any authenticated user.'],
-              ['3', 'Service-role / secret exposure',
-                '`process.env.SUPABASE_SERVICE_ROLE_KEY` reachable from a client file ships in the JS bundle = full database takeover.'],
-              ['4', 'Database indexes',
-                'AI tends to write `references` clauses but forgets indexes. Fast at 1k rows, collapses at 100k.'],
-              ['5', 'Error tracking',
-                '`console.log` doesn\'t reach prod. No Sentry / Datadog / pino / winston / OTel = production blind.'],
-              ['6', 'API rate limiting',
-                'Routes without throttling = open to scraping + bill shock when one enthusiastic agent hammers them.'],
-              ['7', 'Prompt injection / unsanitized input',
-                '`req.body.message` flowing into a model prompt = attacker can override the system instructions, exfiltrate, or rack up tokens.'],
+              ['1', 'Secrets in client',
+                'Detection: scan client paths for service-role / private API key imports. Trigger: `SUPABASE_SERVICE_ROLE_KEY` · `STRIPE_SECRET_KEY` · `OPENAI_API_KEY` reachable from any file under app/components/, src/components/, app/**/page.tsx — anywhere bundled to the browser. AI tendency: copies env-loading patterns wholesale across files; doesn\'t distinguish server-only.'],
+              ['2', 'Error tracking',
+                'Detection: package.json scan for sentry · @sentry/* · datadog · @datadog/* · pino · winston · honeybadger · @opentelemetry/api · openobserve. AI tendency: writes `console.log(error)` and stops there. Console doesn\'t reach prod observability — without a tracker every crash is silent.'],
+              ['3', 'Webhook idempotency',
+                'Detection: route handlers under api/webhook/ · webhooks/ · /webhooks · checked for an idempotency-key lookup, event.id dedupe table, or message-id check. AI tendency: writes `if (event.type === "x") { ... }` and assumes one delivery — Stripe / Slack / GitHub all retry on non-2xx.'],
+              ['4', 'RLS coverage (Supabase)',
+                'Detection: SQL migration files counted for `create table` vs `create policy` and `enable row level security`. Gap = tables without matching policies. AI tendency: generates schemas without thinking about authz; Supabase RLS is opt-in — silent until exploited.'],
+              ['5', 'API rate limiting',
+                'Detection: API route presence + scan for upstash/ratelimit · @upstash/redis · express-rate-limit · hono/rate-limit · custom middleware. Gap = routes exist, no throttling lib. AI tendency: handler-first; never thinks about abuse, scraping, or one-agent-hammers cost.'],
+              ['6', 'Missing indexes',
+                'Detection: SQL parse for `references <table>(<col>)` (FK columns) vs `create index` count. Gap = unindexed FKs. AI tendency: ORMs generate FK constraints automatically but the LLM doesn\'t add indexes — fast at 1K rows, dies at 100K.'],
+              ['7', 'Prompt injection',
+                'Detection: AI SDK detection (anthropic · openai · @vercel/ai · llamaindex · langchain) + scan for `req.body.<x>` flowing into a `messages: [{ content }]` or prompt template. AI tendency: the SDK\'s job is to "make the prompt" so user input goes straight in — attacker overrides system instructions, exfiltrates, or burns tokens.'],
             ]}
           />
           <P>
-            Each category renders as a card with status (pass · warn · fail · N/A),
-            a one-line finding specific to your project, prevalence anchor
-            ("85% of vibe-coded projects miss this"), and a concrete fix
-            recommendation.
+            Each frame renders as a card with status (pass · warn · fail ·
+            N/A — N/A means "this frame doesn\'t apply to your project",
+            e.g. no API routes → no rate-limit check), a one-line finding
+            specific to your code, and concrete evidence (file path,
+            sample violation). The prevalence anchor (e.g. "70% of vibe-
+            coded apps miss this") sits alongside so creators can compare.
+          </P>
+          <P>
+            <B>Roadmap:</B> frames 8-11 land in V1.5 — Hardcoded URLs /
+            env in code · Mock data left in prod paths · Webhook signature
+            verification (separate from idempotency) · CORS too permissive
+            (`origin: '*'`). All four are AI-template-copy footguns we see
+            on most rapid-prototype builds.
           </P>
         </Section>
 

@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react'
 
 interface VibeConcerns {
+  // Core 7 Frames
   webhook_idempotency: { handlers_seen: number; idempotency_signal_seen: number; signature_verified_seen?: number; gap: boolean; sample_files: string[] }
   rls_gaps:            { tables: number; policies: number; writable_table_signals: number; gap_estimate: number; tables_uncovered?: string[]; has_rls_intent: boolean }
   secret_exposure:     { client_violations: Array<{ file: string; pattern: string; reason?: string }>; total: number }
@@ -16,6 +17,11 @@ interface VibeConcerns {
   observability:       { libs: string[]; detected: boolean; checked_subpackages?: number }
   rate_limit:          { lib_detected: string | null; middleware_detected: boolean; has_api_routes: boolean; needs_attention: boolean }
   prompt_injection:    { uses_ai_sdk: boolean; ai_evidence_files?: string[]; raw_input_to_prompt_files: string[]; sanitization_detected?: boolean; suspicious: boolean }
+  // Extension frames 8-11 (2026-04-30 · AI-template-copy footguns)
+  hardcoded_urls?:     { samples: Array<{ file: string; pattern: string }>; total: number }
+  mock_data?:          { samples: Array<{ file: string; collection: string }>; total: number }
+  webhook_signature?:  { handlers_seen: number; verified_seen: number; gap: boolean; sample_files: string[] }
+  cors_permissive?:    { samples: Array<{ file: string; pattern: string }>; total: number }
 }
 
 type Status = 'pass' | 'warn' | 'fail' | 'na'
@@ -215,6 +221,101 @@ function evaluate(vc: VibeConcerns | null | undefined): CardData[] {
       evidence: p?.raw_input_to_prompt_files,
     })
   }
+
+  // 8. Hardcoded URLs (extension)
+  {
+    const h = vc?.hardcoded_urls
+    let status: Status = 'pass'
+    let finding = 'No hardcoded localhost / 127.0.0.1 URLs in scanned files.'
+    if (h && h.total > 0) {
+      status = 'warn'
+      finding = `${h.total} file${h.total === 1 ? '' : 's'} with hardcoded URLs · should be env-driven.`
+    }
+    cards.push({
+      key: 'hardcoded_urls',
+      title: 'Hardcoded URLs',
+      prevalence: '60% of vibe-coded apps ship localhost or staging URLs',
+      status,
+      finding,
+      why: 'AI copies dev URLs into source. Production deploys then point at localhost or wrong env — silent until a user hits the dead link.',
+      fix: status === 'warn' ? 'Move URLs to `process.env.<NAME>` with a typed config layer (zod / valibot).' : null,
+      evidence: h?.samples.map(s => `${s.file} · ${s.pattern}`),
+    })
+  }
+
+  // 9. Mock data left in production
+  {
+    const m = vc?.mock_data
+    let status: Status = 'pass'
+    let finding = 'No inline mock-data arrays detected in app paths.'
+    if (m && m.total > 0) {
+      status = 'warn'
+      finding = `${m.total} file${m.total === 1 ? '' : 's'} with hardcoded mock arrays · check before shipping.`
+    }
+    cards.push({
+      key: 'mock_data',
+      title: 'Mock data in production paths',
+      prevalence: '55% of AI prototypes ship with seed arrays',
+      status,
+      finding,
+      why: 'AI generates `const users = [{id:1,...}]` for prototyping and the production code keeps reading from it. Real database never gets hit; first user sees the seed data.',
+      fix: status === 'warn' ? 'Replace mock arrays with real fetch calls; gate dev-only seeds behind `process.env.NODE_ENV === "development"`.' : null,
+      evidence: m?.samples.map(s => `${s.file} · ${s.collection}`),
+    })
+  }
+
+  // 10. Webhook signature verification
+  {
+    const w = vc?.webhook_signature
+    let status: Status = 'pass'
+    let finding = 'No webhook handlers detected — N/A.'
+    if (w && w.handlers_seen > 0) {
+      if (w.gap) {
+        status = 'fail'
+        finding = `${w.handlers_seen} webhook handler${w.handlers_seen === 1 ? '' : 's'} · 0 signature verification. Anyone can post fake events.`
+      } else if (w.verified_seen >= w.handlers_seen) {
+        status = 'pass'
+        finding = `${w.verified_seen}/${w.handlers_seen} handlers verify signature.`
+      } else {
+        status = 'warn'
+        finding = `${w.verified_seen}/${w.handlers_seen} handlers verify signature · partial coverage.`
+      }
+    } else {
+      status = 'na'
+    }
+    cards.push({
+      key: 'webhook_signature',
+      title: 'Webhook signature verification',
+      prevalence: '75% of webhook handlers ship without HMAC check',
+      status,
+      finding,
+      why: 'Idempotency catches double-charges; signature verification stops fake events. Without HMAC validation an attacker can POST a "payment.succeeded" event and trigger your fulfillment.',
+      fix: status === 'fail' ? 'Stripe → `stripe.webhooks.constructEvent()`. Slack → verify `x-slack-signature` HMAC. GitHub → verify `x-hub-signature-256`.' : null,
+      evidence: w?.sample_files,
+    })
+  }
+
+  // 11. CORS permissive
+  {
+    const c = vc?.cors_permissive
+    let status: Status = 'pass'
+    let finding = 'No `origin: *` CORS patterns detected.'
+    if (c && c.total > 0) {
+      status = 'warn'
+      finding = `${c.total} file${c.total === 1 ? '' : 's'} with permissive CORS (\`origin: *\` or \`origin: true\`).`
+    }
+    cards.push({
+      key: 'cors_permissive',
+      title: 'CORS too permissive',
+      prevalence: '50% of AI-coded APIs allow any origin',
+      status,
+      finding,
+      why: 'AI copies `cors({ origin: "*" })` from a tutorial. In production any website can hit your API with the user\'s cookies — CSRF + token theft surface opens up.',
+      fix: status === 'warn' ? 'Whitelist explicit origins: `cors({ origin: ["https://yourapp.com", "https://staging.yourapp.com"] })`.' : null,
+      evidence: c?.samples.map(s => `${s.file} · ${s.pattern}`),
+    })
+  }
+
   return cards
 }
 
@@ -256,12 +357,12 @@ export function VibeConcernsPanel({ vibeConcerns, showIntro = true }: Props) {
       {showIntro && (
         <div className="mb-4">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-            // VIBE CODER CHECKLIST · 7 things AI-coded projects miss
+            // AI CODER 7 FRAMES
           </div>
           <div className="font-light text-sm" style={{ color: 'var(--text-primary)', lineHeight: 1.6 }}>
-            Generic linters don't check these. Cursor's inline review doesn't either. We probe specifically for the systematic
-            failure modes that ship to production with AI-assisted code — derived from {' '}
-            <span style={{ color: 'var(--cream)' }}>{cards.filter(c => c.status !== 'na').length}/7</span> categories on this project.
+            Seven systematic failure modes AI tools ship without — the ones generic linters and Cursor's
+            inline review don't catch. {' '}
+            <span style={{ color: 'var(--cream)' }}>{cards.filter(c => c.status !== 'na').length}/{cards.length}</span> applied to this project.
           </div>
           <div className="mt-3 flex items-center gap-4 font-mono text-xs">
             {failCount > 0 && <span style={{ color: '#C8102E' }}>● {failCount} fail</span>}

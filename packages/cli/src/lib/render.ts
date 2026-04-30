@@ -244,19 +244,19 @@ export function renderAudit(view: AuditView): string {
 
   // (concerns/strengths block moved above the score · errors-first 2026-04-30)
 
-  // ─── Vibe Coder Checklist · 7-category framework ───
+  // ─── AI Coder 7 Frames · signature framework ───
   // Render only the categories that produced an actionable status (fail /
   // warn / pass when meaningful). N/A categories are dropped to keep the
-  // terminal output compact. Helps beginners see "the 7 things AI-coded
-  // projects miss" framework directly in the report.
+  // terminal output compact. Surfaces the seven AI-specific failure
+  // modes generic linters miss.
   const vc = (snapshot as { github_signals?: { vibe_concerns?: any } } | null)?.github_signals?.vibe_concerns
   if (vc) {
     const items = vibeChecklistLines(vc)
     const actionable = items.filter(i => i.status !== 'na')
     if (actionable.length > 0) {
       lines.push('  ' + boxTop())
-      lines.push('  ' + boxRow('Vibe Coder Checklist · 7 things AI-coded projects miss'.length,
-        c.bold(c.gold('Vibe Coder Checklist')) + c.muted(' · 7 things AI-coded projects miss')))
+      lines.push('  ' + boxRow('AI Coder 7 Frames · what AI ships without'.length,
+        c.bold(c.gold('AI Coder 7 Frames')) + c.muted(' · what AI ships without')))
       lines.push('  ' + boxBlank())
       for (const it of actionable.slice(0, 7)) {
         const tone = it.status === 'fail' ? c.scarlet : it.status === 'warn' ? c.gold : c.teal
@@ -383,6 +383,49 @@ function vibeChecklistLines(vc: any): Array<{ key: string; status: VibeStatus; l
     if (!p?.uses_ai_sdk) out.push({ key:'prompt_injection', status:'na', label:'Prompt injection risk', detail:'no AI SDK detected' })
     else if (p.suspicious) out.push({ key:'prompt_injection', status:'warn', label:'Prompt injection risk', detail:`${p.raw_input_to_prompt_files.length} file${p.raw_input_to_prompt_files.length>1?'s':''} pipe user input into prompt` })
     else out.push({ key:'prompt_injection', status:'pass', label:'Prompt injection risk', detail:'AI SDK in use · no obvious raw-input patterns' })
+  }
+  // 8. Hardcoded URLs
+  {
+    const h = vc?.hardcoded_urls
+    if (h && h.total > 0) {
+      const ev = h.samples?.[0] ? `${h.samples[0].file} · ${h.samples[0].pattern}` : undefined
+      out.push({ key:'hardcoded_urls', status:'warn', label:'Hardcoded URLs', detail:`${h.total} file${h.total>1?'s':''} · localhost / 127.0.0.1 baked in`, evidence: ev })
+    } else {
+      out.push({ key:'hardcoded_urls', status:'pass', label:'Hardcoded URLs', detail:'no localhost / dev URLs in scanned files' })
+    }
+  }
+  // 9. Mock data in production
+  {
+    const m = vc?.mock_data
+    if (m && m.total > 0) {
+      const ev = m.samples?.[0] ? `${m.samples[0].file} · const ${m.samples[0].collection} = […]` : undefined
+      out.push({ key:'mock_data', status:'warn', label:'Mock data in prod', detail:`${m.total} file${m.total>1?'s':''} with inline seed arrays`, evidence: ev })
+    } else {
+      out.push({ key:'mock_data', status:'pass', label:'Mock data in prod', detail:'no inline mock arrays in app paths' })
+    }
+  }
+  // 10. Webhook signature
+  {
+    const w = vc?.webhook_signature
+    if (!w || w.handlers_seen === 0) {
+      out.push({ key:'webhook_signature', status:'na', label:'Webhook signature', detail:'no webhook handler files detected' })
+    } else if (w.gap) {
+      out.push({ key:'webhook_signature', status:'fail', label:'Webhook signature', detail:`${w.handlers_seen} handler${w.handlers_seen>1?'s':''} · 0 HMAC verification` })
+    } else if (w.verified_seen >= w.handlers_seen) {
+      out.push({ key:'webhook_signature', status:'pass', label:'Webhook signature', detail:`${w.verified_seen}/${w.handlers_seen} handlers verify signature` })
+    } else {
+      out.push({ key:'webhook_signature', status:'warn', label:'Webhook signature', detail:`${w.verified_seen}/${w.handlers_seen} handlers verify signature · partial` })
+    }
+  }
+  // 11. CORS permissive
+  {
+    const c = vc?.cors_permissive
+    if (c && c.total > 0) {
+      const ev = c.samples?.[0] ? `${c.samples[0].file} · ${c.samples[0].pattern}` : undefined
+      out.push({ key:'cors_permissive', status:'warn', label:'CORS too permissive', detail:`${c.total} file${c.total>1?'s':''} · origin: '*' or origin: true`, evidence: ev })
+    } else {
+      out.push({ key:'cors_permissive', status:'pass', label:'CORS too permissive', detail:"no 'origin: *' patterns detected" })
+    }
   }
   // Sort fail → warn → pass → na
   const order: Record<VibeStatus, number> = { fail:0, warn:1, pass:2, na:3 }
