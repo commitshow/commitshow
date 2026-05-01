@@ -112,6 +112,17 @@ export async function processImage(file: File, preset: ImagePreset): Promise<Pro
   }
   const img = await loadImage(file)
 
+  // Source-aware starting quality. When the original file already has plenty
+  // of headroom under our cap, double-compressing it at 0.85 can actually
+  // bloat the output (the WebP encoder treats JPEG compression noise as
+  // signal). Starting higher lets the visually-good output stay small; if
+  // it's too big anyway, the quality ladder + shrink pass below take over.
+  const sourceBytes = file.size
+  const cap         = preset.maxBytes
+  let startQuality  = preset.quality
+  if (sourceBytes <= cap * 0.4)       startQuality = Math.min(0.95, preset.quality + 0.1)
+  else if (sourceBytes <= cap * 0.8)  startQuality = Math.min(0.9,  preset.quality + 0.05)
+
   let targetW: number, targetH: number
   let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight
   if (preset.square) {
@@ -174,11 +185,20 @@ export async function processImage(file: File, preset: ImagePreset): Promise<Pro
   }
 
   drawAt(targetW, targetH)
-  let quality = preset.quality
+  let quality = startQuality
   let blob = await canvasToBlob(canvas, 'image/webp', quality)
+
+  // Safari < 15 silently returns PNG when asked to encode WebP. PNG of a
+  // 1200×630 photo can run 1–2MB, which busts the cap before we even start
+  // the quality ladder. Fall back to JPEG (the bucket already accepts both).
+  if (blob.type !== 'image/webp') {
+    blob = await canvasToBlob(canvas, 'image/jpeg', quality)
+  }
+
   while (blob.size > preset.maxBytes && quality > 0.2) {
     quality = Math.max(0.2, quality - 0.1)
-    blob = await canvasToBlob(canvas, 'image/webp', quality)
+    const nextType = blob.type === 'image/webp' ? 'image/webp' : 'image/jpeg'
+    blob = await canvasToBlob(canvas, nextType, quality)
   }
 
   let finalW = targetW, finalH = targetH
@@ -189,10 +209,11 @@ export async function processImage(file: File, preset: ImagePreset): Promise<Pro
     finalH = Math.max(36, Math.round(targetH * scale))
     drawAt(finalW, finalH)
     quality = 0.75
-    blob = await canvasToBlob(canvas, 'image/webp', quality)
+    const tryType = blob.type === 'image/webp' ? 'image/webp' : 'image/jpeg'
+    blob = await canvasToBlob(canvas, tryType, quality)
     while (blob.size > preset.maxBytes && quality > 0.2) {
       quality = Math.max(0.2, quality - 0.1)
-      blob = await canvasToBlob(canvas, 'image/webp', quality)
+      blob = await canvasToBlob(canvas, tryType, quality)
     }
   }
 
@@ -209,13 +230,20 @@ export async function processImage(file: File, preset: ImagePreset): Promise<Pro
 }
 
 export async function uploadImage(processed: ProcessedImage, preset: ImagePreset, userId: string): Promise<{ path: string; publicUrl: string }> {
-  const filename = `${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.webp`
+  // Pick extension/contentType from whatever the encoder actually produced.
+  // processImage falls back from WebP → JPEG on browsers without WebP canvas
+  // support (Safari < 15) so we can't hardcode .webp anymore.
+  const mime = processed.blob.type || 'image/webp'
+  const ext  = mime === 'image/jpeg' ? 'jpg'
+             : mime === 'image/png'  ? 'png'
+             :                          'webp'
+  const filename = `${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
   const { error: upErr } = await supabase.storage
     .from(preset.bucket)
     .upload(filename, processed.blob, {
-      contentType: 'image/webp',
+      contentType:  mime,
       cacheControl: '31536000',
-      upsert: false,
+      upsert:       false,
     })
   if (upErr) throw new Error(`Image upload failed: ${upErr.message}`)
   const { data } = supabase.storage.from(preset.bucket).getPublicUrl(filename)
