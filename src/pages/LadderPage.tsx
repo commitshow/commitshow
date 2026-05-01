@@ -228,8 +228,13 @@ export function LadderPage() {
           </div>
         </div>
 
-        {/* ── Category chip strip · 'All' is the default + always-leftmost ── */}
-        <div className="mb-6 flex items-center gap-2 flex-wrap">
+        {/* ── Category chip strip · 'All' is the default + always-leftmost ──
+              Mobile: horizontal scroll (chips never wrap, full row stays browseable
+              with one swipe). ≥sm: wrap onto multiple lines as before. */}
+        <div
+          className="mb-6 flex items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible pb-1 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0"
+          style={{ scrollbarWidth: 'none' }}
+        >
           {([
             { value: 'all' as const,           label: 'All' },
             ...LADDER_CATEGORIES.map(c => ({ value: c, label: LADDER_CATEGORY_LABELS[c] })),
@@ -243,7 +248,7 @@ export function LadderPage() {
                 key={c.value}
                 type="button"
                 onClick={() => updateParam('cat', c.value)}
-                className="font-mono text-[11px] tracking-wide px-3 py-1.5 inline-flex items-center gap-2"
+                className="font-mono text-[11px] tracking-wide px-3 py-1.5 inline-flex items-center gap-2 shrink-0"
                 style={{
                   background:  active ? 'rgba(240,192,64,0.12)' : 'transparent',
                   color:       active ? 'var(--gold-500)' : 'var(--text-primary)',
