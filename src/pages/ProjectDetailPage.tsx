@@ -203,10 +203,10 @@ export function ProjectDetailPage() {
 
   // ── Section nav config (order = scroll order) ───────────────
   const sections: Array<{ id: string; label: string; ownerOnly?: boolean }> = [
+    { id: 'comments',  label: 'Comments' },
     { id: 'overview',  label: 'Overview' },
     { id: 'analysis',  label: 'Analysis' },
     { id: 'activity',  label: 'Activity' },
-    { id: 'comments',  label: 'Comments' },
     { id: 'backstage', label: 'Backstage' },
   ]
   if (isOwner) sections.push({ id: 'brief', label: 'Private brief', ownerOnly: true })
@@ -393,6 +393,15 @@ export function ProjectDetailPage() {
             parent · earlier symptom: own-project view layout broke
             on the right because of the badge snippet pre. */}
         <div className="grid grid-cols-1 gap-10 min-w-0">
+          {/* COMMENTS · placed first (right under the score) so the room's
+              reaction is visible alongside the build evidence, not buried
+              after every analytical section. YouTube-mobile pattern collapses
+              this to a single preview row on phones (full-screen sheet on tap). */}
+          <section id="comments" className="scroll-mt-28">
+            <SectionHeader label="COMMENTS" hint="What other vibe coders think." />
+            <ProjectComments projectId={project.id} viewerMemberId={member?.id ?? null} />
+          </section>
+
           {/* OVERVIEW */}
           <section id="overview" className="scroll-mt-28">
             <SectionHeader label="OVERVIEW" />
@@ -514,12 +523,6 @@ export function ProjectDetailPage() {
                 ))}
               </ActivityList>
             </div>
-          </section>
-
-          {/* COMMENTS · YouTube-mobile pattern · §13-B-style discussion thread */}
-          <section id="comments" className="scroll-mt-28">
-            <SectionHeader label="COMMENTS" hint="What other vibe coders think." />
-            <ProjectComments projectId={project.id} viewerMemberId={member?.id ?? null} />
           </section>
 
           {/* BACKSTAGE · public · locked until graduation per CLAUDE.md §12 */}
