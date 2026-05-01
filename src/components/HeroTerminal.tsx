@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRecentAudits, type AuditDemo } from '../lib/recentAudits'
 
-// 5×5 ASCII font for the big score · same shapes as packages/cli/src/lib/render.ts
+// 5×5 ASCII font for the big score · same shapes as commitshow/cli render.ts
 // so the visual is the SAME mark a user gets in their terminal.
 const BIG_DIGITS: Record<string, string[]> = {
   '0': ['█▀▀▀█', '█   █', '█   █', '█   █', '█▄▄▄█'],
