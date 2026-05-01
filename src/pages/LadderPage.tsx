@@ -174,58 +174,28 @@ export function LadderPage() {
           <FeaturedLanes />
         </div>
 
-        {/* ── Time window + view toggle ── */}
-        <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            {WINDOWS.map(w => {
-              const active = w === window
-              return (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => updateParam('window', w)}
-                  className="font-mono text-[11px] tracking-wide px-3 py-1.5"
-                  style={{
-                    background:  active ? 'var(--gold-500)' : 'transparent',
-                    color:       active ? 'var(--navy-900)' : 'var(--text-secondary)',
-                    border:      `1px solid ${active ? 'var(--gold-500)' : 'rgba(255,255,255,0.12)'}`,
-                    borderRadius: '2px',
-                    cursor:      'pointer',
-                  }}
-                >
-                  {LADDER_WINDOW_LABELS[w]}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* View toggle · list ↔ cards */}
-          <div className="flex items-center" style={{
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '2px',
-            background: 'rgba(6,12,26,0.5)',
-          }}>
-            {(['list', 'cards'] as ViewMode[]).map(v => {
-              const active = v === view
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => updateParam('view', v)}
-                  className="font-mono text-[10px] tracking-widest px-3 py-1.5"
-                  style={{
-                    background: active ? 'var(--gold-500)' : 'transparent',
-                    color:      active ? 'var(--navy-900)' : 'var(--text-secondary)',
-                    border:     'none',
-                    cursor:     'pointer',
-                    fontWeight: active ? 600 : 400,
-                  }}
-                >
-                  {v === 'list' ? 'RANK LIST' : 'CARDS'}
-                </button>
-              )
-            })}
-          </div>
+        {/* ── Time window strip ── */}
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          {WINDOWS.map(w => {
+            const active = w === window
+            return (
+              <button
+                key={w}
+                type="button"
+                onClick={() => updateParam('window', w)}
+                className="font-mono text-[11px] tracking-wide px-3 py-1.5"
+                style={{
+                  background:  active ? 'var(--gold-500)' : 'transparent',
+                  color:       active ? 'var(--navy-900)' : 'var(--text-secondary)',
+                  border:      `1px solid ${active ? 'var(--gold-500)' : 'rgba(255,255,255,0.12)'}`,
+                  borderRadius: '2px',
+                  cursor:      'pointer',
+                }}
+              >
+                {LADDER_WINDOW_LABELS[w]}
+              </button>
+            )
+          })}
         </div>
 
         {/* ── Category chip strip · 'All' is the default + always-leftmost ──
@@ -266,8 +236,37 @@ export function LadderPage() {
           })}
         </div>
 
-        <div className="font-mono text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
-          {hint}
+        {/* ── View toggle · sits below the category strip, right-aligned · paired with hint on the left ── */}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {hint}
+          </div>
+          <div className="flex items-center shrink-0" style={{
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '2px',
+            background: 'rgba(6,12,26,0.5)',
+          }}>
+            {(['list', 'cards'] as ViewMode[]).map(v => {
+              const active = v === view
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => updateParam('view', v)}
+                  className="font-mono text-[10px] tracking-widest px-3 py-1.5"
+                  style={{
+                    background: active ? 'var(--gold-500)' : 'transparent',
+                    color:      active ? 'var(--navy-900)' : 'var(--text-secondary)',
+                    border:     'none',
+                    cursor:     'pointer',
+                    fontWeight: active ? 600 : 400,
+                  }}
+                >
+                  {v === 'list' ? 'RANK LIST' : 'CARDS'}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* ── List view (rank-first) ── */}
