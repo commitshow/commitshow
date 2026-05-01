@@ -485,7 +485,33 @@ export function ProjectDetailPage() {
               <AnalysisResultCard
                 result={snapshotResult}
                 projectId={isOwner ? project.id : undefined}
-                onReanalyzed={isOwner ? (next) => setSnapshotResult(next) : undefined}
+                onReanalyzed={isOwner ? async (next) => {
+                  // 1) Latest analysis snapshot — drives the bottom card.
+                  setSnapshotResult(next)
+                  // 2) Mirror the new totals into the in-memory project so
+                  //    Hero + ScanStrip + GraduationStanding (which read
+                  //    project.score_total / forecast / community) update
+                  //    in the same render — no flicker between top and
+                  //    bottom while waiting for a refetch.
+                  setProject(prev => prev ? {
+                    ...prev,
+                    score_total:     next.score_total ?? prev.score_total,
+                    score_auto:      next.score_auto ?? prev.score_auto,
+                    score_forecast:  next.score_forecast ?? prev.score_forecast,
+                    score_community: next.score_community ?? prev.score_community,
+                  } : prev)
+                  // 3) Re-fetch project + timeline + applauds so derived
+                  //    fields (audit_count · last_analysis_at · timeline
+                  //    delta) settle without a full reload.
+                  const [refreshed, tl, ap] = await Promise.all([
+                    fetchProjectById(project.id),
+                    fetchProjectTimeline(project.id),
+                    fetchProjectApplauds(project.id),
+                  ])
+                  if (refreshed) setProject(refreshed)
+                  setTimeline(tl)
+                  setApplauds(ap)
+                } : undefined}
                 viewerMode={isOwner ? 'owner' : 'visitor'}
                 seasonPhase={seasonPhase}
                 viewerTier={member?.tier ?? null}
