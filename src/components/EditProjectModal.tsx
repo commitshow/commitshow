@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   supabase, PUBLIC_PROJECT_COLUMNS,
   LADDER_CATEGORIES, LADDER_CATEGORY_LABELS, LADDER_CATEGORY_HINTS,
@@ -92,7 +93,7 @@ export function EditProjectModal({ project, onClose, onSaved }: Props) {
     onSaved(data as unknown as Project)
   }
 
-  return (
+  return createPortal(
     <div
       role="dialog" aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -296,7 +297,8 @@ export function EditProjectModal({ project, onClose, onSaved }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

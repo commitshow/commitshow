@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Project, ScoutTier } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import {
@@ -80,7 +81,7 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
     } finally { setBusy(false) }
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: 'rgba(6,12,26,0.85)', backdropFilter: 'blur(6px)' }}
@@ -235,6 +236,7 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

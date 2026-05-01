@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 // Shared modal shown during analyze-project pipeline runs. Used by both the
 // initial submission flow and the in-detail Re-analyze button so the UX is
@@ -72,7 +73,7 @@ export function AnalysisProgressModal({
     : 'Re-analyzing · rolling the next audit')
   const sub = subtitle ?? 'Takes 60–120s · don\'t close this tab'
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -187,6 +188,7 @@ export function AnalysisProgressModal({
           Closing or reloading the tab will not cancel the analysis — the pipeline runs on the server.
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
