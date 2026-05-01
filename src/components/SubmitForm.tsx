@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
@@ -380,10 +381,50 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
         })}
       </div>
 
-      {error && (
-        <div className="mb-4 px-4 py-3 text-sm font-mono" style={{ background: 'rgba(200,16,46,0.1)', border: '1px solid rgba(200,16,46,0.3)', color: '#F87171', borderRadius: '2px' }}>
-          {error}
-        </div>
+      {error && createPortal(
+        <div
+          onClick={() => setError('')}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(6,12,26,0.78)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="card-navy"
+            style={{
+              maxWidth: '480px', width: '100%',
+              border: '1px solid rgba(200,16,46,0.4)',
+              borderRadius: '2px',
+              padding: '24px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div className="font-mono text-xs tracking-widest mb-3" style={{ color: '#F87171' }}>
+              // SUBMISSION BLOCKED
+            </div>
+            <div className="font-mono text-sm mb-5" style={{ color: 'var(--cream)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {error}
+            </div>
+            <button
+              onClick={() => setError('')}
+              className="w-full py-2.5 font-mono text-xs tracking-wide transition-colors"
+              style={{
+                background: 'var(--gold-500)',
+                color: 'var(--navy-900)',
+                border: 'none',
+                borderRadius: '2px',
+                cursor: 'pointer',
+              }}
+            >
+              GOT IT
+            </button>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {eligibility?.ok && step < 3 && (

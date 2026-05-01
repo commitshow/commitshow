@@ -57,6 +57,11 @@ function parseGithubUrl(url: string): { owner: string; repo: string } | null {
 export function BriefExtraction({ githubUrl, onBriefReady, onBack }: BriefExtractionProps) {
   const [phase, setPhase] = useState<Phase>('intro')
   const [copied, setCopied] = useState(false)
+  // Sticky flag — once the user has copied at least once, the "Next" CTA stays
+  // gold so they don't get the active button taken away the instant the
+  // ✓ COPIED toast fades. The transient `copied` flag still drives the COPY
+  // button's confirmation state on each click.
+  const [everCopied, setEverCopied] = useState(false)
   const [fetchStatus, setFetchStatus] = useState<FetchStatus>('idle')
   const [fetchErrorMsg, setFetchErrorMsg] = useState<string>('')
   const [foundPath, setFoundPath] = useState<string>('')
@@ -78,7 +83,7 @@ export function BriefExtraction({ githubUrl, onBriefReady, onBack }: BriefExtrac
       document.body.appendChild(ta); ta.select()
       document.execCommand('copy'); document.body.removeChild(ta)
     }
-    setCopied(true); setTimeout(() => setCopied(false), 2500)
+    setCopied(true); setEverCopied(true); setTimeout(() => setCopied(false), 2500)
   }
 
   const fetchFromGitHub = async () => {
@@ -341,8 +346,8 @@ export function BriefExtraction({ githubUrl, onBriefReady, onBack }: BriefExtrac
             </button>
             <button onClick={() => setPhase('verify')} className="px-6 py-2 font-mono text-xs font-medium tracking-wide"
               style={{
-                background: copied ? 'var(--gold-500)' : 'rgba(240,192,64,0.2)',
-                color: copied ? 'var(--navy-900)' : 'rgba(248,245,238,0.6)',
+                background: everCopied ? 'var(--gold-500)' : 'rgba(240,192,64,0.2)',
+                color: everCopied ? 'var(--navy-900)' : 'rgba(248,245,238,0.6)',
                 border: 'none', borderRadius: '2px', cursor: 'pointer',
               }}>
               TEMPLATE COPIED · NEXT →
