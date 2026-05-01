@@ -431,9 +431,42 @@ export function AnalysisResultCard({
               It's a snapshot, not a verdict. Code changes; so does this number.
             </div>
           </div>
-          {r.headline_metrics.slice(0, 3).map((m, i) => (
-            <MetricCard key={i} {...m} />
-          ))}
+          {(() => {
+            // Headline-metric strip · 3 slots next to OVERALL SCORE.
+            // Replace any 'Lighthouse <category>' headline that Claude
+            // emitted with a single 'Lighthouse · 4 cats' avg card so a
+            // standalone 100 (e.g. Best Practices on a clean static
+            // build) doesn't read as 'Lighthouse = 100'. Underlying
+            // numbers stay visible in the LighthouseCard strip below.
+            const lh = result.lh
+            const lhItems: Array<[string, number]> = []
+            if (lh.performance   >= 0) lhItems.push(['Perf', lh.performance])
+            if (lh.accessibility >= 0) lhItems.push(['A11y', lh.accessibility])
+            if (lh.bestPractices >= 0) lhItems.push(['BP',   lh.bestPractices])
+            if (lh.seo           >= 0) lhItems.push(['SEO',  lh.seo])
+            const lhAvg = lhItems.length > 0
+              ? Math.round(lhItems.reduce((sum, [, v]) => sum + v, 0) / lhItems.length)
+              : null
+
+            const claudeMetrics = r.headline_metrics.filter(
+              m => !/lighthouse/i.test(m.label ?? '')
+            )
+
+            const cards: Array<{ label: string; value: string; sublabel: string }> = []
+            if (lhAvg !== null) {
+              cards.push({
+                label:    'Lighthouse · 4 cats',
+                value:    String(lhAvg),
+                sublabel: lhItems.map(([k, v]) => `${k} ${v}`).join(' · '),
+              })
+            }
+            for (const m of claudeMetrics) {
+              if (cards.length >= 3) break
+              cards.push(m)
+            }
+
+            return cards.slice(0, 3).map((m, i) => <MetricCard key={i} {...m} />)
+          })()}
         </div>
       )}
 
