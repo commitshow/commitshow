@@ -320,7 +320,7 @@ export function Nav() {
                 cursor: 'pointer',
               }}
             >
-              Audit your product →
+              Audition your product →
             </button>
 
             {/* Auth area · mobile */}

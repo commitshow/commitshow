@@ -35,11 +35,14 @@ PRD 버전: v2 (2026-04-24) — v1 통합 기획서 (2026-04-19 + Creator Commun
 3. **Applaud polymorphic target** — `applauds` 테이블 (`member_id`, `target_type`, `target_id`) 로 재설계. `target_type` ∈ {product, comment, build_log, stack, brief, recommit}. 기존 `UNIQUE (member_id, season_id)` 제약 제거 → `UNIQUE (member_id, target_type, target_id)`. 자기 콘텐츠 applaud 금지 (이해충돌).
 4. **Creator Community 4 메뉴 V1 Day 1 필수** — Build Logs · Stacks · Asks · Office Hours. Reddit/Indie Hackers 이탈 방지 + LinkedIn-for-Vibecoders 장기 비전의 기초 증거. §13-B 신설.
 5. **Rookie Circle 톤 엄격 유지** — "낙제 · 실패 · 탈락 · 패자 · 루저 · Loser · Failed · 미달 · 미흡" UI · 코드 · 약관 · 에러 메시지 · Claude 프롬프트 **전 레이어 금지**. 허용: "Rookie Circle · Try Again · 다음 Commit · Retry · Next season".
-6. **브랜드 verb 3-체계 (업데이트 2026-04-29)** — 라틴어 audīre 어원 공유, 본질 다른 행위에 다른 verb:
-   - **Audit** (default · ladder) — Creator 의 객관 측정 요청. 매 등록·재분석에 사용. Hero CTA: `Audit your build →`.
-   - **Audition** (event entry) — Creator 가 이벤트 무대 등판. 이벤트 entry 시 사용. `Audition for <event_name>`.
-   - **Audited** (passive · result) — 측정 완료된 상태. "Audited on commit.show", "Audit report".
-   AI 레이어 = "Audit" (외부 노출은 항상 "Audit / Audit report"). "Commit" 은 브랜드 wordmark·도메인·Hall of Fame 메타포로만 유지 ("commit.show" · "Every commit, on stage"). "Submit" / "Register" / "Apply" / "Score your project" UI 금지. **"AI" 단어 사용자 노출 금지** — "AI analysis" → "Audit report" 식으로 치환 (§19 rule 11).
+6. **브랜드 verb 3-체계 (재정정 2026-05-01 · 4-29 통합 롤백)** — 라틴어 audīre 어원 공유, 본질 다른 행위에 다른 verb. **행위 주체로 verb 가른다**:
+   - **Audition** (Creator 행위 · 사람이 무대에 오름) — 첫 등록 · 재등판 · CTA · 이벤트 entry. Hero CTA: `Audition your product →` · ProfilePage "No auditions yet · Audition your first product…" · LadderPage `AUDITION YOUR PROJECT →` · 이력 페이지 `Audition Log` · Hall of Fame 메타포 `Audition Archive`.
+   - **Audit** (Engine 행위 · 도구가 측정) — analyze-project Edge Function 호출 · `Re-audit →` 버튼 · `Audit report` 출력 · `/audit` 메서드 페이지 · CLI `commitshow audit` · `commitshow-mcp` audit_repo 도구 · `api.commit.show/audit` REST 엔드포인트.
+   - **Audited** (passive result) — 측정 완료된 상태. "Audited on commit.show".
+
+   룰: **사용자 시점 = Audition · 엔진 시점 = Audit.** 4-29 에 두 verb 를 "Audit 으로 통합" 시도했다가 5-01 에 잘못된 방향으로 판명, 이전 분리 룰 복구. 같은 폼 안에서도 Creator 가 누르는 버튼은 "Audition", 그 결과로 Engine 이 만드는 출력은 "Audit report" — 자연스럽게 두 단어가 같이 등장.
+
+   "Commit" 은 브랜드 wordmark·도메인·Hall of Fame 메타포로만 유지 ("commit.show" · "Every commit, on stage"). "Submit" / "Register" / "Apply" / "Score your project" UI 금지. **"AI" 단어 사용자 노출 금지** — "AI analysis" → "Audit report" 식으로 치환 (§19 rule 11).
 7. **Audit 5+3 비대칭 유지** — 사용자 노출 명칭 "Audit report" (내부 기술 레이어 = Claude 호출 · §3). 장점 5 / 우려 3. 5+5 대칭 형식 **금지** (아첨 인지 편향 + Creator 방어 부담 완화).
 
 ### 1-B. 참조 문서
@@ -1997,8 +2000,8 @@ X → commit.show:
     - Claude API 프롬프트에도 "All prose fields MUST be American English" 명시
     - 사용자 대화는 한글, 제품 UI 는 영어. 혼동 금지
     - 한글 리터럴 발견 시 리팩토링 중 즉시 영어로 교체
-10. 브랜드 verb (v2 · §1-A ⑥ 업데이트 2026-04-24)
-    - Creator 액션 = **Audition** · AI 레이어 = **Audit** · 둘은 형제어 (라틴어 audīre)
+10. 브랜드 verb (v2 · §1-A ⑥ · 4-29 통합 시도 후 5-01 분리 복구 · canonical 룰)
+    - **행위 주체로 가른다**: Creator 행위 = **Audition** · Engine 행위 = **Audit** · 둘은 형제어 (라틴어 audīre)
     - Hero CTA: "Audition your product →" (기존 "Score your project" / "Commit your product" 모두 폐기)
     - "Auditioning in Season Zero" · "Audition Archive" · "Now auditioning" 식 표현
     - "Submit" · "Register" · "Registration" · "Apply" · "Application" · "Commit your product" 전부 CTA 에서 금지

@@ -164,7 +164,7 @@ export function LadderPage() {
                 border: 'none', borderRadius: '2px', textDecoration: 'none',
               }}
             >
-              AUDIT YOUR BUILD →
+              AUDITION YOUR PROJECT →
             </NavLink>
           )}
         </header>

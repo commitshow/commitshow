@@ -241,9 +241,9 @@ export function ProfilePage() {
             </div>
           ) : applications.length === 0 ? (
             <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
-              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No audits yet</div>
+              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No auditions yet</div>
               <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
-                Audit your first product to open the dashboard.
+                Audition your first product to open the dashboard.
               </p>
             </div>
           ) : (

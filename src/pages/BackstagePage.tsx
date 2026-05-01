@@ -130,7 +130,7 @@ export function BackstagePage() {
                 textDecoration: 'none',
               }}
             >
-              Audit your product →
+              Audition your product →
             </Link>
           </div>
         </div>

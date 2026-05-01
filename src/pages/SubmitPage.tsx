@@ -10,7 +10,7 @@ export function SubmitPage() {
       <div className="max-w-2xl mx-auto pt-8">
         <div className="text-center mb-12">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>
-            // AUDIT YOUR BUILD
+            // AUDITION YOUR PROJECT
           </div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-3">
             Get on the ladder
