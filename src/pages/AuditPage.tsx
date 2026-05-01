@@ -418,7 +418,7 @@ function AuditPageContent() {
             All scoring math is open. Implementation:
           </p>
           <p className="font-mono text-xs">
-            <a href="https://github.com/hans1329/vibe/blob/main/supabase/functions/analyze-project/index.ts"
+            <a href="https://github.com/commitshow/commitshow/blob/main/supabase/functions/analyze-project/index.ts"
                target="_blank" rel="noopener noreferrer"
                className="underline" style={{ color: 'var(--gold-500)' }}>
               supabase/functions/analyze-project/index.ts

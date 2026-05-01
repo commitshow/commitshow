@@ -60,7 +60,7 @@ without wading through an undifferentiated feed.
 - Web: https://commit.show
 - CLI: `npx commitshow audit <target>` or `npx @commit.show/cli audit <target>`
 - npm: https://npmjs.com/package/commitshow
-- Source: https://github.com/hans1329/vibe
+- Source: https://github.com/commitshow/commitshow
 
 ---
 
@@ -126,7 +126,7 @@ without wading through an undifferentiated feed.
 ### Live proof
 
 - Production: <https://commit.show>
-- Source: <https://github.com/hans1329/vibe>
+- Source: <https://github.com/commitshow/commitshow>
 - CLI on npm: <https://npmjs.com/package/commitshow> + <https://npmjs.com/package/@commit.show/cli>
 - 5 Edge Functions deployed: `analyze-project`, `audit-preview`, `apply-artifact`, `discover-mds`, `badge`
 - 7 tables with RLS: `projects`, `members`, `votes`, `applauds`, `comments`, `build_briefs`, `notifications`

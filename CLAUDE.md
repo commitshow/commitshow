@@ -17,9 +17,10 @@
 PRD 버전: v2 (2026-04-24) — v1 통합 기획서 (2026-04-19 + Creator Community 추가 2026-04-23) 기반
 ```
 
-- **레포**: https://github.com/hans1329/vibe
+- **레포**: https://github.com/commitshow/commitshow (이전: hans1329/vibe · 2026-05-01 transfer)
+- **CLI 레포**: https://github.com/commitshow/cli (분사 · npm `commitshow` 패키지)
 - **Supabase URL**: https://tekemubwihsjdzittoqf.supabase.co
-- **배포 대상**: Cloudflare Pages (GitHub `hans1329/vibe` main 자동 빌드 · Pages 프로젝트 `vibe`)
+- **배포 대상**: Cloudflare Pages (GitHub `commitshow/commitshow` main 자동 빌드 · Pages 프로젝트 `vibe`)
 - **Pages URL**: https://vibe-cxf.pages.dev
 - **도메인**: commit.show + www.commit.show (Pages Custom Domain 연결 완료)
 - **참고**: 별도 Workers 스크립트 `vibe` 도 존재하나 (`vibe.hans1329.workers.dev`) 실제 트래픽 안 받음. `wrangler deploy` 는 사용 안 함.
@@ -54,11 +55,10 @@ PRD 버전: v2 (2026-04-24) — v1 통합 기획서 (2026-04-19 + Creator Commun
 - **관리자 전용**:
   - [/admin](https://commit.show/admin) — 한국어 대시보드 · 5 탭 · members.is_admin 가드 · §15-D 참조
 
-> **공개 repo 주의**: github.com/hans1329/vibe 는 public. 따라서 CLAUDE.md 자체는
-> 인덱싱됨. 민감 정보는 모두 INTERNAL.md (gitignored) 로 옮겼지만, **2026-04-28
-> 이전 git history** 에는 옛 버전이 남아있음. 진짜 비공개 처리하려면 (1) main repo
-> private 전환 또는 (2) `git filter-repo` 로 history 재작성 필요. 현재는 (a) 새
-> commit 부터 깨끗 + (b) history rewrite 검토 (TODO).
+> **공개 repo 주의**: github.com/commitshow/commitshow 는 public. 따라서 CLAUDE.md 자체는
+> 인덱싱됨. 민감 정보는 모두 INTERNAL.md (gitignored) 로 옮겼고, 2026-04-28 history rewrite
+> 로 옛 leak 도 정리됨. 2026-05-01 hans1329/vibe → commitshow/commitshow transfer 완료
+> (GitHub 자동 redirect 작동 중).
 
 ---
 

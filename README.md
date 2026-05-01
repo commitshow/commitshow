@@ -37,8 +37,8 @@ guaranteed for Valedictorian) + Entry fee refund.
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/hans1329/vibe.git
-cd vibe
+git clone https://github.com/commitshow/commitshow.git
+cd commitshow
 npm install
 ```
 
@@ -71,7 +71,7 @@ npm run dev
 ## Deploy to Cloudflare Pages
 
 1. Push to GitHub
-2. [dash.cloudflare.com](https://dash.cloudflare.com) → Pages → Create a project → Connect GitHub → `hans1329/vibe`
+2. [dash.cloudflare.com](https://dash.cloudflare.com) → Pages → Create a project → Connect GitHub → `commitshow/commitshow`
 3. Build settings:
    - Framework preset: Vite
    - Build command: `npm run build`

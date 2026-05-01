@@ -24,8 +24,10 @@
   "homepage": "https://commit.show",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hans1329/vibe",
-    "directory": "packages/cli-alias"
+    "url": "https://github.com/commitshow/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/commitshow/cli/issues"
   },
   "dependencies": {
     "commitshow": "^0.1.0"

@@ -131,7 +131,7 @@ changes do. Known keys: `project`, `score`, `standing`, `strengths`, `concerns`,
 ## Links
 
 - Home: <https://commit.show>
-- Source: <https://github.com/hans1329/vibe/tree/main/packages/cli>
-- Issues: <https://github.com/hans1329/vibe/issues>
+- Source: <https://github.com/commitshow/cli>
+- Issues: <https://github.com/commitshow/cli/issues>
 
 MIT © 2026 commit.show
