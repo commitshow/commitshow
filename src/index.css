@@ -258,3 +258,14 @@ input:focus, textarea:focus {
 input::placeholder, textarea::placeholder {
   color: rgba(248, 245, 238, 0.25);
 }
+/* Borderless textarea — used inside cards/composers that already provide
+   their own border. Cancels the global focus glow so the input feels
+   continuous with the card background. */
+.commit-bare-textarea,
+.commit-bare-textarea:focus {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+}

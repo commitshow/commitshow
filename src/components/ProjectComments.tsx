@@ -20,6 +20,7 @@ interface CommentRow {
   id:          string
   text:        string
   member_id:   string | null
+  parent_id:   string | null   // null = top-level · uuid = reply to that comment
   created_at:  string
   // Stage Manager system comments — populated by DB triggers (registered ·
   // score_jump · graduated). 'kind' defaults to 'human' on existing rows.
@@ -48,11 +49,10 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
     ;(async () => {
       const { data, error } = await supabase
         .from('comments')
-        .select('id, text, member_id, created_at, kind, event_kind, event_meta, author:members!comments_member_id_fkey(id, display_name, avatar_url)')
+        .select('id, text, member_id, parent_id, created_at, kind, event_kind, event_meta, author:members!comments_member_id_fkey(id, display_name, avatar_url)')
         .eq('project_id', projectId)
-        .is('parent_id', null)
         .order('created_at', { ascending: false })
-        .limit(200)
+        .limit(400)
       if (cancelled) return
       if (error) {
         console.error('[comments] load failed', error)
@@ -73,8 +73,23 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
     return () => { document.body.style.overflow = prev }
   }, [modalOpen])
 
-  const count = rows.length
-  const previews = rows.slice(0, PREVIEW_COUNT)
+  // Top-level rows are the thread skeleton; replies hang under their parent.
+  const topLevel = useMemo(() => rows.filter(r => !r.parent_id), [rows])
+  const count = topLevel.length
+  const previews = topLevel.slice(0, PREVIEW_COUNT)
+  const repliesByParent = useMemo(() => {
+    const m = new Map<string, CommentRow[]>()
+    for (const r of rows) {
+      if (!r.parent_id) continue
+      const arr = m.get(r.parent_id) ?? []
+      arr.push(r)
+      m.set(r.parent_id, arr)
+    }
+    // Replies render oldest-first under their parent so the conversation
+    // reads top-down even though the parent list is newest-first.
+    for (const [k, arr] of m) m.set(k, [...arr].reverse())
+    return m
+  }, [rows])
 
   const handlePosted = (row: CommentRow) => {
     setRows(prev => [row, ...prev])
@@ -163,7 +178,8 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
         <Drawer
           projectId={projectId}
           viewerMemberId={viewerMemberId}
-          rows={rows}
+          topLevel={topLevel}
+          repliesByParent={repliesByParent}
           loading={loading}
           onClose={() => setModalOpen(false)}
           onPosted={handlePosted}
@@ -177,19 +193,23 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
 
 // ── Drawer · slides in from the right · width-capped on desktop ─────
 function Drawer({
-  projectId, viewerMemberId, rows, loading, onClose, onPosted, onDeleted,
+  projectId, viewerMemberId, topLevel, repliesByParent, loading,
+  onClose, onPosted, onDeleted,
 }: {
-  projectId:      string
-  viewerMemberId: string | null
-  rows:           CommentRow[]
-  loading:        boolean
-  onClose:        () => void
-  onPosted:       (row: CommentRow) => void
-  onDeleted:      (id: string) => void
+  projectId:       string
+  viewerMemberId:  string | null
+  topLevel:        CommentRow[]
+  repliesByParent: Map<string, CommentRow[]>
+  loading:         boolean
+  onClose:         () => void
+  onPosted:        (row: CommentRow) => void
+  onDeleted:       (id: string) => void
 }) {
   // Two-phase mount so the slide-in transition runs after the portal attaches.
   const [entered, setEntered] = useState(false)
   const [closing, setClosing] = useState(false)
+  // When set, the next post from the composer is a reply to this comment.
+  const [replyTo, setReplyTo] = useState<{ id: string; displayName: string } | null>(null)
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setEntered(true))
@@ -242,7 +262,7 @@ function Drawer({
           style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'var(--navy-900)' }}
         >
           <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--text-secondary)' }}>
-            COMMENTS · <span className="tabular-nums" style={{ color: 'var(--cream)' }}>{rows.length}</span>
+            COMMENTS · <span className="tabular-nums" style={{ color: 'var(--cream)' }}>{topLevel.length}</span>
           </div>
           <button
             type="button"
@@ -264,10 +284,13 @@ function Drawer({
         {/* list */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           <DrawerCommentList
-            rows={rows}
+            topLevel={topLevel}
+            repliesByParent={repliesByParent}
             loading={loading}
             viewerMemberId={viewerMemberId}
             onDeleted={onDeleted}
+            onReply={(id, displayName) => setReplyTo({ id, displayName })}
+            activeReplyId={replyTo?.id ?? null}
           />
         </div>
 
@@ -281,6 +304,8 @@ function Drawer({
             viewerMemberId={viewerMemberId}
             onPosted={onPosted}
             autoFocus
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
           />
         </div>
       </div>
@@ -290,12 +315,15 @@ function Drawer({
 
 // ── Comment list inside the drawer ──────────────────────────────────
 function DrawerCommentList({
-  rows, loading, viewerMemberId, onDeleted,
+  topLevel, repliesByParent, loading, viewerMemberId, onDeleted, onReply, activeReplyId,
 }: {
-  rows:           CommentRow[]
-  loading:        boolean
-  viewerMemberId: string | null
-  onDeleted:      (id: string) => void
+  topLevel:        CommentRow[]
+  repliesByParent: Map<string, CommentRow[]>
+  loading:         boolean
+  viewerMemberId:  string | null
+  onDeleted:       (id: string) => void
+  onReply:         (id: string, displayName: string) => void
+  activeReplyId:   string | null
 }) {
   if (loading) {
     return (
@@ -304,40 +332,66 @@ function DrawerCommentList({
       </div>
     )
   }
-  if (rows.length === 0) {
+  if (topLevel.length === 0) {
     return (
       <div className="px-4 py-16 text-center">
         <div className="font-mono text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
-          NO COMMENTS YET
+          THE ROOM IS QUIET
         </div>
         <div className="font-light text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Be the first to weigh in on this build.
+          Drop the first read on this build.
         </div>
       </div>
     )
   }
   return (
     <ul>
-      {rows.map((r, i) => (
-        <CommentItem
-          key={r.id}
-          row={r}
-          isFirst={i === 0}
-          viewerMemberId={viewerMemberId}
-          onDeleted={onDeleted}
-        />
-      ))}
+      {topLevel.map((r, i) => {
+        const replies = repliesByParent.get(r.id) ?? []
+        return (
+          <li key={r.id} style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+            <CommentItem
+              row={r}
+              isFirst={true}
+              viewerMemberId={viewerMemberId}
+              onDeleted={onDeleted}
+              onReply={onReply}
+              isReplying={activeReplyId === r.id}
+            />
+            {replies.length > 0 && (
+              <ul className="pl-8" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                {replies.map((rep, j) => (
+                  <li key={rep.id} style={{ borderTop: j === 0 ? 'none' : '1px solid rgba(255,255,255,0.04)' }}>
+                    <CommentItem
+                      row={rep}
+                      isFirst={true}
+                      viewerMemberId={viewerMemberId}
+                      onDeleted={onDeleted}
+                      onReply={onReply}
+                      isReplying={activeReplyId === rep.id}
+                      isReply
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
 function CommentItem({
-  row, isFirst, viewerMemberId, onDeleted,
+  row, isFirst, viewerMemberId, onDeleted, onReply, isReplying = false, isReply = false,
 }: {
   row:            CommentRow
   isFirst:        boolean
   viewerMemberId: string | null
   onDeleted:      (id: string) => void
+  onReply?:       (id: string, displayName: string) => void
+  isReplying?:    boolean
+  isReply?:       boolean
 }) {
   const [busy, setBusy] = useState(false)
   const sys = isSystem(row)
@@ -418,7 +472,7 @@ function CommentItem({
           {row.text}
         </div>
         {sys && row.event_meta && <SystemEventChips meta={row.event_meta} kind={row.event_kind ?? null} />}
-        <div className="mt-2">
+        <div className="mt-2 flex items-center gap-3">
           <ApplaudButton
             targetType="comment"
             targetId={row.id}
@@ -428,29 +482,81 @@ function CommentItem({
             variant="icon"
             label="Applaud"
           />
+          {/* Reply only on top-level rows so threads stay 1 level deep
+              (keeps the visual model simple · matches YouTube mobile). */}
+          {!isReply && onReply && (
+            <button
+              type="button"
+              onClick={() => onReply(row.id, name)}
+              className="font-mono text-[11px] tracking-wide"
+              style={{
+                background: 'transparent',
+                border:     'none',
+                padding:    0,
+                cursor:     'pointer',
+                color:      isReplying ? 'var(--gold-500)' : 'var(--text-muted)',
+                fontWeight: isReplying ? 600 : 400,
+              }}
+              onMouseEnter={(e) => { if (!isReplying) e.currentTarget.style.color = 'var(--cream)' }}
+              onMouseLeave={(e) => { if (!isReplying) e.currentTarget.style.color = 'var(--text-muted)' }}
+            >
+              reply
+            </button>
+          )}
         </div>
       </div>
     </li>
   )
 }
 
+// Reaction primer chips · §2 Community exception (emoji allowed in comment
+// input). Tap → prepend the glyph + space to the textarea + focus. Lowers
+// the path from 'blank → paragraph' to 'tap → 5 words' on first comment.
+const REACTION_PRIMERS = [
+  { glyph: '🙌', label: 'nailed it' },
+  { glyph: '🎯', label: 'sharp' },
+  { glyph: '🔥', label: 'hot take' },
+  { glyph: '🤔', label: 'not sure' },
+  { glyph: '💡', label: 'idea' },
+] as const
+
+// Empty / general placeholder rotations — the textarea hint nudges the user
+// without prescribing what to write.
+const COMPOSER_PLACEHOLDERS = [
+  'What jumped out in the audit?',
+  'What would you ship next?',
+  'Give the creator a note.',
+  'First take from the room?',
+  'Add to the discussion…',
+] as const
+
 // ── Composer ────────────────────────────────────────────────────────
 function Composer({
   projectId, viewerMemberId, onPosted, autoFocus = false,
+  replyTo = null, onCancelReply,
 }: {
   projectId:      string
   viewerMemberId: string | null
   onPosted:       (row: CommentRow) => void
   autoFocus?:     boolean
+  /** When set, the next post is a reply to this comment. */
+  replyTo?:       { id: string; displayName: string } | null
+  onCancelReply?: () => void
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const ref = useRef<HTMLTextAreaElement | null>(null)
 
+  // Pick a placeholder once per mount so it doesn't flicker mid-type.
+  const placeholder = useMemo(() => {
+    if (replyTo) return `Replying to @${replyTo.displayName}…`
+    return COMPOSER_PLACEHOLDERS[Math.floor(Math.random() * COMPOSER_PLACEHOLDERS.length)]
+  }, [replyTo])
+
   useEffect(() => {
-    if (autoFocus) ref.current?.focus()
-  }, [autoFocus])
+    if (autoFocus || replyTo) ref.current?.focus()
+  }, [autoFocus, replyTo])
 
   if (!viewerMemberId) {
     return (
@@ -478,14 +584,36 @@ function Composer({
   const trimmed = text.trim()
   const valid = trimmed.length > 0 && trimmed.length <= MAX_LEN
 
+  const insertPrimer = (glyph: string) => {
+    setText(prev => {
+      // If the textarea already starts with a glyph + space, swap it.
+      const startsWithGlyph = /^.\s/.test(prev) && /\p{Emoji}/u.test(prev.charAt(0))
+      const next = startsWithGlyph ? glyph + ' ' + prev.slice(2) : glyph + ' ' + prev
+      return next
+    })
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus()
+      const pos = el.value.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
+
   const handleSubmit = async () => {
     if (!valid || busy) return
     setBusy(true)
     setErr(null)
+    const insertPayload: Record<string, unknown> = {
+      project_id: projectId,
+      member_id:  viewerMemberId,
+      text:       trimmed,
+    }
+    if (replyTo) insertPayload.parent_id = replyTo.id
     const { data, error } = await supabase
       .from('comments')
-      .insert({ project_id: projectId, member_id: viewerMemberId, text: trimmed })
-      .select('id, text, member_id, created_at, kind, event_kind, event_meta, author:members!comments_member_id_fkey(id, display_name, avatar_url)')
+      .insert(insertPayload)
+      .select('id, text, member_id, parent_id, created_at, kind, event_kind, event_meta, author:members!comments_member_id_fkey(id, display_name, avatar_url)')
       .single()
     setBusy(false)
     if (error || !data) {
@@ -495,6 +623,7 @@ function Composer({
     }
     onPosted(data as unknown as CommentRow)
     setText('')
+    if (onCancelReply) onCancelReply()
   }
 
   return (
@@ -506,20 +635,74 @@ function Composer({
         background: 'var(--navy-800)',
       }}
     >
+      {replyTo && (
+        <div className="mb-2 flex items-center gap-2 font-mono text-[11px]"
+             style={{ color: 'var(--text-secondary)' }}>
+          <span>Replying to <span style={{ color: 'var(--gold-500)' }}>@{replyTo.displayName}</span></span>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="ml-auto"
+            style={{
+              background: 'transparent', border: 'none', padding: 0,
+              cursor: 'pointer', color: 'var(--text-muted)',
+            }}
+            aria-label="Cancel reply"
+          >
+            × cancel
+          </button>
+        </div>
+      )}
+
+      {/* Reaction primer chips · §2 Community exception · emoji allowed in
+          comment input */}
+      <div className="mb-2 flex items-center gap-1.5 flex-wrap">
+        {REACTION_PRIMERS.map(p => (
+          <button
+            key={p.glyph}
+            type="button"
+            onClick={() => insertPrimer(p.glyph)}
+            className="font-mono text-[11px] tracking-wide px-2 py-1 inline-flex items-center gap-1.5"
+            style={{
+              background:   'transparent',
+              color:        'var(--text-secondary)',
+              border:       '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '2px',
+              cursor:       'pointer',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(240,192,64,0.45)'
+              e.currentTarget.style.color = 'var(--cream)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.color = 'var(--text-secondary)'
+            }}
+            aria-label={`Insert ${p.label} reaction`}
+          >
+            <span aria-hidden="true">{p.glyph}</span>
+            <span>{p.label}</span>
+          </button>
+        ))}
+      </div>
+
       <textarea
         ref={ref}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Add a comment…"
+        placeholder={placeholder}
         rows={2}
         maxLength={MAX_LEN}
-        className="w-full font-light text-sm leading-relaxed resize-none"
+        className="w-full font-light text-sm leading-relaxed resize-none commit-bare-textarea"
         style={{
           background: 'transparent',
           border:     'none',
           outline:    'none',
+          boxShadow:  'none',
           color:      'var(--text-primary)',
           padding:    0,
+          WebkitAppearance: 'none',
+          WebkitTapHighlightColor: 'transparent',
         }}
       />
       <div className="mt-2 flex items-center justify-between gap-2">
@@ -546,7 +729,7 @@ function Composer({
               fontWeight:   600,
             }}
           >
-            {busy ? 'Posting…' : 'Post'}
+            {busy ? 'Posting…' : (replyTo ? 'Reply' : 'Post')}
           </button>
         </div>
       </div>
