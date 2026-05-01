@@ -48,7 +48,7 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
     ;(async () => {
       const { data, error } = await supabase
         .from('comments')
-        .select('id, text, member_id, created_at, kind, event_kind, event_meta, author:members(id, display_name, avatar_url)')
+        .select('id, text, member_id, created_at, kind, event_kind, event_meta, author:members!comments_member_id_fkey(id, display_name, avatar_url)')
         .eq('project_id', projectId)
         .is('parent_id', null)
         .order('created_at', { ascending: false })
@@ -517,7 +517,7 @@ function Composer({
     const { data, error } = await supabase
       .from('comments')
       .insert({ project_id: projectId, member_id: viewerMemberId, text: trimmed })
-      .select('id, text, member_id, created_at, kind, event_kind, event_meta, author:members(id, display_name, avatar_url)')
+      .select('id, text, member_id, created_at, kind, event_kind, event_meta, author:members!comments_member_id_fkey(id, display_name, avatar_url)')
       .single()
     setBusy(false)
     if (error || !data) {
