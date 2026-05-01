@@ -14,7 +14,9 @@ import {
   type CreatorIdentity,
 } from '../lib/projectQueries'
 import type { AnalysisResult } from '../lib/analysis'
+import { analyzeProject, CooldownError } from '../lib/analysis'
 import { AnalysisResultCard } from '../components/AnalysisResultCard'
+import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
 import { NativeAppPanel, type NativeAppBreakdown, type NativeFootguns } from '../components/NativeAppPanel'
@@ -50,6 +52,12 @@ export function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [forecastOpen, setForecastOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  // Hero-level Re-audit state. Lives here (not inside AnalysisResultCard)
+  // so the Re-audit affordance can sit in the title block alongside EDIT
+  // — most owners want to act on it from the top of the page, not after
+  // scrolling past Activity.
+  const [heroRerunBusy, setHeroRerunBusy] = useState(false)
+  const [heroRerunError, setHeroRerunError] = useState<string | null>(null)
   const [streakClimbs, setStreakClimbs] = useState(0)
   const [notFound, setNotFound] = useState(false)
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase | undefined>(undefined)
@@ -150,6 +158,48 @@ export function ProjectDetailPage() {
     })()
   }, [id])
 
+  // Hero-level Re-audit handler · same pipeline as the AnalysisResultCard
+  // version (lib/analysis::analyzeProject 'resubmit' trigger + ladder cache
+  // invalidation + on-success snapshot/project sync), just plumbed off the
+  // top-of-page button instead of the SCOUT BRIEF header.
+  const handleHeroReanalyze = async () => {
+    if (!project || heroRerunBusy) return
+    setHeroRerunBusy(true)
+    setHeroRerunError(null)
+    try {
+      const next = await analyzeProject(project.id, 'resubmit')
+      void import('../lib/ladder').then(m => m.invalidateLadderCache())
+      // Same in-render sync as the existing onReanalyzed flow on AnalysisResultCard.
+      setSnapshotResult(next)
+      setProject(prev => prev ? {
+        ...prev,
+        score_total:     next.score_total ?? prev.score_total,
+        score_auto:      next.score_auto ?? prev.score_auto,
+        score_forecast:  next.score_forecast ?? prev.score_forecast,
+        score_community: next.score_community ?? prev.score_community,
+      } : prev)
+      const [refreshed, tl, ap] = await Promise.all([
+        fetchProjectById(project.id),
+        fetchProjectTimeline(project.id),
+        fetchProjectApplauds(project.id),
+      ])
+      if (refreshed) setProject(refreshed)
+      setTimeline(tl)
+      setApplauds(ap)
+      window.setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'auto' })
+      }, 0)
+    } catch (e) {
+      if (e instanceof CooldownError) {
+        setHeroRerunError(`Re-audit available in ${e.retryAfterHours}h. The 24h cooldown prevents spam.`)
+      } else {
+        setHeroRerunError(`Re-audit failed: ${(e as Error).message}`)
+      }
+    } finally {
+      setHeroRerunBusy(false)
+    }
+  }
+
   // Scroll-spy · highlight the section nav chip that matches the viewport
   useEffect(() => {
     if (loading) return
@@ -245,23 +295,57 @@ export function ProjectDetailPage() {
         {/* ── Compact Hero (description moved to Overview pullquote) ── */}
         <header className="card-navy overflow-hidden mb-4 relative" style={{ borderRadius: '2px' }}>
           {isOwner && (
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="absolute top-3 right-3 z-10 font-mono text-[11px] tracking-wide px-3 py-1.5"
-              style={{
-                background: 'rgba(6,12,26,0.8)',
-                color: 'var(--gold-500)',
-                border: '1px solid rgba(240,192,64,0.4)',
-                borderRadius: '2px',
-                cursor: 'pointer',
-                backdropFilter: 'blur(4px)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.color = 'var(--navy-900)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(6,12,26,0.8)'; e.currentTarget.style.color = 'var(--gold-500)' }}
-            >
-              EDIT
-            </button>
+            <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-1.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleHeroReanalyze}
+                  disabled={heroRerunBusy}
+                  className="font-mono text-[11px] tracking-wide px-3 py-1.5"
+                  style={{
+                    background:   heroRerunBusy ? 'rgba(240,192,64,0.25)' : 'var(--gold-500)',
+                    color:        heroRerunBusy ? 'var(--text-muted)' : 'var(--navy-900)',
+                    border:       'none',
+                    borderRadius: '2px',
+                    cursor:       heroRerunBusy ? 'wait' : 'pointer',
+                    fontWeight:   600,
+                  }}
+                  aria-label="Re-audit this build"
+                >
+                  {heroRerunBusy ? 'Auditing 60–120s…' : 'Re-audit →'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  className="font-mono text-[11px] tracking-wide px-3 py-1.5"
+                  style={{
+                    background: 'rgba(6,12,26,0.8)',
+                    color: 'var(--gold-500)',
+                    border: '1px solid rgba(240,192,64,0.4)',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                    backdropFilter: 'blur(4px)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.color = 'var(--navy-900)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(6,12,26,0.8)'; e.currentTarget.style.color = 'var(--gold-500)' }}
+                >
+                  EDIT
+                </button>
+              </div>
+              {heroRerunError && (
+                <div className="font-mono text-[10px] tracking-wide px-2 py-1"
+                     style={{
+                       maxWidth: '320px',
+                       textAlign: 'right',
+                       color: '#F87871',
+                       background: 'rgba(200,16,46,0.08)',
+                       borderLeft: '2px solid var(--scarlet)',
+                       borderRadius: '2px',
+                     }}>
+                  {heroRerunError}
+                </div>
+              )}
+            </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
             <div style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)', overflow: 'hidden' }}>
@@ -528,6 +612,7 @@ export function ProjectDetailPage() {
                 viewerMode={isOwner ? 'owner' : 'visitor'}
                 seasonPhase={seasonPhase}
                 viewerTier={member?.tier ?? null}
+                hideReanalyzeButton
               />
             ) : (
               <EmptyBox label="No analysis yet — awaiting first round." />
@@ -610,6 +695,15 @@ export function ProjectDetailPage() {
           onSaved={(updated) => { setProject(updated); setEditOpen(false) }}
         />
       )}
+
+      {/* Hero Re-audit progress overlay — same shared modal AnalysisResultCard
+          uses; rendered at the page level so it sits above everything while
+          the audit runs. */}
+      <AnalysisProgressModal
+        open={heroRerunBusy}
+        variant="reanalyze"
+        completed={false}
+      />
     </section>
   )
 }

@@ -189,6 +189,7 @@ function LighthouseCard({ lh, githubOk, liveUrl }: { lh: AnalysisResult['lh']; g
 
 export function AnalysisResultCard({
   result, onReset, projectId, onReanalyzed, viewerMode = 'owner', seasonPhase, viewerTier = null,
+  hideReanalyzeButton = false,
 }: {
   result: AnalysisResult
   onReset?: () => void
@@ -211,6 +212,14 @@ export function AnalysisResultCard({
    * with the last 2 weaknesses locked behind Platinum.
    */
   viewerTier?: ScoutTier | null
+  /**
+   * When true, the Re-audit button inside the SCOUT BRIEF header is hidden
+   * — the parent (e.g. ProjectDetailPage Hero) is rendering its own
+   * Re-audit affordance. The internal handleReanalyze + progress modal
+   * remain wired so callers that DON'T set this (SubmitForm) keep their
+   * existing button.
+   */
+  hideReanalyzeButton?: boolean
 }) {
   const navigate = useNavigate()
   const isOwner = viewerMode === 'owner'
@@ -371,7 +380,7 @@ export function AnalysisResultCard({
           scoreForecast={typeof result.score_forecast === 'number' ? result.score_forecast : null}
           scoreCommunity={typeof result.score_community === 'number' ? result.score_community : null}
           tldr={typeof r.tldr === 'string' ? r.tldr : null}
-          onReanalyze={isOwner && projectId && onReanalyzed ? handleReanalyze : null}
+          onReanalyze={isOwner && projectId && onReanalyzed && !hideReanalyzeButton ? handleReanalyze : null}
           rerunBusy={rerunBusy}
         />
       )}
@@ -963,16 +972,15 @@ function ScoutBriefSection({
             <button
               type="button"
               onClick={handleCopyPrompt}
-              className="font-mono text-[11px] tracking-wide px-3 py-1.5 inline-flex items-center gap-1.5"
+              className="font-mono text-[11px] tracking-wide px-3 py-1.5"
               style={{
-                background: copied ? 'rgba(63,168,116,0.12)' : 'transparent',
-                color:      copied ? '#3FA874' : 'var(--text-secondary)',
-                border:     `1px solid ${copied ? 'rgba(63,168,116,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                background:   copied ? 'rgba(63,168,116,0.18)' : 'var(--gold-500)',
+                color:        copied ? '#3FA874' : 'var(--navy-900)',
+                border:       copied ? '1px solid rgba(63,168,116,0.45)' : 'none',
                 borderRadius: '2px',
-                cursor: 'pointer',
+                cursor:       'pointer',
+                fontWeight:   600,
               }}
-              onMouseEnter={(e) => { if (!copied) e.currentTarget.style.color = 'var(--cream)' }}
-              onMouseLeave={(e) => { if (!copied) e.currentTarget.style.color = 'var(--text-secondary)' }}
               aria-label="Copy fix prompt for AI tool"
             >
               {copied ? 'Copied · paste in your AI tool' : 'Copy fix prompt'}
