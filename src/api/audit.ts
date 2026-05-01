@@ -1,10 +1,14 @@
-// Cloudflare Pages Function · GET https://commit.show/api/audit?repo=<github-url>&format=md|json
+// Cloudflare Worker route · GET https://commit.show/api/audit?repo=<github-url>&format=md|json
 //
 // Public, fetch-friendly audit endpoint for agents that can't shell out
 // (gemini.google.com chat · ChatGPT WebFetch · n8n HTTP node · curl/jq
 // in scripts). Wraps the existing Supabase audit-preview Edge Function
 // so we don't duplicate audit logic — this layer only handles HTTP
 // shape, CORS, and markdown rendering.
+//
+// Mounted by src/worker.ts when the request path is /api/audit. Lives
+// in src/ (not functions/) because we deploy via Workers Static Assets,
+// not Pages Functions — see CLAUDE.md memory: deploy trigger.
 //
 // Response formats:
 //   format=md   (default) — markdown summary the agent can paste into
@@ -21,18 +25,11 @@
 // hammer Claude. The audit-preview function itself does longer caching by
 // commit_sha; this is just an HTTP-edge buffer.
 
-interface Env {
+export interface AuditEnv {
   VITE_SUPABASE_URL?: string
   VITE_SUPABASE_ANON_KEY?: string
   SUPABASE_URL?: string
   SUPABASE_ANON_KEY?: string
-}
-
-// Pages Function context — typed locally so we don't need to pull in
-// @cloudflare/workers-types just for this single file.
-interface PagesContext {
-  request: Request
-  env:     Env
 }
 
 const CORS = {
@@ -146,9 +143,7 @@ function renderMarkdown(env: PreviewEnvelope, slug: string): string {
   return lines.join('\n')
 }
 
-export const onRequest = async (context: PagesContext): Promise<Response> => {
-  const { request, env } = context
-
+export async function handleAudit(request: Request, env: AuditEnv): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
   if (request.method !== 'GET' && request.method !== 'POST') {
     return jsonResponse({ error: 'method_not_allowed' }, { status: 405 })
