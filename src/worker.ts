@@ -12,6 +12,7 @@
 //   everything else    → env.ASSETS.fetch(request)  (static + SPA fallback)
 
 import { handleAudit, type AuditEnv } from './api/audit'
+import { handleOpenAPI } from './api/openapi'
 
 interface Env extends AuditEnv {
   ASSETS: { fetch: (req: Request) => Promise<Response> }
@@ -22,6 +23,9 @@ export default {
     const url = new URL(request.url)
     if (url.pathname === '/api/audit' || url.pathname.startsWith('/api/audit/')) {
       return handleAudit(request, env)
+    }
+    if (url.pathname === '/api/openapi.json' || url.pathname === '/api/openapi') {
+      return handleOpenAPI(request)
     }
     return env.ASSETS.fetch(request)
   },
