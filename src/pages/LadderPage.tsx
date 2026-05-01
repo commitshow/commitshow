@@ -241,29 +241,28 @@ export function LadderPage() {
           <div className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
             {hint}
           </div>
-          <div className="flex items-center shrink-0" style={{
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '2px',
-            background: 'rgba(6,12,26,0.5)',
-          }}>
-            {(['list', 'cards'] as ViewMode[]).map(v => {
+          <div className="flex items-center gap-2 shrink-0">
+            {(['list', 'cards'] as ViewMode[]).map((v, i) => {
               const active = v === view
               return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => updateParam('view', v)}
-                  className="font-mono text-[10px] tracking-widest px-3 py-1.5"
-                  style={{
-                    background: active ? 'var(--gold-500)' : 'transparent',
-                    color:      active ? 'var(--navy-900)' : 'var(--text-secondary)',
-                    border:     'none',
-                    cursor:     'pointer',
-                    fontWeight: active ? 600 : 400,
-                  }}
-                >
-                  {v === 'list' ? 'RANK LIST' : 'CARDS'}
-                </button>
+                <span key={v} className="flex items-center gap-2">
+                  {i > 0 && <span aria-hidden="true" style={{ color: 'var(--text-faint)' }}>·</span>}
+                  <button
+                    type="button"
+                    onClick={() => updateParam('view', v)}
+                    className="font-mono text-[11px] tracking-wide"
+                    style={{
+                      background: 'transparent',
+                      border:     'none',
+                      padding:    0,
+                      cursor:     active ? 'default' : 'pointer',
+                      color:      active ? 'var(--gold-500)' : 'var(--text-muted)',
+                      fontWeight: active ? 600 : 400,
+                    }}
+                  >
+                    {v === 'list' ? 'Rank list' : 'Cards'}
+                  </button>
+                </span>
               )
             })}
           </div>
