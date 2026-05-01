@@ -303,7 +303,6 @@ function Drawer({
             projectId={projectId}
             viewerMemberId={viewerMemberId}
             onPosted={onPosted}
-            autoFocus
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}
           />
@@ -554,8 +553,14 @@ function Composer({
     return COMPOSER_PLACEHOLDERS[Math.floor(Math.random() * COMPOSER_PLACEHOLDERS.length)]
   }, [replyTo])
 
+  // Auto-focus only when explicitly opted in via the prop (e.g. desktop
+  // contexts) AND for a reply tap (the user just chose a target). On
+  // mobile, focusing the textarea immediately makes iOS Safari zoom the
+  // viewport — we skip the implicit focus so opening the drawer feels
+  // calm; the user taps the textarea when they're ready.
   useEffect(() => {
-    if (autoFocus || replyTo) ref.current?.focus()
+    if (replyTo) ref.current?.focus()
+    else if (autoFocus && !isLikelyMobile()) ref.current?.focus()
   }, [autoFocus, replyTo])
 
   if (!viewerMemberId) {
@@ -700,7 +705,11 @@ function Composer({
         placeholder={placeholder}
         rows={2}
         maxLength={MAX_LEN}
-        className="w-full font-light text-sm leading-relaxed resize-none commit-bare-textarea"
+        // text-base on mobile (16px) → text-sm on ≥sm (14px) — iOS Safari
+        // auto-zooms the viewport when a focused input has font-size < 16px.
+        // 16px on small screens prevents that pinch even if the user does
+        // tap the textarea manually.
+        className="w-full font-light text-base sm:text-sm leading-relaxed resize-none commit-bare-textarea"
         style={{
           background: 'transparent',
           border:     'none',
@@ -838,6 +847,16 @@ function Avatar({ name, url }: { name: string; url: string | null }) {
       )}
     </div>
   )
+}
+
+// Crude UA + width heuristic — only used to skip auto-focus, never to
+// gate functionality. False negatives are fine; we just avoid the iOS
+// Safari zoom on small screens.
+function isLikelyMobile(): boolean {
+  if (typeof window === 'undefined') return false
+  if (window.matchMedia?.('(pointer: coarse)').matches) return true
+  if (window.innerWidth < 640) return true
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 }
 
 // ── relative time ───────────────────────────────────────────────────

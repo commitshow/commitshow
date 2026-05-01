@@ -201,6 +201,9 @@ interface GitHubInfo {
       mock_data:           { samples: Array<{ file: string; collection: string }>; total: number }
       webhook_signature:   { handlers_seen: number; verified_seen: number; gap: boolean; sample_files: string[] }
       cors_permissive:     { samples: Array<{ file: string; pattern: string }>; total: number }
+      // Frame 12 · 2026-05-01 · iOS Safari zoom-on-focus when input/textarea
+      // font-size < 16px. Common Tailwind text-sm pitfall on mobile-first.
+      mobile_input_zoom:   { samples: Array<{ file: string; pattern: string }>; total: number; needs_attention: boolean }
     }
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
@@ -411,6 +414,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
         mock_data:           { samples: [], total: 0 },
         webhook_signature:   { handlers_seen: 0, verified_seen: 0, gap: false, sample_files: [] },
         cors_permissive:     { samples: [], total: 0 },
+        mobile_input_zoom:   { samples: [], total: 0, needs_attention: false },
       },
     },
     readme_excerpt: null,
@@ -1041,12 +1045,20 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const webhook_sig_evidence: string[] = []
   // 11. CORS PERMISSIVE · `origin: '*'` or `Access-Control-Allow-Origin: *`.
   const cors_perm_samples: Array<{ file: string; pattern: string }> = []
+  // 12. MOBILE INPUT ZOOM · iOS Safari auto-zooms a focused input/textarea
+  //     whose computed font-size is below 16px. Catches the common
+  //     `<input className="text-sm">` Tailwind pattern + inline
+  //     `style={{ fontSize: '14px' }}`. False-positive guard: ignore
+  //     classNames that contain a sm:/md:/lg: escape hatch upgrading the
+  //     font on larger viewports — that's intentional.
+  const mobile_zoom_samples: Array<{ file: string; pattern: string }> = []
 
   for (const f of extScanFiles) {
     if (
       hardcoded_url_samples.length >= 3 &&
       mock_data_samples.length >= 3 &&
-      cors_perm_samples.length >= 3
+      cors_perm_samples.length >= 3 &&
+      mobile_zoom_samples.length >= 3
     ) break
     const text = await readFile(f)
     if (!text) continue
@@ -1065,6 +1077,35 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
                      ?? text.match(/['"]Access-Control-Allow-Origin['"]\s*:\s*['"]\*['"]/i)
                      ?? text.match(/cors\s*\(\s*\{[^}]*origin\s*:\s*true\b/i)
       if (corsMatch) cors_perm_samples.push({ file: f, pattern: corsMatch[0].slice(0, 80) })
+    }
+    if (mobile_zoom_samples.length < 3) {
+      // (a) inline style fontSize < 16px on input/textarea
+      const inlineRe = /<\s*(?:input|textarea)\b[^>]*style\s*=\s*\{\{[^}]*fontSize\s*:\s*['"]?(\d+)\s*px/gi
+      let im: RegExpExecArray | null
+      let added = false
+      while ((im = inlineRe.exec(text)) !== null) {
+        const px = parseInt(im[1], 10)
+        if (px < 16) {
+          mobile_zoom_samples.push({ file: f, pattern: `inline ${px}px` })
+          added = true
+          break
+        }
+      }
+      // (b) Tailwind text-xs / text-sm on input/textarea without a sm:/md:/lg:
+      // base+/lg/xl override (those signal an intentional mobile-first bump).
+      if (!added) {
+        const twRe = /<\s*(?:input|textarea)\b[^>]*className\s*=\s*['"]([^'"]+)['"]/gi
+        let cm: RegExpExecArray | null
+        while ((cm = twRe.exec(text)) !== null) {
+          const cls = cm[1]
+          const small = cls.match(/\btext-(xs|sm)\b/)
+          const mobileEscape = /\b(?:sm|md|lg|xl):text-(?:base|lg|xl|2xl|3xl)\b/.test(cls)
+          if (small && !mobileEscape) {
+            mobile_zoom_samples.push({ file: f, pattern: `class .text-${small[1]}` })
+            break
+          }
+        }
+      }
     }
   }
 
@@ -1149,6 +1190,11 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     cors_permissive: {
       samples: cors_perm_samples,
       total:   cors_perm_samples.length,
+    },
+    mobile_input_zoom: {
+      samples:         mobile_zoom_samples,
+      total:           mobile_zoom_samples.length,
+      needs_attention: mobile_zoom_samples.length > 0,
     },
   }
 

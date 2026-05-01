@@ -22,6 +22,8 @@ interface VibeConcerns {
   mock_data?:          { samples: Array<{ file: string; collection: string }>; total: number }
   webhook_signature?:  { handlers_seen: number; verified_seen: number; gap: boolean; sample_files: string[] }
   cors_permissive?:    { samples: Array<{ file: string; pattern: string }>; total: number }
+  // Frame 12 (2026-05-01)
+  mobile_input_zoom?:  { samples: Array<{ file: string; pattern: string }>; total: number; needs_attention?: boolean }
 }
 
 type Status = 'pass' | 'warn' | 'fail' | 'na'
@@ -313,6 +315,29 @@ function evaluate(vc: VibeConcerns | null | undefined): CardData[] {
       why: 'AI copies `cors({ origin: "*" })` from a tutorial. In production any website can hit your API with the user\'s cookies — CSRF + token theft surface opens up.',
       fix: status === 'warn' ? 'Whitelist explicit origins: `cors({ origin: ["https://yourapp.com", "https://staging.yourapp.com"] })`.' : null,
       evidence: c?.samples.map(s => `${s.file} · ${s.pattern}`),
+    })
+  }
+
+  // 12. Mobile input zoom · iOS Safari auto-zooms a focused input/textarea
+  // whose font-size is below 16px. The Tailwind 'text-sm' default on inputs
+  // is the most common trigger.
+  {
+    const m = vc?.mobile_input_zoom
+    let status: Status = 'pass'
+    let finding = 'Inputs/textareas use ≥16px font (no iOS zoom-on-focus).'
+    if (m && m.total > 0) {
+      status = 'warn'
+      finding = `${m.total} input/textarea${m.total === 1 ? '' : 's'} with sub-16px font — iOS Safari will pinch-zoom on focus.`
+    }
+    cards.push({
+      key: 'mobile_input_zoom',
+      title: 'Mobile input zoom on focus',
+      prevalence: 'Tailwind text-sm on inputs is a top-3 mobile UX bug',
+      status,
+      finding,
+      why: 'iOS Safari auto-zooms the viewport when a focused input has font-size < 16px. The page jumps, the user has to pinch back out, and forms feel broken. Most often a leftover `text-sm` from a Tailwind starter on inputs/textareas.',
+      fix: status === 'warn' ? 'Bump base font-size to 16px on mobile (`className="text-base sm:text-sm"`), or set the textarea/input min-size in CSS. Skip auto-focus on small screens.' : null,
+      evidence: m?.samples.map(s => `${s.file} · ${s.pattern}`),
     })
   }
 
