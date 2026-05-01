@@ -26,6 +26,7 @@ import { fetchAuditionStreak } from '../lib/auditionStreak'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
 import { BackstagePanel } from '../components/BackstagePanel'
+import { ProjectComments } from '../components/ProjectComments'
 import { GraduationStanding } from '../components/GraduationStanding'
 import { BadgeSnippet } from '../components/BadgeSnippet'
 import { useAuth } from '../lib/auth'
@@ -205,6 +206,7 @@ export function ProjectDetailPage() {
     { id: 'overview',  label: 'Overview' },
     { id: 'analysis',  label: 'Analysis' },
     { id: 'activity',  label: 'Activity' },
+    { id: 'comments',  label: 'Comments' },
     { id: 'backstage', label: 'Backstage' },
   ]
   if (isOwner) sections.push({ id: 'brief', label: 'Private brief', ownerOnly: true })
@@ -512,6 +514,12 @@ export function ProjectDetailPage() {
                 ))}
               </ActivityList>
             </div>
+          </section>
+
+          {/* COMMENTS · YouTube-mobile pattern · §13-B-style discussion thread */}
+          <section id="comments" className="scroll-mt-28">
+            <SectionHeader label="COMMENTS" hint="What other vibe coders think." />
+            <ProjectComments projectId={project.id} viewerMemberId={member?.id ?? null} />
           </section>
 
           {/* BACKSTAGE · public · locked until graduation per CLAUDE.md §12 */}
