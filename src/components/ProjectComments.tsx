@@ -117,47 +117,30 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
           <ul>
             {previews.map((r, i) => {
               const sys = isSystem(r)
-              const name = sys ? 'Stage Manager' : (r.author?.display_name || 'Anon').trim()
               return (
                 <li
                   key={r.id}
-                  className="px-3 py-2 flex items-start gap-2.5"
+                  className="px-3 py-2 flex items-center gap-2.5"
                   style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)' }}
                 >
                   {sys
                     ? <StageManagerAvatar />
-                    : <Avatar name={name} url={r.author?.avatar_url ?? null} />}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 mb-0.5">
-                      <span
-                        className="font-mono text-[11px] tracking-wide truncate"
-                        style={{ color: sys ? 'var(--cream)' : 'var(--gold-500)' }}
-                      >
-                        {sys ? 'Stage Manager' : '@' + name}
-                      </span>
-                      {sys && (
-                        <span
-                          className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 shrink-0"
-                          style={{
-                            color: 'var(--gold-500)',
-                            border: '1px solid rgba(240,192,64,0.4)',
-                            borderRadius: '2px',
-                          }}
-                        >
-                          STAGE
-                        </span>
-                      )}
-                      <span className="font-mono text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>
-                        {formatRelative(r.created_at)}
-                      </span>
-                    </div>
-                    <div
-                      className="font-light text-sm leading-snug truncate"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      {r.text}
-                    </div>
+                    : <Avatar
+                        name={(r.author?.display_name || 'Anon').trim()}
+                        url={r.author?.avatar_url ?? null}
+                      />}
+                  <div
+                    className="flex-1 min-w-0 font-light text-sm leading-snug truncate"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {r.text}
                   </div>
+                  <span
+                    className="font-mono text-[10px] shrink-0"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    {formatRelative(r.created_at)}
+                  </span>
                 </li>
               )
             })}
