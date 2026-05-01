@@ -933,14 +933,30 @@ function ScoutBriefSection({
       lines.push('')
     }
 
+    lines.push('## Step 0 — pull the evidence pack before editing')
+    lines.push('')
+    lines.push('Each concern has more detail than the bullet above. Run this FIRST so you')
+    lines.push("know which files / which patterns the audit actually keyed on — guessing")
+    lines.push('without it usually means re-doing the work after re-audit:')
+    lines.push('')
+    lines.push('```')
+    lines.push('npx commitshow audit'
+      + (slug ? ` ${slug}` : '')
+      + ' --json')
+    lines.push('```')
+    lines.push('')
+    lines.push('Look at `snapshot.rich_analysis` (`scout_brief`, `vibe_concerns`, axis breakdown). Each concern category typically carries a `samples` / `sample_files` / `evidence_files` list with the exact paths and patterns the detector matched.')
+    lines.push('')
+
     lines.push('## Rules of engagement')
     lines.push('')
     lines.push('- Smallest minimal patch per concern. No refactors, no new dependencies, no behavior changes outside the flagged scope.')
-    lines.push('- If a concern\'s exact file path or fix isn\'t obvious from the bullet, run `npx commitshow audit'
-      + (slug ? ` ${slug}` : '')
-      + ' --json` and inspect `rich_analysis` for the full evidence pack — paths, line counts, axis breakdown.')
     lines.push('- Stop and ask before doing anything that conflicts with the strengths above (e.g. don\'t replace a working pattern just to reach a metric).')
+    lines.push('- **Stop and ask before any destructive history rewrite.** If a concern requires `git filter-repo` / `git filter-branch` / force-pushing to scrub committed secrets, surface the exact commands and the impact (collaborators must re-clone, CI tokens may need rotation) and wait for confirmation. Do not run them autonomously.')
     lines.push('- Apply concerns in order. Skip and explain if a concern is genuinely not actionable in this repo.')
+    lines.push('- After every 1-2 concerns, re-run `npx commitshow audit'
+      + (slug ? ` ${slug}` : '')
+      + '` to verify the fix actually landed before moving on. Cheaper than batching 5 fixes and discovering 2 didn\'t register.')
     lines.push('')
 
     lines.push('## When you\'re done')
