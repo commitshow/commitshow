@@ -584,12 +584,19 @@ function Composer({
   const trimmed = text.trim()
   const valid = trimmed.length > 0 && trimmed.length <= MAX_LEN
 
-  const insertPrimer = (glyph: string) => {
+  const insertPrimer = (glyph: string, label: string) => {
+    const newPrefix = `${glyph} ${label} — `
     setText(prev => {
-      // If the textarea already starts with a glyph + space, swap it.
-      const startsWithGlyph = /^.\s/.test(prev) && /\p{Emoji}/u.test(prev.charAt(0))
-      const next = startsWithGlyph ? glyph + ' ' + prev.slice(2) : glyph + ' ' + prev
-      return next
+      // Strip any existing primer prefix so back-to-back taps swap cleanly.
+      let stripped = prev
+      for (const p of REACTION_PRIMERS) {
+        const pp = `${p.glyph} ${p.label} — `
+        if (stripped.startsWith(pp)) {
+          stripped = stripped.slice(pp.length)
+          break
+        }
+      }
+      return newPrefix + stripped
     })
     requestAnimationFrame(() => {
       const el = ref.current
@@ -661,7 +668,7 @@ function Composer({
           <button
             key={p.glyph}
             type="button"
-            onClick={() => insertPrimer(p.glyph)}
+            onClick={() => insertPrimer(p.glyph, p.label)}
             className="font-mono text-[11px] tracking-wide px-2 py-1 inline-flex items-center gap-1.5"
             style={{
               background:   'transparent',
