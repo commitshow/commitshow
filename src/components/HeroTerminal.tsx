@@ -39,7 +39,11 @@ const BIG_ROWS = 6
 
 function bigDigits(n: string): string[] {
   const rows = Array.from({ length: BIG_ROWS }, () => "")
-  const GAP = " "
+  // 0 explicit gutter — each glyph already carries its own leading and
+  // trailing whitespace, so concatenating with no extra gap still gives
+  // a visible 2-col space. Tightened from 1 col on 2026-05-02 to keep
+  // adjacent digits feeling like a single number, not two separate ones.
+  const GAP = ""
   const chars = n.split("")
   for (let i = 0; i < chars.length; i++) {
     const glyph = BIG_DIGITS[chars[i]] ?? BIG_DIGITS["0"]
