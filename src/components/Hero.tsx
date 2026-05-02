@@ -174,7 +174,7 @@ function TypedH1() {
   return (
     <h1
       className="stagger-2 font-display font-black leading-none tracking-tight mb-6"
-      style={{ fontSize: 'clamp(3.5rem, 9vw, 8rem)', letterSpacing: '-1.5px' }}
+      style={{ fontSize: 'clamp(3rem, 7.5vw, 6.5rem)', letterSpacing: '-1.5px' }}
     >
       <span style={{ color: 'var(--cream)' }}>{line1 || '​'}</span>
       {!onLine2 && <span className="terminal-cursor" aria-hidden="true" />}
