@@ -17,6 +17,7 @@
 // @ts-nocheck — Deno runtime, not typechecked by tsc
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { enforceRateLimit, isAdmin } from '../_shared/rateLimit.ts'
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -3074,6 +3075,31 @@ Deno.serve(async (req) => {
     .eq('id', projectId)
     .single()
   if (projErr || !project) return json({ error: 'project not found' }, 404)
+
+  // ── Rate-limit gate ────────────────────────────────────────────────
+  // audit-preview already enforces 3-tier limits before fanning out to
+  // analyze-project with SERVICE_KEY auth · don't double-charge that path.
+  // Direct callers (web /submit, /me re-audit, MCP, REST API) hit this
+  // gate fresh and pay the same Claude-spend defence audit-preview pays.
+  // The slug from github_url is the URL bucket key, matching audit-preview
+  // so retries via either entrypoint share the same per-target cap.
+  const authHeader = req.headers.get('authorization') ?? ''
+  const isServiceRole = authHeader === `Bearer ${SERVICE_KEY}`
+  if (!isServiceRole && !isAdmin(req)) {
+    const slugMatch = project.github_url?.match(/github\.com[:/]([^/\s]+)\/([^/\s?#]+?)(?:\.git)?\/?$/i)
+    const slug = slugMatch ? `${slugMatch[1]}/${slugMatch[2]}`.toLowerCase() : projectId
+    const rl = await enforceRateLimit(admin, req, slug, /*willCostClaude*/ true)
+    if (!rl.ok) {
+      return json({
+        error:   'rate_limited',
+        reason:  rl.reason,
+        message: rl.message,
+        limit:   rl.limit,
+        count:   rl.count,
+        quota:   rl.quota,
+      }, 429)
+    }
+  }
 
   const { data: brief } = await admin
     .from('build_briefs').select('*').eq('project_id', projectId).maybeSingle()
