@@ -105,7 +105,12 @@ function sequenceForDemo(d: AuditDemo): Line[] {
   return [
     { kind: 'prompt', text: `npx commitshow@latest audit github.com/${d.slug}` },
     { kind: 'spacer' },
-    { kind: 'note',   text: `Auditing ${d.slug}… catching what your AI missed.` },
+    // Canonical brand copy · same line that closes the AnalysisResultCard
+    // hero score (AnalysisResultCard.tsx:299). Replaces the earlier
+    // "catching what your AI missed" — that read awkward when the demo
+    // pool included production OSS like calcom/cal.com (cal.com isn't
+    // someone's vibe-coded weekend project, so "your AI" was off).
+    { kind: 'note',   text: `It's a snapshot, not a verdict. Code changes; so does this number.` },
     { kind: 'spacer' },
     { kind: 'big',    score: String(d.score) },
     { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: captionPost },
