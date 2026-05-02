@@ -21,6 +21,15 @@ const TIER_COLOR: Record<ScoutTier, string> = {
   Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
 }
 
+// AP thresholds → next tier (CLAUDE.md §9). OR-condition with correct-
+// forecast count is shown as a sibling hint, not the primary path.
+const NEXT_TIER: Record<ScoutTier, { name: ScoutTier | null; apTarget: number | null; correctTarget: number | null }> = {
+  Bronze:   { name: 'Silver',   apTarget: 500,  correctTarget: 30  },
+  Silver:   { name: 'Gold',     apTarget: 2000, correctTarget: 120 },
+  Gold:     { name: 'Platinum', apTarget: 5000, correctTarget: null }, // Platinum is "top 3%" not absolute · render text-only
+  Platinum: { name: null,       apTarget: null, correctTarget: null },
+}
+
 export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) {
   const { user } = useAuth()
   const [score, setScore] = useState(75)
@@ -120,7 +129,7 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
           }}>
             <span>
               <span style={{ color: TIER_COLOR[tier] }}>{tier}</span>
-              <span style={{ color: 'rgba(248,245,238,0.35)' }}> · {ap.toLocaleString()} AP</span>
+              <span style={{ color: 'rgba(248,245,238,0.35)' }}> · {ap.toLocaleString()} AP earned</span>
             </span>
             <span style={{ color: quotaRemaining === 0 ? '#C8102E' : 'rgba(248,245,238,0.45)' }}>
               {quotaRemaining ?? '—'} / {quotaCap ?? '—'} votes left this month
@@ -149,6 +158,58 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
                 Bonus AP resolves at graduation if your forecast is accurate.
               </div>
             </div>
+
+            {/* AP total + progress to next tier · so the user sees the +10 land
+                in their lifetime AP and how far they are from the next promotion.
+                AP path is the primary metric on the bar; the OR-condition (correct
+                forecasts) gets a small hint underneath since most users won't
+                track that count manually. */}
+            {(() => {
+              const apBefore = ap
+              const apAfter  = ap + success.ap
+              const next     = NEXT_TIER[success.tier]
+              const target   = next.apTarget ?? 0
+              const pct      = next.apTarget ? Math.min(100, Math.max(0, (apAfter / target) * 100)) : 100
+              const remaining = next.apTarget ? Math.max(0, target - apAfter) : 0
+              return (
+                <div className="px-4 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px' }}>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>YOUR TOTAL AP</span>
+                    <span className="font-mono text-sm tabular-nums" style={{ color: 'var(--cream)' }}>
+                      {apBefore.toLocaleString()}
+                      <span className="mx-1" style={{ color: 'var(--text-muted)' }}>→</span>
+                      <strong>{apAfter.toLocaleString()}</strong>
+                    </span>
+                  </div>
+                  {next.name ? (
+                    <>
+                      <div className="relative h-1.5 mb-1.5" style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div className="absolute inset-y-0 left-0 transition-all duration-500" style={{
+                          width: `${pct}%`,
+                          background: `linear-gradient(90deg, ${TIER_COLOR[success.tier]} 0%, ${TIER_COLOR[next.name]} 100%)`,
+                        }} />
+                      </div>
+                      <div className="flex items-baseline justify-between font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                        <span>
+                          {remaining.toLocaleString()} AP to{' '}
+                          <span style={{ color: TIER_COLOR[next.name] }}>{next.name}</span>
+                        </span>
+                        {next.correctTarget && (
+                          <span style={{ color: 'rgba(248,245,238,0.3)' }}>
+                            or {next.correctTarget} verified hits
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      Top tier reached · keep your hit rate up to stay in the top 3%.
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
             <button onClick={onClose} className="w-full py-2.5 font-mono text-xs tracking-wide"
               style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: 'pointer' }}>
               DONE
