@@ -55,6 +55,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadMember(session.user.id)
   }, [session?.user?.id])
 
+  // Sync X (Twitter) identity → members.x_handle whenever the auth user's
+  // identity list includes a twitter row. Covers (1) signup via X OAuth,
+  // (2) link X to an existing account from VerifiedIdentities. The RPC is
+  // idempotent — calling on every session change is cheap and keeps the
+  // denormalized handle fresh if the user later renames on X.
+  useEffect(() => {
+    if (!session?.user) return
+    const hasTwitter = (session.user.identities ?? []).some(i => i.provider === 'twitter')
+    if (!hasTwitter) return
+    supabase.rpc('sync_x_identity', { p_user_id: session.user.id }).then(({ error }) => {
+      if (error) {
+        console.warn('[auth] sync_x_identity failed', error.message)
+        return
+      }
+      // Pull the updated members row so x_handle propagates to the UI.
+      loadMember(session.user.id)
+    })
+  }, [session?.user?.id, (session?.user?.identities ?? []).length])
+
   const value: AuthState = {
     session,
     user: session?.user ?? null,
