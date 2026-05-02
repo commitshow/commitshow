@@ -37,8 +37,8 @@ const BIG_DIGITS: Record<string, string[]> = {
 }
 
 const BIG_ROWS = 7
-const PIXEL_FILL  = "██"
-const PIXEL_BLANK = "  "
+const PIXEL_FILL  = "█"
+const PIXEL_BLANK = " "
 const PIXEL_GAP   = " "
 const DIGIT_GAP   = "   "
 
