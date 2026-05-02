@@ -245,7 +245,7 @@ export function Nav() {
                       Terms / Privacy) live in the footer. Keeping this menu
                       to two items removes redundancy + makes Sign out a
                       one-tap target. */}
-                  <DropdownLink to="/me" onSelect={() => setMenuOpen(false)}>My profile</DropdownLink>
+                  <DropdownLink to="/me" onSelect={() => setMenuOpen(false)} icon={<IconGear />}>My profile</DropdownLink>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false) }}
                     className="w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
@@ -429,17 +429,30 @@ export function Nav() {
   )
 }
 
-function DropdownLink({ to, onSelect, children }: { to: string; onSelect: () => void; children: React.ReactNode }) {
+function DropdownLink({ to, onSelect, icon, children }: { to: string; onSelect: () => void; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <NavLink
       to={to}
       onClick={onSelect}
-      className="block w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
+      className="flex items-center gap-2 w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
       style={{ color: 'rgba(248,245,238,0.7)', textDecoration: 'none' }}
       onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
       onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,245,238,0.7)')}
     >
-      {children}
+      {icon && <span className="inline-flex items-center" style={{ color: 'inherit' }}>{icon}</span>}
+      <span>{children}</span>
     </NavLink>
+  )
+}
+
+// Inline gear icon · matches the icons.tsx convention (currentColor stroke,
+// viewBox 24, no fill). Used as the lead glyph for the "My profile" item
+// in the user dropdown to signal "this is settings / your account row".
+function IconGear({ size = 13 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
   )
 }
