@@ -325,7 +325,7 @@ function LineRow({
               // brand mono, with a generic monospace fallback for any env
               // where DM Mono hasn't loaded yet.
               fontFamily:    '"DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-              fontSize:      '32px',
+              fontSize:      '26px',
               lineHeight:    1,
               letterSpacing: 0,
               whiteSpace:    'pre',
