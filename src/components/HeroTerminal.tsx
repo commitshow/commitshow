@@ -314,46 +314,23 @@ function LineRow({
     // Color: peach pixel-ink to match the CLI hero (CLAUDE Code family).
     return (
       <div className="text-center" style={{ margin: '0.6em 0' }}>
-        {/* Trophy plate · double-border frame mirrors the CLI ╔═╗ box
-            (commitshow/cli render.ts) so an X/Twitter share screenshot
-            of the hero terminal embeds the same crop-friendly result
-            artifact users get on their own terminal. inline-block lets
-            the box hug the digits regardless of score length. */}
-        <div
-          style={{
-            display:      'inline-block',
-            border:       '2px double rgba(248,245,238,0.25)',
-            borderRadius: '2px',
-            padding:      '0.6em 1em',
-          }}
-        >
-          {rows.map((row, i) => (
-            <div
-              key={i}
-              style={{
-                color:         '#F0C040',
-                // Force monospace on the digit row directly — the hero
-                // panel inherits DM Sans for body copy, which renders ANSI
-                // Shadow's box-drawing connectors (╔╗╚╝═║) at proportional
-                // widths and the silhouette falls apart.
-                fontFamily:    '"DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                // Responsive · "100" (the widest 3-digit ANSI Shadow glyph)
-                // at 30px wraps off-screen on a 360-414px phone viewport.
-                // clamp(18px, 4.5vw, 26px): 18px floor keeps it inside the
-                // narrowest mobile width, 26px ceiling preserves hero scale
-                // on desktop without reverting to the "stubby" 18px feel.
-                fontSize:      'clamp(18px, 4.5vw, 26px)',
-                lineHeight:    1,
-                letterSpacing: 0,
-                whiteSpace:    'pre',
-                fontWeight:    700,
-                fontVariantLigatures: 'none',
-              }}
-            >
-              {row}
-            </div>
-          ))}
-        </div>
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            style={{
+              color:         '#F0C040',
+              fontFamily:    '"DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+              fontSize:      'clamp(18px, 4.5vw, 26px)',
+              lineHeight:    1,
+              letterSpacing: 0,
+              whiteSpace:    'pre',
+              fontWeight:    700,
+              fontVariantLigatures: 'none',
+            }}
+          >
+            {row}
+          </div>
+        ))}
       </div>
     )
   }
