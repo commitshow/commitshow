@@ -1,0 +1,20 @@
+-- ───────────────────────────────────────────────────────────────────────────
+-- members.email · drop NOT NULL so X OAuth signups (no email scope) succeed
+-- ───────────────────────────────────────────────────────────────────────────
+-- X (Twitter) OAuth doesn't return an email by default — Supabase has an
+-- "Allow users without an email" toggle that lets the auth.users insert
+-- through with email=NULL. handle_new_user fans that into public.members,
+-- and our column was NOT NULL, so every X-only signup blew up the insert.
+--
+-- Existing rows all have email populated (every account so far came from
+-- email / Google / GitHub flows that DO carry email), so dropping NOT NULL
+-- doesn't touch any existing data — it only opens the door for X-only
+-- signups going forward.
+--
+-- Downstream:
+--   · email-driven flows (audit-completion notifs, weekly digest, password
+--     reset) silently skip rows where email IS NULL · those users get
+--     in-app notifications only until they link an email-bearing identity.
+--   · /me profile shows an "Add an email" affordance when email is NULL
+--     (V1.5 wiring · not in this migration).
+ALTER TABLE public.members ALTER COLUMN email DROP NOT NULL;
