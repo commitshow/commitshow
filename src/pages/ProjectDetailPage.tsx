@@ -25,6 +25,7 @@ import { ApplaudButton } from '../components/ApplaudButton'
 import { EditProjectModal } from '../components/EditProjectModal'
 import { ProjectActionFooter } from '../components/ProjectActionFooter'
 import { fetchAuditionStreak } from '../lib/auditionStreak'
+import { recordProjectView } from '../lib/projectViews'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
 import { BackstagePanel } from '../components/BackstagePanel'
@@ -199,6 +200,15 @@ export function ProjectDetailPage() {
       setHeroRerunBusy(false)
     }
   }
+
+  // Record a project_views row · once per page load. Skip when the viewer
+  // is the project's own creator so the Community pillar never reflects
+  // self-traffic. The helper handles its own StrictMode/double-mount guard.
+  useEffect(() => {
+    if (!project?.id) return
+    if (project.creator_id && user?.id && project.creator_id === user.id) return
+    void recordProjectView(project.id)
+  }, [project?.id, project?.creator_id, user?.id])
 
   // Scroll-spy · highlight the section nav chip that matches the viewport
   useEffect(() => {
