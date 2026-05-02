@@ -239,11 +239,13 @@ export function Nav() {
                       </div>
                     )}
                   </NavLink>
+                  {/* Profile dropdown is user-action only. Browsing entry points
+                      (Ladder / Library / Community / Scouts) live in the main
+                      Nav strip; explanatory pages (Backstage / Rulebook /
+                      Terms / Privacy) live in the footer. Keeping this menu
+                      to two items removes redundancy + makes Sign out a
+                      one-tap target. */}
                   <DropdownLink to="/me" onSelect={() => setMenuOpen(false)}>My profile</DropdownLink>
-                  <DropdownLink to="/ladder" onSelect={() => setMenuOpen(false)}>Browse the ladder</DropdownLink>
-                  {/* Backstage / Judging rulebook are explanatory pages — they
-                      live in the footer (App.tsx). Profile dropdown should
-                      stay user-action only (profile / navigate / sign out). */}
                   <button
                     onClick={() => { signOut(); setMenuOpen(false) }}
                     className="w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
