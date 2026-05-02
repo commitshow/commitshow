@@ -57,7 +57,7 @@ export function LadderTopStrip() {
   if (!loaded || rows.length === 0) return null
 
   return (
-    <section className="relative z-10 px-4 md:px-6 pt-2 pb-2">
+    <section className="relative z-10 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40 pt-2 pb-2">
       <div className="max-w-5xl mx-auto">
         <div className="card-navy" style={{ borderRadius: '2px' }}>
           <div className="px-4 md:px-5 py-3 flex items-center justify-between gap-3" style={{

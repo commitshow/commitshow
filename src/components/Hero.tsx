@@ -47,7 +47,7 @@ export function Hero(_props: HeroProps) {
   const onFeedClick = () => navigate('/projects')
 
   return (
-    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 md:px-10 lg:px-16 xl:px-24 pt-20 pb-16 overflow-hidden">
+    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40 pt-20 pb-16 overflow-hidden">
 
       {/* ── Subtle background orbs · drift slowly behind the content.
           Pure CSS — radial-gradient blobs with heavy blur. Two-object

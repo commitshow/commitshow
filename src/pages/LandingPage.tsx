@@ -88,7 +88,7 @@ export function LandingPage() {
           (Season Zero etc.) culminate in graduation. Audience needs
           both surfaces in the same glance — left = always, right =
           seasonal. */}
-      <section id="how" className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
+      <section id="how" className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// HOW IT WORKS</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight">
@@ -220,7 +220,7 @@ export function LandingPage() {
       <ThisWeekHighlight />
 
       {/* ── QUARTERLY CULMINATION · graduation tiers ── */}
-      <section className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
+      <section className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: '#A78BFA' }}>// QUARTERLY CULMINATION</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">
@@ -248,7 +248,7 @@ export function LandingPage() {
       </section>
 
       {/* ── GRADES ── */}
-      <section id="grades" className="relative z-10 py-24 px-4 md:px-6" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
+      <section id="grades" className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// CREATOR GRADES</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">Earn your grade</h2>
