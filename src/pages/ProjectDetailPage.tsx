@@ -30,6 +30,7 @@ import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
 import { BackstagePanel } from '../components/BackstagePanel'
 import { ProjectComments } from '../components/ProjectComments'
+import { ShareToXModal } from '../components/ShareToXModal'
 import { GraduationStanding } from '../components/GraduationStanding'
 import { BadgeSnippet } from '../components/BadgeSnippet'
 import { useAuth } from '../lib/auth'
@@ -59,6 +60,10 @@ export function ProjectDetailPage() {
   // scrolling past Activity.
   const [heroRerunBusy, setHeroRerunBusy] = useState(false)
   const [heroRerunError, setHeroRerunError] = useState<string | null>(null)
+  // Score-jump share prompt · opens after a re-audit lands a delta ≥
+  // SHARE_PROMPT_THRESHOLD. Captures the post-audit number so the modal
+  // shows the new score even if `project` is mid-refresh.
+  const [shareJump, setShareJump] = useState<{ score: number; delta: number; takeaway: string | null } | null>(null)
   const [streakClimbs, setStreakClimbs] = useState(0)
   const [notFound, setNotFound] = useState(false)
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase | undefined>(undefined)
@@ -190,6 +195,23 @@ export function ProjectDetailPage() {
       window.setTimeout(() => {
         window.scrollTo({ top: 0, behavior: 'auto' })
       }, 0)
+
+      // Score-jump share prompt · only on positive delta ≥ threshold so
+      // we don't nag on small wiggles. takeaway pulls the first strength
+      // bullet from the fresh snapshot for tweet body context.
+      const SHARE_PROMPT_THRESHOLD = 5
+      const delta = next.score_total_delta ?? 0
+      if (delta >= SHARE_PROMPT_THRESHOLD) {
+        const strengths = next.rich?.scout_brief?.strengths
+        const firstStrength = Array.isArray(strengths) && strengths.length > 0
+          ? (typeof strengths[0] === 'string' ? strengths[0] : strengths[0]?.bullet ?? null)
+          : null
+        setShareJump({
+          score: next.score_total ?? project.score_total,
+          delta,
+          takeaway: firstStrength,
+        })
+      }
     } catch (e) {
       if (e instanceof CooldownError) {
         setHeroRerunError(`Re-audit available in ${e.retryAfterHours}h. The 24h cooldown prevents spam.`)
@@ -735,6 +757,16 @@ export function ProjectDetailPage() {
         open={heroRerunBusy}
         variant="reanalyze"
         completed={false}
+      />
+
+      <ShareToXModal
+        open={!!shareJump}
+        onClose={() => setShareJump(null)}
+        projectName={project.project_name ?? 'this build'}
+        score={shareJump?.score ?? project.score_total}
+        delta={shareJump?.delta ?? 0}
+        url={typeof window !== 'undefined' ? `${window.location.origin}/projects/${project.id}` : `/projects/${project.id}`}
+        takeaway={shareJump?.takeaway ?? null}
       />
     </section>
   )
