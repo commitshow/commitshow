@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <!-- Navy gradient background -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F2040"/>
+      <stop offset="100%" stop-color="#060C1A"/>
+    </linearGradient>
+    <linearGradient id="goldShimmer" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F0C040"/>
+      <stop offset="100%" stop-color="#D4A838"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- Subtle grid lines · suggests "every commit on stage" -->
+  <g stroke="rgba(240,192,64,0.04)" stroke-width="1">
+    <line x1="0" y1="160" x2="1280" y2="160"/>
+    <line x1="0" y1="320" x2="1280" y2="320"/>
+    <line x1="0" y1="480" x2="1280" y2="480"/>
+    <line x1="320" y1="0" x2="320" y2="640"/>
+    <line x1="640" y1="0" x2="640" y2="640"/>
+    <line x1="960" y1="0" x2="960" y2="640"/>
+  </g>
+
+  <!-- Top-left wordmark -->
+  <text x="64" y="72" font-family="'Playfair Display', Georgia, serif" font-weight="900"
+        font-size="36" fill="#F0C040">commit<tspan fill="#F8F5EE" font-weight="400">.show</tspan></text>
+  <text x="64" y="100" font-family="'DM Mono', 'SF Mono', monospace"
+        font-size="14" fill="rgba(248,245,238,0.55)" letter-spacing="2">VIBE&#8209;CODING&#160;&#160;LEAGUE</text>
+
+  <!-- Center: trophy plate with score -->
+  <g transform="translate(640, 320)">
+    <!-- Double-line frame · evokes the CLI ╔═╗ trophy box -->
+    <rect x="-300" y="-115" width="600" height="230" fill="none"
+          stroke="rgba(240,192,64,0.55)" stroke-width="3" rx="4"/>
+    <rect x="-294" y="-109" width="588" height="218" fill="none"
+          stroke="rgba(240,192,64,0.25)" stroke-width="1" rx="3"/>
+
+    <!-- The score · big, gold, Playfair to feel hand-set -->
+    <text x="0" y="32" text-anchor="middle"
+          font-family="'Playfair Display', Georgia, serif" font-weight="900"
+          font-size="180" fill="url(#goldShimmer)" letter-spacing="-4">82</text>
+    <!-- " / 100 · strong" caption inside the frame -->
+    <text x="0" y="84" text-anchor="middle"
+          font-family="'DM Mono', 'SF Mono', monospace" font-size="22"
+          fill="rgba(248,245,238,0.75)" letter-spacing="3">/ 100 · STRONG</text>
+  </g>
+
+  <!-- Tagline below trophy -->
+  <text x="640" y="490" text-anchor="middle"
+        font-family="'Playfair Display', Georgia, serif" font-weight="700"
+        font-style="italic" font-size="38" fill="#F8F5EE">Every commit, on stage.</text>
+  <text x="640" y="525" text-anchor="middle"
+        font-family="'DM Sans', system-ui, sans-serif" font-weight="400"
+        font-size="20" fill="rgba(248,245,238,0.55)">Audit any GitHub repo from your terminal · 60s</text>
+
+  <!-- Bottom CTA · npx command -->
+  <g transform="translate(640, 575)">
+    <rect x="-340" y="-22" width="680" height="44" rx="3"
+          fill="rgba(0,0,0,0.4)" stroke="rgba(240,192,64,0.35)" stroke-width="1"/>
+    <text x="0" y="8" text-anchor="middle"
+          font-family="'DM Mono', 'SF Mono', monospace" font-size="18"
+          fill="#F0C040" letter-spacing="0.5">npx commitshow@latest audit github.com/owner/repo</text>
+  </g>
+</svg>
