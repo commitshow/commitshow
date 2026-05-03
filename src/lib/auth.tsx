@@ -66,8 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
 
     const syncProvider = async (
-      provider: 'twitter' | 'github',
-      rpc: 'sync_x_identity' | 'sync_github_identity',
+      provider: 'twitter' | 'github' | 'linkedin_oidc',
+      rpc: 'sync_x_identity' | 'sync_github_identity' | 'sync_linkedin_identity',
     ) => {
       if (!providers.has(provider)) return false
       const { error } = await supabase.rpc(rpc, { p_user_id: session.user.id })
@@ -79,8 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     Promise.all([
-      syncProvider('twitter', 'sync_x_identity'),
-      syncProvider('github',  'sync_github_identity'),
+      syncProvider('twitter',       'sync_x_identity'),
+      syncProvider('github',        'sync_github_identity'),
+      syncProvider('linkedin_oidc', 'sync_linkedin_identity'),
     ]).then(results => {
       if (!mounted) return
       // If anything synced, refresh the member row so the UI sees the new

@@ -217,7 +217,8 @@ export const PUBLIC_MEMBER_COLUMNS =
   'votes_reset_at, creator_grade, total_graduated, avg_auto_score, ' +
   'preferred_stack, created_at, updated_at, grade_recalc_at, is_admin, ' +
   'x_handle, x_provider_id, x_connected_at, ' +
-  'github_handle, github_provider_id, github_connected_at'
+  'github_handle, github_provider_id, github_connected_at, ' +
+  'linkedin_handle, linkedin_provider_id, linkedin_connected_at'
 
 export const PUBLIC_PROJECT_COLUMNS =
   'id, created_at, github_url, live_url, description, lh_performance, ' +
@@ -256,6 +257,12 @@ export type Member = {
   github_handle: string | null
   github_provider_id: string | null
   github_connected_at: string | null
+  // LinkedIn OAuth identity · 20260504_linkedin_oauth_identity migration.
+  // linkedin_handle = vanity URL slug (linkedin.com/in/<slug>),
+  // linkedin_provider_id = stable LinkedIn member URN (`sub` claim).
+  linkedin_handle: string | null
+  linkedin_provider_id: string | null
+  linkedin_connected_at: string | null
 }
 
 // v1.5 · member_stack_auto view · auto-inferred from projects.tech_layers
