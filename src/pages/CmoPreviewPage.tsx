@@ -143,6 +143,7 @@ type WorkspaceRow = {
 
 type TemplateRow = {
   id:            string
+  audience:      'marketing' | 'user_share'
   label:         string
   copy_template: string
   fires_when:    string
@@ -187,7 +188,7 @@ export function CmoPreviewPage() {
     setLoadErr(null)
     const [wsRes, tplRes, draftRes] = await Promise.all([
       supabase.from('cmo_workspace').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('cmo_templates').select('*').order('id'),
+      supabase.from('cmo_templates').select('*').order('audience').order('id'),
       supabase.from('cmo_drafts').select('*').order('created_at', { ascending: false }).limit(10),
     ])
     if (wsRes.error)    { setLoadErr(`workspace: ${wsRes.error.message}`);    return }
@@ -234,7 +235,7 @@ export function CmoPreviewPage() {
   if (loading || !user || !member?.is_admin) return null
 
   return (
-    <div className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen" style={{ background: 'var(--navy-950)', color: 'var(--cream)' }}>
+    <div className="admin-shell relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen" style={{ background: 'var(--navy-950)', color: 'var(--cream)' }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         <header style={{ marginBottom: 32 }}>
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// CMO'S ROOM</div>
@@ -256,16 +257,16 @@ export function CmoPreviewPage() {
             <>
               <WorkspacePanel
                 field="insights"
-                label="Insights"
-                hint="What M is observing about audience · performance · opportunities."
+                label="인사이트"
+                hint="M 이 관찰한 청중 · 성과 · 기회. 한 화면 1분 스캔."
                 md={workspace.insights_md}
                 updatedAt={workspace.updated_at}
                 onUpdate={() => loadAll()}
               />
               <WorkspacePanel
                 field="roadmap"
-                label="Roadmap"
-                hint="Marketing plan over time · this week · next week · month-1 · phase progression."
+                label="로드맵"
+                hint="시점별 마케팅 플랜 · 이번 주 · 다음 주 · 한 달 마일스톤 · Phase 진행."
                 md={workspace.roadmap_md}
                 updatedAt={workspace.updated_at}
                 onUpdate={() => loadAll()}
@@ -318,19 +319,32 @@ export function CmoPreviewPage() {
           )}
         </section>
 
-        {/* ── 2. 5 trigger templates ─────────────────────────────────────── */}
-        <section>
-          <h2 className="font-display text-xl mb-3" style={{ color: 'var(--gold-500)' }}>Trigger templates · 5 share-card formats</h2>
+        {/* ── 2a. Marketing · M's outbound tweets ─────────────────────────── */}
+        <section style={{ marginTop: 48 }}>
+          <h2 className="font-display text-xl mb-3" style={{ color: 'var(--gold-500)' }}>마케팅 트윗 · M 발신 (자동)</h2>
           <p className="text-xs mb-6" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Each fires automatically (Phase 2) on a specific DB event. Edit the tweet copy and Save to update the live template. Slot placeholders like <code>{'{project_name}'}</code> are filled in at post time.
+            DB 이벤트 발생 시 M 이 @commitshow 계정으로 자동 게시. 슬롯 placeholder (<code>{'{project_name}'}</code> 등) 는 게시 시점에 자동 채움. 톤은 3 인칭 관찰자.
           </p>
           <div style={{ display: 'grid', gap: 36 }}>
-            {templates.map(t => (
-              <TemplateCard key={t.id} template={t} onSave={() => loadAll()} />
+            {templates.filter(t => t.audience === 'marketing').map(t => (
+              <TemplateCard key={`${t.id}-${t.audience}`} template={t} onSave={() => loadAll()} />
             ))}
             {templates.length === 0 && !loadErr && (
               <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>loading templates…</div>
             )}
+          </div>
+        </section>
+
+        {/* ── 2b. User-share · 사용자 1-click 공유 템플릿 ───────────────── */}
+        <section style={{ marginTop: 48 }}>
+          <h2 className="font-display text-xl mb-3" style={{ color: 'var(--gold-500)' }}>사용자 공유 템플릿 · 1-click 게시</h2>
+          <p className="text-xs mb-6" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            사용자 본인의 audit 결과 / 졸업 / milestone / Early Spotter 발생 시 "Share on X" 버튼 한 번으로 트윗. 플랫폼이 X intent URL 로 카피 + 프로젝트 링크 (per-project og:image 자동 attach) 미리채움. 톤은 1 인칭. 사용자가 게시 전 검토 가능.
+          </p>
+          <div style={{ display: 'grid', gap: 36 }}>
+            {templates.filter(t => t.audience === 'user_share').map(t => (
+              <TemplateCard key={`${t.id}-${t.audience}`} template={t} onSave={() => loadAll()} />
+            ))}
           </div>
         </section>
 
@@ -433,7 +447,7 @@ function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
           className="font-mono text-[10px]"
           style={{ background: 'transparent', color: 'rgba(255,255,255,0.55)', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
         >
-          {editing ? 'view' : 'edit raw'}
+          {editing ? '보기' : '직접 편집'}
         </button>
       </div>
       <p className="text-[11px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>{hint}</p>
@@ -452,14 +466,14 @@ function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
             }}
           />
           <div className="flex items-center justify-between gap-2">
-            <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{draftMd.length} chars{dirty ? ' · UNSAVED' : ''}</div>
+            <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{draftMd.length} chars{dirty ? ' · 저장 안 됨' : ''}</div>
             <button
               onClick={saveDirect}
               disabled={!dirty || busy === 'save'}
               className="px-3 py-1 font-mono text-[10px]"
               style={{ background: dirty ? 'var(--gold-500)' : 'rgba(255,255,255,0.05)', color: dirty ? 'var(--navy-900)' : 'rgba(255,255,255,0.3)', border: 'none', borderRadius: 2, cursor: dirty && busy !== 'save' ? 'pointer' : 'default' }}
             >
-              {busy === 'save' ? '…' : 'SAVE RAW'}
+              {busy === 'save' ? '…' : '저장'}
             </button>
           </div>
         </>
@@ -469,20 +483,20 @@ function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
           fontFamily: "'DM Mono', monospace", fontSize: 12, lineHeight: 1.55,
           color: 'var(--cream)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           margin: 0, minHeight: 200, maxHeight: 400, overflowY: 'auto',
-        }}>{md || '_(empty · ask M to populate via chat below)_'}</pre>
+        }}>{md || '_(비어있음 · 아래 채팅으로 M 한테 채워달라고 요청)_'}</pre>
       )}
 
       {/* Chat-edit · ask M to update the doc */}
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="font-mono text-[10px] mb-1" style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>ASK M TO UPDATE</div>
+        <div className="font-mono text-[10px] mb-1" style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>M 한테 업데이트 요청</div>
         <textarea
           value={chatMsg}
           onChange={e => setChatMsg(e.target.value)}
           disabled={busy === 'chat'}
           rows={2}
           placeholder={field === 'insights'
-            ? 'we just hit 50 followers, audience seems to skew Cursor users · update insights'
-            : 'shift week-2 focus to LinkedIn · keep X for daily Pillar A only'
+            ? '예: 팔로워 50명 됐고 Cursor 사용자 비중 높아 보임 · 인사이트 업데이트'
+            : '예: W2 부터 LinkedIn 도 다루자 · X 는 일일 Pillar A 만 유지'
           }
           style={{
             width: '100%', padding: 10, background: 'rgba(0,0,0,0.4)',
@@ -492,7 +506,7 @@ function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
           }}
         />
         <div className="flex items-center justify-between gap-2">
-          <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>updated {new Date(updatedAt).toLocaleString('ko-KR')}</div>
+          <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>업데이트 {new Date(updatedAt).toLocaleString('ko-KR')}</div>
           <button
             onClick={sendChat}
             disabled={!chatMsg.trim() || busy === 'chat'}
@@ -504,7 +518,7 @@ function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
               cursor: chatMsg.trim() && busy !== 'chat' ? 'pointer' : 'default',
             }}
           >
-            {busy === 'chat' ? 'M IS THINKING…' : 'SEND'}
+            {busy === 'chat' ? 'M 작성 중…' : '보내기'}
           </button>
         </div>
         {out && <div className="font-mono text-[11px] mt-2" style={{ color: out.includes('failed') ? 'var(--scarlet)' : 'var(--gold-500)' }}>{out}</div>}
@@ -578,7 +592,8 @@ function TemplateCard({ template, onSave }: { template: TemplateRow; onSave: () 
   const save = async () => {
     setBusy(true)
     setOut(null)
-    const { error } = await supabase.from('cmo_templates').update({ copy_template: copy }).eq('id', template.id)
+    const { error } = await supabase.from('cmo_templates').update({ copy_template: copy })
+      .eq('id', template.id).eq('audience', template.audience)
     setBusy(false)
     if (error) setOut(`save failed: ${error.message}`)
     else { setOut('saved'); onSave() }
