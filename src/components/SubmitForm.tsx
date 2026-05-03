@@ -96,29 +96,54 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   }, [user?.id, paymentResult])
 
   // After a successful payment, the webhook is asynchronous — observed end-to-end
-  // latency is 30-40s for Stripe to fire and PostgREST to see the credit. Poll
-  // up to 60s (30 × 2s) so we don't give up while the webhook is still in flight.
+  // latency is 20-40s for Stripe to fire and PostgREST to see the credit. Poll
+  // every 2s for up to 90s so we don't give up while the webhook is still in flight.
   // `paymentPolling` suppresses the PaymentGate UI during this window — without it,
-  // the gate flashes "Pay $99" again right after a successful payment.
+  // the gate flashes "Pay $99" again right after a successful payment. Wrapped in
+  // try/catch because an uncaught fetch error inside the tick used to kill polling
+  // silently, leaving the user stuck on the finalizing panel forever.
   const [paymentPolling, setPaymentPolling] = useState(false)
+  const [paymentPollAttempt, setPaymentPollAttempt] = useState(0)
   useEffect(() => {
     if (paymentResult !== 'success' || !user?.id) return
     let cancelled = false
     let attempts = 0
     setPaymentPolling(true)
+    setPaymentPollAttempt(0)
     const tick = async () => {
       if (cancelled) return
-      if (attempts >= 30) { setPaymentPolling(false); return }
+      if (attempts >= 45) { setPaymentPolling(false); return }
       attempts++
-      const res = await checkRegistrationEligibility(user.id)
-      if (cancelled) return
-      setEligibility(res)
-      if ((res.paidCredit ?? 0) > 0) { setPaymentPolling(false); return }
+      setPaymentPollAttempt(attempts)
+      try {
+        const res = await checkRegistrationEligibility(user.id)
+        if (cancelled) return
+        setEligibility(res)
+        if ((res.paidCredit ?? 0) > 0) { setPaymentPolling(false); return }
+      } catch (err) {
+        if (cancelled) return
+        console.warn('[submit] eligibility poll failed', err)
+        // fall through · keep polling
+      }
       setTimeout(tick, 2000)
     }
     tick()
     return () => { cancelled = true; setPaymentPolling(false) }
   }, [paymentResult, user?.id])
+
+  // Manual override · user clicks the "I've already paid" button on the
+  // finalizing panel to force a fresh eligibility check. If it lands ok,
+  // polling stops and they continue to the form.
+  const recheckEligibility = async () => {
+    if (!user?.id) return
+    try {
+      const res = await checkRegistrationEligibility(user.id)
+      setEligibility(res)
+      if (res.ok) setPaymentPolling(false)
+    } catch (err) {
+      console.warn('[submit] manual eligibility recheck failed', err)
+    }
+  }
 
   // Scroll to top whenever the step changes. Deferred to the next paint so
   // the new step's DOM has committed first; instant behavior because smooth
@@ -379,30 +404,60 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   // While we're still polling for the post-checkout webhook, render a confirming
   // panel instead of PaymentGate — otherwise the user paid and immediately sees
   // "Pay $99" again because the credit hasn't landed yet (webhook is async,
-  // typically 30-40s end-to-end).
-  if (eligibility && !eligibility.ok) {
-    if (paymentPolling) {
-      return (
-        <div className="max-w-xl mx-auto text-center card-navy p-10" style={{ borderRadius: '2px' }}>
-          <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
-            // CONFIRMING PAYMENT
-          </div>
-          <h3 className="font-display font-bold text-2xl mb-3" style={{ color: 'var(--cream)' }}>
-            Payment received · finalizing
-          </h3>
-          <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
-            Stripe is sending the receipt to our server (usually 30-60 seconds).
-            Hang tight — this page will switch to the audition form automatically.
-          </p>
-          <div className="inline-block w-6 h-6" style={{
-            border: '2px solid rgba(240,192,64,0.3)',
-            borderTopColor: 'var(--gold-500)',
-            borderRadius: '50%',
-            animation: 'spin 0.9s linear infinite',
-          }} />
+  // typically 20-40s end-to-end). We also enter this state when paymentResult
+  // is 'success' before the first eligibility fetch resolves, so the form never
+  // flashes between mount and the first poll tick.
+  const inPostCheckoutWait =
+    paymentPolling || (paymentResult === 'success' && eligibility === null)
+  if (inPostCheckoutWait || (eligibility && !eligibility.ok && paymentResult === 'success')) {
+    return (
+      <div className="max-w-xl mx-auto text-center card-navy p-10" style={{ borderRadius: '2px' }}>
+        <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+          // CONFIRMING PAYMENT
         </div>
-      )
-    }
+        <h3 className="font-display font-bold text-2xl mb-3" style={{ color: 'var(--cream)' }}>
+          Payment received · finalizing
+        </h3>
+        <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
+          Stripe is sending the receipt to our server (usually 20-40 seconds).
+          This page will switch to the audition form automatically.
+        </p>
+        <div className="inline-block w-6 h-6 mb-6" style={{
+          border: '2px solid rgba(240,192,64,0.3)',
+          borderTopColor: 'var(--gold-500)',
+          borderRadius: '50%',
+          animation: 'spin 0.9s linear infinite',
+        }} />
+        {paymentPollAttempt >= 4 && (
+          <div className="mt-4">
+            <button
+              onClick={recheckEligibility}
+              className="px-5 py-2 font-mono text-xs font-medium tracking-wide transition-all"
+              style={{
+                background: 'transparent',
+                color: 'var(--gold-500)',
+                border: '1px solid rgba(240,192,64,0.5)',
+                borderRadius: '2px',
+                cursor: 'pointer',
+              }}
+            >
+              I'VE ALREADY PAID · CHECK NOW
+            </button>
+            <p className="font-mono text-[11px] mt-2" style={{ color: 'rgba(248,245,238,0.35)' }}>
+              attempt {paymentPollAttempt} / 45
+            </p>
+          </div>
+        )}
+        {!paymentPolling && (
+          <p className="font-light mt-4 text-sm" style={{ color: 'rgba(248,245,238,0.45)' }}>
+            Webhook took longer than expected. Click above to refresh — your
+            payment is safe and the receipt is in your email.
+          </p>
+        )}
+      </div>
+    )
+  }
+  if (eligibility && !eligibility.ok) {
     return <PaymentGate eligibility={eligibility} />
   }
 
