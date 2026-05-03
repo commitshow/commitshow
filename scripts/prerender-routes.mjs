@@ -123,12 +123,17 @@ for (const r of routes) {
     html = html.replace(/<\/head>/i, `  <link rel="canonical" href="${url}" />\n  </head>`)
   }
 
-  // Write to dist/<route>/index.html. Cloudflare Pages serves directory
-  // index.html files when the request matches the directory exactly.
-  const targetDir = resolve(DIST, r.path.replace(/^\//, ''))
-  mkdirSync(targetDir, { recursive: true })
-  writeFileSync(resolve(targetDir, 'index.html'), html)
-  console.log(`  ✓ ${r.path}/index.html`)
+  // Write to dist/<route>.html (NOT dist/<route>/index.html). Cloudflare
+  // Pages serves /<route> straight from /<route>.html with no redirect.
+  // The directory form would 308-redirect /rulebook → /rulebook/ which
+  // breaks every backlink that uses the canonical no-trailing-slash form.
+  // Nested routes (e.g. /community/build-logs) still need the parent
+  // directory created — only the leaf gets the .html suffix.
+  const rel       = r.path.replace(/^\//, '')              // 'community/build-logs'
+  const targetDir = resolve(DIST, dirname(rel))            // dist/community
+  if (rel.includes('/')) mkdirSync(targetDir, { recursive: true })
+  writeFileSync(resolve(DIST, `${rel}.html`), html)
+  console.log(`  ✓ ${rel}.html`)
 }
 
 console.log(`\n[prerender] Generated ${routes.length} static route HTMLs.`)
