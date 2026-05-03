@@ -253,7 +253,7 @@ export function Nav() {
                   {member?.is_admin && (
                     <>
                       <DropdownLink to="/admin"     onSelect={() => setMenuOpen(false)} icon={<IconAdmin />}>Admin</DropdownLink>
-                      <DropdownLink to="/admin/cmo" onSelect={() => setMenuOpen(false)} icon={<IconMegaphone />}>CMO post studio</DropdownLink>
+                      <DropdownLink to="/admin/cmo" onSelect={() => setMenuOpen(false)} icon={<IconMegaphone />}>CMO's Room</DropdownLink>
                     </>
                   )}
                   {/* Sign out · right-aligned to set it apart from the
@@ -434,7 +434,7 @@ export function Nav() {
                       style={{ color: 'var(--cream)', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
                     >
                       <IconMegaphone size={14} />
-                      CMO POST STUDIO
+                      CMO'S ROOM
                     </NavLink>
                   </>
                 )}

@@ -134,6 +134,13 @@ const TEMPLATE_IMAGES: Record<string, () => React.ReactElement> = {
   early_spotter:  EarlySpotterCard,
 }
 
+type WorkspaceRow = {
+  id:          number
+  insights_md: string
+  roadmap_md:  string
+  updated_at:  string
+}
+
 type TemplateRow = {
   id:            string
   label:         string
@@ -158,6 +165,7 @@ export function CmoPreviewPage() {
   const { user, member, loading } = useAuth()
   const navigate = useNavigate()
 
+  const [workspace,    setWorkspace]    = useState<WorkspaceRow | null>(null)
   const [templates,    setTemplates]    = useState<TemplateRow[]>([])
   const [drafts,       setDrafts]       = useState<DraftRow[]>([])
   const [loadErr,      setLoadErr]      = useState<string | null>(null)
@@ -177,12 +185,15 @@ export function CmoPreviewPage() {
 
   const loadAll = useCallback(async () => {
     setLoadErr(null)
-    const [tplRes, draftRes] = await Promise.all([
+    const [wsRes, tplRes, draftRes] = await Promise.all([
+      supabase.from('cmo_workspace').select('*').eq('id', 1).maybeSingle(),
       supabase.from('cmo_templates').select('*').order('id'),
       supabase.from('cmo_drafts').select('*').order('created_at', { ascending: false }).limit(10),
     ])
+    if (wsRes.error)    { setLoadErr(`workspace: ${wsRes.error.message}`);    return }
     if (tplRes.error)   { setLoadErr(`templates: ${tplRes.error.message}`);   return }
     if (draftRes.error) { setLoadErr(`drafts: ${draftRes.error.message}`);    return }
+    setWorkspace(wsRes.data as WorkspaceRow | null)
     setTemplates(tplRes.data as TemplateRow[])
     setDrafts(draftRes.data as DraftRow[])
   }, [])
@@ -226,10 +237,10 @@ export function CmoPreviewPage() {
     <div className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen" style={{ background: 'var(--navy-950)', color: 'var(--cream)' }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         <header style={{ marginBottom: 32 }}>
-          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// CMO POST STUDIO</div>
-          <h1 className="font-display text-3xl mb-1" style={{ color: 'var(--cream)' }}>Tweet drafts · 5 trigger templates · recent history</h1>
+          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// CMO'S ROOM</div>
+          <h1 className="font-display text-3xl mb-1" style={{ color: 'var(--cream)' }}>Insights · Roadmap · Tweet drafts</h1>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Freeform: ask M for a tweet (launch announce · feature drop · vibe-coding react). Templates: 5 share-card formats with editable copy. All saves to <code>cmo_templates</code> / <code>cmo_drafts</code>. Voice rules locked in CMO.md.
+            M's strategic workspace. Top: insights + marketing roadmap (chat-editable). Below: freeform tweet generator that pulls roadmap as context, 5 trigger templates, recent draft history. Voice rules locked in CMO.md.
           </p>
         </header>
 
@@ -238,6 +249,30 @@ export function CmoPreviewPage() {
             {loadErr}
           </div>
         )}
+
+        {/* ── 0. Workspace (insights + roadmap) ─────────────────────────── */}
+        <section style={{ marginBottom: 48, display: 'grid', gap: 24, gridTemplateColumns: '1fr 1fr' }}>
+          {workspace && (
+            <>
+              <WorkspacePanel
+                field="insights"
+                label="Insights"
+                hint="What M is observing about audience · performance · opportunities."
+                md={workspace.insights_md}
+                updatedAt={workspace.updated_at}
+                onUpdate={() => loadAll()}
+              />
+              <WorkspacePanel
+                field="roadmap"
+                label="Roadmap"
+                hint="Marketing plan over time · this week · next week · month-1 · phase progression."
+                md={workspace.roadmap_md}
+                updatedAt={workspace.updated_at}
+                onUpdate={() => loadAll()}
+              />
+            </>
+          )}
+        </section>
 
         {/* ── 1. Freeform tweet generator ────────────────────────────────── */}
         <section style={{ marginBottom: 48, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(240,192,64,0.18)', borderRadius: '4px', padding: 24 }}>
@@ -330,6 +365,149 @@ export function CmoPreviewPage() {
         <footer className="font-mono text-xs mt-12" style={{ color: 'rgba(255,255,255,0.4)' }}>
           source · src/pages/CmoPreviewPage.tsx + supabase/functions/generate-tweet-copy
         </footer>
+      </div>
+    </div>
+  )
+}
+
+// ── Workspace panel · insights / roadmap with chat-edit ────────────────────
+function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
+  field:     'insights' | 'roadmap'
+  label:     string
+  hint:      string
+  md:        string
+  updatedAt: string
+  onUpdate:  () => void
+}) {
+  const [draftMd,  setDraftMd]  = useState(md)
+  const [editing,  setEditing]  = useState(false)
+  const [chatMsg,  setChatMsg]  = useState('')
+  const [busy,     setBusy]     = useState<'save' | 'chat' | null>(null)
+  const [out,      setOut]      = useState<string | null>(null)
+  const dirty = draftMd !== md
+
+  useEffect(() => { setDraftMd(md) }, [md])
+
+  const saveDirect = async () => {
+    setBusy('save'); setOut(null)
+    const updateField = field === 'insights' ? { insights_md: draftMd } : { roadmap_md: draftMd }
+    const { error } = await supabase.from('cmo_workspace').update(updateField).eq('id', 1)
+    setBusy(null)
+    if (error) { setOut(`save failed: ${error.message}`); return }
+    setOut('saved')
+    setEditing(false)
+    onUpdate()
+  }
+
+  const sendChat = async () => {
+    if (!chatMsg.trim()) return
+    setBusy('chat'); setOut(null)
+    try {
+      const { data: sessionRes } = await supabase.auth.getSession()
+      const token = sessionRes.session?.access_token
+      if (!token) throw new Error('Sign-in expired')
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/update-cmo-workspace`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field, message: chatMsg.trim(), current_md: md }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`)
+      setOut(`updated · ${j.summary ?? '(no summary)'}`)
+      setChatMsg('')
+      onUpdate()
+    } catch (e) {
+      setOut(`chat failed: ${(e as Error)?.message ?? e}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(240,192,64,0.18)', borderRadius: '4px', padding: 20 }}>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-display text-lg" style={{ color: 'var(--gold-500)' }}>{label}</h2>
+        <button
+          onClick={() => { setEditing(e => !e); setOut(null) }}
+          className="font-mono text-[10px]"
+          style={{ background: 'transparent', color: 'rgba(255,255,255,0.55)', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          {editing ? 'view' : 'edit raw'}
+        </button>
+      </div>
+      <p className="text-[11px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>{hint}</p>
+
+      {editing ? (
+        <>
+          <textarea
+            value={draftMd}
+            onChange={e => setDraftMd(e.target.value)}
+            rows={14}
+            style={{
+              width: '100%', padding: 12, background: 'rgba(0,0,0,0.4)',
+              border: '1px solid rgba(240,192,64,0.18)', borderRadius: '3px',
+              color: 'var(--cream)', fontFamily: "'DM Mono', monospace", fontSize: 12,
+              lineHeight: 1.55, resize: 'vertical', marginBottom: 8,
+            }}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{draftMd.length} chars{dirty ? ' · UNSAVED' : ''}</div>
+            <button
+              onClick={saveDirect}
+              disabled={!dirty || busy === 'save'}
+              className="px-3 py-1 font-mono text-[10px]"
+              style={{ background: dirty ? 'var(--gold-500)' : 'rgba(255,255,255,0.05)', color: dirty ? 'var(--navy-900)' : 'rgba(255,255,255,0.3)', border: 'none', borderRadius: 2, cursor: dirty && busy !== 'save' ? 'pointer' : 'default' }}
+            >
+              {busy === 'save' ? '…' : 'SAVE RAW'}
+            </button>
+          </div>
+        </>
+      ) : (
+        <pre style={{
+          background: 'rgba(0,0,0,0.3)', padding: 12, borderRadius: 3,
+          fontFamily: "'DM Mono', monospace", fontSize: 12, lineHeight: 1.55,
+          color: 'var(--cream)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          margin: 0, minHeight: 200, maxHeight: 400, overflowY: 'auto',
+        }}>{md || '_(empty · ask M to populate via chat below)_'}</pre>
+      )}
+
+      {/* Chat-edit · ask M to update the doc */}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="font-mono text-[10px] mb-1" style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>ASK M TO UPDATE</div>
+        <textarea
+          value={chatMsg}
+          onChange={e => setChatMsg(e.target.value)}
+          disabled={busy === 'chat'}
+          rows={2}
+          placeholder={field === 'insights'
+            ? 'we just hit 50 followers, audience seems to skew Cursor users · update insights'
+            : 'shift week-2 focus to LinkedIn · keep X for daily Pillar A only'
+          }
+          style={{
+            width: '100%', padding: 10, background: 'rgba(0,0,0,0.4)',
+            border: '1px solid rgba(255,255,255,0.1)', borderRadius: '3px',
+            color: 'var(--cream)', fontFamily: "'DM Mono', monospace", fontSize: 12,
+            resize: 'vertical', marginBottom: 6,
+          }}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>updated {new Date(updatedAt).toLocaleString('ko-KR')}</div>
+          <button
+            onClick={sendChat}
+            disabled={!chatMsg.trim() || busy === 'chat'}
+            className="px-3 py-1 font-mono text-[10px]"
+            style={{
+              background: chatMsg.trim() ? 'var(--gold-500)' : 'rgba(255,255,255,0.05)',
+              color: chatMsg.trim() ? 'var(--navy-900)' : 'rgba(255,255,255,0.3)',
+              border: 'none', borderRadius: 2,
+              cursor: chatMsg.trim() && busy !== 'chat' ? 'pointer' : 'default',
+            }}
+          >
+            {busy === 'chat' ? 'M IS THINKING…' : 'SEND'}
+          </button>
+        </div>
+        {out && <div className="font-mono text-[11px] mt-2" style={{ color: out.includes('failed') ? 'var(--scarlet)' : 'var(--gold-500)' }}>{out}</div>}
       </div>
     </div>
   )

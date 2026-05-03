@@ -99,10 +99,23 @@ Deno.serve(async (req) => {
   if (!prompt) return json({ error: 'prompt required' }, 400)
   if (prompt.length > 2000) return json({ error: 'prompt too long (max 2000 chars)' }, 400)
 
+  // Pull current strategic workspace (insights + roadmap) so generated
+  // tweets are aligned with the active marketing plan. Best-effort —
+  // if the workspace row is missing or the read fails, fall through
+  // without context (single-row table seeded by 20260504_cmo_workspace).
+  const { data: workspace } = await admin
+    .from('cmo_workspace')
+    .select('insights_md, roadmap_md')
+    .eq('id', 1)
+    .maybeSingle()
+  const workspaceContext = workspace
+    ? `\n\nCurrent strategic context (CMO's Room) · use to align the tweet with what we're doing this week:\n\n=== INSIGHTS ===\n${workspace.insights_md || '(empty)'}\n\n=== ROADMAP ===\n${workspace.roadmap_md || '(empty)'}\n`
+    : ''
+
   // Call Claude API.
-  const userMessage = context
-    ? `Context the tweet should reflect:\n${context}\n\nRequest:\n${prompt}`
-    : prompt
+  const userMessage = (context ? `Context the tweet should reflect:\n${context}\n\n` : '')
+                    + `Request:\n${prompt}`
+                    + workspaceContext
 
   let claudeRes: Response
   try {
