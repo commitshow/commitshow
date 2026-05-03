@@ -1157,7 +1157,12 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     const grantedCols   = new Map<string, Set<string>>()           // table → cols ever GRANTed
     const addedCols     : Array<{ table: string; column: string; sql_file: string }> = []
     const grantPattern  = /grant\s+(?:select|all)\s*(?:\(\s*([^)]+)\))?\s+on\s+(?:public\.|"public"\.)?\s*"?(\w+)"?/gi
-    const addColPattern = /alter\s+table\s+(?:if\s+exists\s+)?(?:public\.|"public"\.)?\s*"?(\w+)"?\s+add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?(\w+)"?/gi
+    // Match ADD COLUMN explicitly so that ADD CONSTRAINT / ADD PRIMARY KEY /
+    // ADD FOREIGN KEY etc. don't masquerade as new columns. The 'column'
+    // keyword is mandatory — implicit-column form (`ADD foo type`) is rare
+    // enough in practice that we'd rather miss it than flood with false
+    // positives on every constraint statement.
+    const addColPattern = /alter\s+table\s+(?:if\s+exists\s+)?(?:public\.|"public"\.)?\s*"?(\w+)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?(\w+)"?/gi
     for (const [filePath, text] of sqlSampleCache) {
       let gm: RegExpExecArray | null
       while ((gm = grantPattern.exec(text)) !== null) {
@@ -1205,7 +1210,11 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   let stripe_api_idempotent = 0
   {
     const stripeWriteRe = /\bstripe\.[A-Za-z][A-Za-z0-9_.]*\.(?:create|update|cancel|retrieve|list)\s*\(/g
-    const idempotencyRe = /idempotency[Kk]ey\s*:|['"]Idempotency-Key['"]\s*:/
+    // Match the protected forms:
+    //   1. SDK option object property:           `idempotencyKey: 'foo'` or shorthand `{ idempotencyKey }`
+    //   2. HTTP header string (raw fetch / curl): `'Idempotency-Key': 'foo'`
+    // Both forms count — we don't need to distinguish at this granularity.
+    const idempotencyRe = /\bidempotency[Kk]ey\b|['"]Idempotency-Key['"]/
     const stripeFiles = paths.filter(p =>
       /\.(ts|tsx|js|jsx|mjs|py|go|rs)$/.test(p) &&
       !/\.(test|spec|stories)\./i.test(p),
