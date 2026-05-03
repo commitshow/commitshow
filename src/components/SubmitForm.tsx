@@ -95,24 +95,29 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     checkRegistrationEligibility(user.id).then(setEligibility)
   }, [user?.id, paymentResult])
 
-  // After a successful payment, the webhook is asynchronous · re-poll
-  // eligibility briefly so the new paid_audits_credit propagates. 4 polls
-  // at 1.5s = 6s window, which covers Stripe's typical webhook latency.
+  // After a successful payment, the webhook is asynchronous — observed end-to-end
+  // latency is 30-40s for Stripe to fire and PostgREST to see the credit. Poll
+  // up to 60s (30 × 2s) so we don't give up while the webhook is still in flight.
+  // `paymentPolling` suppresses the PaymentGate UI during this window — without it,
+  // the gate flashes "Pay $99" again right after a successful payment.
+  const [paymentPolling, setPaymentPolling] = useState(false)
   useEffect(() => {
     if (paymentResult !== 'success' || !user?.id) return
     let cancelled = false
     let attempts = 0
+    setPaymentPolling(true)
     const tick = async () => {
-      if (cancelled || attempts >= 4) return
+      if (cancelled) return
+      if (attempts >= 30) { setPaymentPolling(false); return }
       attempts++
       const res = await checkRegistrationEligibility(user.id)
       if (cancelled) return
       setEligibility(res)
-      if ((res.paidCredit ?? 0) > 0) return // webhook landed · stop polling
-      setTimeout(tick, 1500)
+      if ((res.paidCredit ?? 0) > 0) { setPaymentPolling(false); return }
+      setTimeout(tick, 2000)
     }
     tick()
-    return () => { cancelled = true }
+    return () => { cancelled = true; setPaymentPolling(false) }
   }, [paymentResult, user?.id])
 
   // Scroll to top whenever the step changes. Deferred to the next paint so
@@ -371,7 +376,33 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   }
 
   // ── PAYMENT GATE (permanent policy: first 3 free per member, 4th+ = $99) ──
+  // While we're still polling for the post-checkout webhook, render a confirming
+  // panel instead of PaymentGate — otherwise the user paid and immediately sees
+  // "Pay $99" again because the credit hasn't landed yet (webhook is async,
+  // typically 30-40s end-to-end).
   if (eligibility && !eligibility.ok) {
+    if (paymentPolling) {
+      return (
+        <div className="max-w-xl mx-auto text-center card-navy p-10" style={{ borderRadius: '2px' }}>
+          <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+            // CONFIRMING PAYMENT
+          </div>
+          <h3 className="font-display font-bold text-2xl mb-3" style={{ color: 'var(--cream)' }}>
+            Payment received · finalizing
+          </h3>
+          <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
+            Stripe is sending the receipt to our server (usually 30-60 seconds).
+            Hang tight — this page will switch to the audition form automatically.
+          </p>
+          <div className="inline-block w-6 h-6" style={{
+            border: '2px solid rgba(240,192,64,0.3)',
+            borderTopColor: 'var(--gold-500)',
+            borderRadius: '50%',
+            animation: 'spin 0.9s linear infinite',
+          }} />
+        </div>
+      )
+    }
     return <PaymentGate eligibility={eligibility} />
   }
 
