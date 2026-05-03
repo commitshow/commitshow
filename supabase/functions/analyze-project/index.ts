@@ -18,6 +18,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 import { enforceRateLimit, isAdmin } from '../_shared/rateLimit.ts'
+import { fetchGithubHead, slugFromGithubUrl } from '../_shared/github.ts'
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -3022,9 +3023,21 @@ Return ONE tool call containing an "items" array with ONE object per input file.
 
 // ── Main handler ──────────────────────────────────────────────
 type TriggerType = 'initial' | 'resubmit' | 'applaud' | 'weekly' | 'season_end'
-// Re-analysis cooldown window. Temporarily disabled for testing — flip back
-// to `24 * 60 * 60 * 1000` (or a policy-driven value) before public launch.
-const RESUBMIT_COOLDOWN_MS = 0  // TODO: 24h cooldown before public launch
+
+// Re-analysis cooldown window for creator-initiated resubmits. 24h is the
+// abuse defence — without it, a Creator (or a bot using their JWT) could
+// burn arbitrary Claude budget by clicking Re-audit in a tight loop.
+//
+// Bypass: when the repo's HEAD commit SHA differs from the last snapshot's
+// SHA, we skip the cooldown entirely. The vibe-coding workflow is "edit →
+// push → audit → improve"; punishing real new code with a 24h wait would
+// break that loop. Same-SHA resubmits (no real change) still pay the
+// cooldown, which is exactly what we want spam-defended.
+//
+// SHA probe failure (rate-limit / private / network) falls through to
+// time-based cooldown — fail-safe, slightly stricter than ideal but never
+// over-permissive.
+const RESUBMIT_COOLDOWN_MS = 24 * 60 * 60 * 1000  // 24h
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -3041,11 +3054,11 @@ Deno.serve(async (req) => {
   const triggerType: TriggerType = payload.trigger_type ?? 'initial'
   const triggeredBy = payload.triggered_by ?? null
 
-  // Cooldown gate for creator-initiated re-runs
+  // Cooldown gate for creator-initiated re-runs · sha-aware bypass.
   if (triggerType === 'resubmit') {
     const { data: lastSnap } = await admin
       .from('analysis_snapshots')
-      .select('created_at')
+      .select('created_at, commit_sha')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -3053,12 +3066,32 @@ Deno.serve(async (req) => {
     if (lastSnap?.created_at) {
       const elapsed = Date.now() - new Date(lastSnap.created_at).getTime()
       if (elapsed < RESUBMIT_COOLDOWN_MS) {
-        const hoursRemaining = Math.ceil((RESUBMIT_COOLDOWN_MS - elapsed) / 3600000)
-        return json({
-          error: 'cooldown',
-          message: `Re-analysis available in ${hoursRemaining}h. Cooldown prevents spam.`,
-          retry_after_hours: hoursRemaining,
-        }, 429)
+        // Cooldown active · check if the repo has new commits since the
+        // last snapshot. If yes, the resubmit is auditing genuinely
+        // different code and we skip the wait.
+        const { data: projRow } = await admin
+          .from('projects')
+          .select('github_url')
+          .eq('id', projectId)
+          .maybeSingle()
+        const slug = projRow?.github_url ? slugFromGithubUrl(projRow.github_url) : null
+        const lastSha = (lastSnap as { commit_sha?: string | null }).commit_sha ?? null
+        const headSha = slug ? await fetchGithubHead(slug) : null
+        const shaChanged = !!(lastSha && headSha && lastSha !== headSha)
+
+        if (!shaChanged) {
+          // Same code (or sha probe failed) · honor the 24h cooldown.
+          const hoursRemaining = Math.ceil((RESUBMIT_COOLDOWN_MS - elapsed) / 3600000)
+          return json({
+            error: 'cooldown',
+            message: lastSha && headSha
+              ? `Re-audit available in ${hoursRemaining}h · push new code to bypass.`
+              : `Re-audit available in ${hoursRemaining}h.`,
+            retry_after_hours: hoursRemaining,
+            commit_sha_unchanged: !!lastSha && !!headSha,
+          }, 429)
+        }
+        // shaChanged · fall through · proceed with the resubmit.
       }
     }
   }
