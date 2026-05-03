@@ -259,7 +259,7 @@ export function CmoPreviewPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--navy-950)', padding: '40px 20px', color: 'var(--cream)' }}>
+    <div className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen" style={{ background: 'var(--navy-950)', color: 'var(--cream)' }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
         <header style={{ marginBottom: 32 }}>
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// CMO POST STUDIO · PREVIEW MODE</div>
