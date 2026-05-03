@@ -61,7 +61,14 @@
 npx commitshow@latest audit github.com/owner/repo
 ```
 
-> [⭐ Star us](https://github.com/commitshow/commitshow) if commit.show changes how you think about shipping vibe-coded work.
+<p align="center">
+  <a href="https://github.com/commitshow/commitshow"><img src="https://img.shields.io/github/stars/commitshow/commitshow?style=for-the-badge&logo=github&label=Star%20%E2%98%85%20commit.show&color=F0C040&labelColor=0F2040" alt="Star commit.show"></a>
+</p>
+
+<p align="center">
+  <strong>If commit.show changes how you think about shipping vibe-coded work — drop a ⭐.</strong><br>
+  <sub>Stars tell us this league is wanted · they help vibe-coders find each other faster.</sub>
+</p>
 
 ---
 
