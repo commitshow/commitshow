@@ -99,6 +99,14 @@ Deno.serve(async (req) => {
   const successUrl = body.success_url ?? `${origin}/submit?payment=success&session_id={CHECKOUT_SESSION_ID}`
   const cancelUrl  = body.cancel_url  ?? `${origin}/submit?payment=canceled`
 
+  // Idempotency-Key — Stripe collapses identical create() calls within 24h
+  // to the same session. Without it, a network retry or a double-clicked
+  // 'Pay $99' button can spawn two Checkout sessions. We bucket the key
+  // per (member, day) so a deliberate second purchase the next day still
+  // works, but a same-day retry just returns the existing session.
+  const dayBucket = new Date().toISOString().slice(0, 10)
+  const idempotencyKey = `audit-fee:${userId}:${dayBucket}`
+
   let session
   try {
     session = await stripe.checkout.sessions.create({
@@ -123,7 +131,7 @@ Deno.serve(async (req) => {
       },
       success_url: successUrl,
       cancel_url:  cancelUrl,
-    })
+    }, { idempotencyKey })
   } catch (e) {
     console.error('[create-checkout] stripe.create failed', (e as Error)?.message ?? e)
     return json({ error: 'Stripe checkout creation failed' }, 502)

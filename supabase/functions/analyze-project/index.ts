@@ -206,6 +206,20 @@ interface GitHubInfo {
       // Frame 12 · 2026-05-01 · iOS Safari zoom-on-focus when input/textarea
       // font-size < 16px. Common Tailwind text-sm pitfall on mobile-first.
       mobile_input_zoom:   { samples: Array<{ file: string; pattern: string }>; total: number; needs_attention: boolean }
+      // Frame 13 · 2026-05-03 · column-level GRANT SELECT mismatch — when a
+      // table is configured with column-level grants (privacy pattern hiding
+      // PII like email) and a later migration adds a new column without
+      // GRANTing it, PostgREST returns 42501 'permission denied for table X'
+      // for any client query that includes the new column. Silent fail in
+      // supabase-js (error treated as no row), masks production-critical
+      // bugs (Stripe webhook polling, scout leaderboards, profile pages).
+      column_grant_mismatch: { samples: Array<{ table: string; column: string; sql_file: string }>; total: number; needs_attention: boolean }
+      // Frame 14 · 2026-05-03 · Stripe API write call without Idempotency-Key
+      // header. Distinct from webhook idempotency (#1, which protects the
+      // INBOUND event). This protects OUTBOUND POSTs to Stripe — without it
+      // a network retry or double-clicked Pay button can create two
+      // Checkout sessions / two Charges / two Customers.
+      stripe_api_idempotency: { call_sites: number; idempotent_call_sites: number; gap: boolean; samples: Array<{ file: string; pattern: string }> }
     }
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
@@ -417,6 +431,8 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
         webhook_signature:   { handlers_seen: 0, verified_seen: 0, gap: false, sample_files: [] },
         cors_permissive:     { samples: [], total: 0 },
         mobile_input_zoom:   { samples: [], total: 0, needs_attention: false },
+        column_grant_mismatch: { samples: [], total: 0, needs_attention: false },
+        stripe_api_idempotency: { call_sites: 0, idempotent_call_sites: 0, gap: false, samples: [] },
       },
     },
     readme_excerpt: null,
@@ -1127,6 +1143,96 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   }
   const webhook_sig_gap = webhook_sig_handlers > 0 && webhook_sig_verified === 0
 
+  // 13. COLUMN GRANT MISMATCH · table uses column-level GRANT SELECT (privacy
+  // pattern · 'GRANT SELECT (col1, col2, ...) ON tbl TO anon, authenticated')
+  // and a later migration ADD COLUMN'd a column without granting it. The
+  // matching SELECT will return 42501 'permission denied for table' from
+  // PostgREST · supabase-js silently treats it as no row · production-
+  // critical bugs land masked. We scan ALL sql sample files (cached during
+  // RLS scan above) twice: first pass collects (table → set of cols ever
+  // granted), second pass extracts ADD COLUMN events; gap = column added
+  // to a known column-grant table whose grant set never received it.
+  const column_grant_samples: Array<{ table: string; column: string; sql_file: string }> = []
+  {
+    const grantedCols   = new Map<string, Set<string>>()           // table → cols ever GRANTed
+    const addedCols     : Array<{ table: string; column: string; sql_file: string }> = []
+    const grantPattern  = /grant\s+(?:select|all)\s*(?:\(\s*([^)]+)\))?\s+on\s+(?:public\.|"public"\.)?\s*"?(\w+)"?/gi
+    const addColPattern = /alter\s+table\s+(?:if\s+exists\s+)?(?:public\.|"public"\.)?\s*"?(\w+)"?\s+add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?(\w+)"?/gi
+    for (const [filePath, text] of sqlSampleCache) {
+      let gm: RegExpExecArray | null
+      while ((gm = grantPattern.exec(text)) !== null) {
+        const cols = (gm[1] ?? '').split(',').map(c => c.trim().replace(/^"|"$/g, '').toLowerCase()).filter(Boolean)
+        const tbl  = gm[2].toLowerCase()
+        // No column list = table-level grant · we only flag tables that have
+        // *at least one* column-level grant (i.e. the privacy pattern). A
+        // table-level grant later means the privacy pattern was abandoned;
+        // record an empty marker just so we know the table appears in grants.
+        if (!grantedCols.has(tbl)) grantedCols.set(tbl, new Set())
+        if (cols.length > 0) for (const c of cols) grantedCols.get(tbl)!.add(c)
+      }
+      let am: RegExpExecArray | null
+      while ((am = addColPattern.exec(text)) !== null) {
+        addedCols.push({ table: am[1].toLowerCase(), column: am[2].toLowerCase(), sql_file: filePath })
+      }
+    }
+    // Tables that use column-level pattern: at least one column-level GRANT
+    // statement seen (set has any column). Tables with empty set = table-
+    // level grant only · don't flag those.
+    const columnLevelTables = new Set<string>()
+    for (const [tbl, cols] of grantedCols) if (cols.size > 0) columnLevelTables.add(tbl)
+    for (const ev of addedCols) {
+      if (!columnLevelTables.has(ev.table)) continue
+      const grants = grantedCols.get(ev.table) ?? new Set()
+      if (grants.has(ev.column)) continue
+      // Skip privacy-intent column names (email-like) · these are commonly
+      // intentionally restricted. Conservative — false negative is safer
+      // than false positive for a public-readable column claim.
+      if (/(email|password|secret|token|provider_id|hash)$/.test(ev.column)) continue
+      column_grant_samples.push(ev)
+      if (column_grant_samples.length >= 12) break
+    }
+  }
+
+  // 14. STRIPE API IDEMPOTENCY · outbound POST to Stripe (Checkout sessions,
+  // PaymentIntents, Charges, Customers, Subscriptions, Refunds, Transfers,
+  // SetupIntents) without an Idempotency-Key. Network retry or a double-
+  // clicked Pay button can spawn a duplicate session → duplicate charge.
+  // The Stripe SDK accepts `{ idempotencyKey }` as a second-arg request
+  // option · curl/fetch impls use the `Idempotency-Key` header. Both forms
+  // count as protected.
+  const stripe_api_samples: Array<{ file: string; pattern: string }> = []
+  let stripe_api_call_sites = 0
+  let stripe_api_idempotent = 0
+  {
+    const stripeWriteRe = /\bstripe\.[A-Za-z][A-Za-z0-9_.]*\.(?:create|update|cancel|retrieve|list)\s*\(/g
+    const idempotencyRe = /idempotency[Kk]ey\s*:|['"]Idempotency-Key['"]\s*:/
+    const stripeFiles = paths.filter(p =>
+      /\.(ts|tsx|js|jsx|mjs|py|go|rs)$/.test(p) &&
+      !/\.(test|spec|stories)\./i.test(p),
+    ).slice(0, 40)
+    for (const f of stripeFiles) {
+      if (stripe_api_samples.length >= 6 && stripe_api_call_sites > 8) break
+      const text = await readFile(f)
+      if (!text) continue
+      const writes: string[] = []
+      let wm: RegExpExecArray | null
+      while ((wm = stripeWriteRe.exec(text)) !== null) {
+        // Only count meaningful writes — `.retrieve(`, `.list(` are reads
+        // and don't need idempotency. Filter the regex result on suffix.
+        if (/\.(create|update|cancel)\s*\($/.test(wm[0])) writes.push(wm[0])
+      }
+      if (writes.length === 0) continue
+      stripe_api_call_sites += writes.length
+      const fileHasIdempotency = idempotencyRe.test(text)
+      if (fileHasIdempotency) {
+        stripe_api_idempotent += writes.length
+      } else if (stripe_api_samples.length < 6) {
+        stripe_api_samples.push({ file: f, pattern: writes[0].slice(0, 40) })
+      }
+    }
+  }
+  const stripe_api_gap = stripe_api_call_sites > 0 && stripe_api_idempotent < stripe_api_call_sites
+
   // Aggregate vibe_concerns object — surfaced both to Claude evidence pack
   // and persisted in github_signals for UI rendering. Each category now
   // ships an `evidence_files` array so the UI can show specific paths.
@@ -1197,6 +1303,17 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       samples:         mobile_zoom_samples,
       total:           mobile_zoom_samples.length,
       needs_attention: mobile_zoom_samples.length > 0,
+    },
+    column_grant_mismatch: {
+      samples:         column_grant_samples,
+      total:           column_grant_samples.length,
+      needs_attention: column_grant_samples.length > 0,
+    },
+    stripe_api_idempotency: {
+      call_sites:           stripe_api_call_sites,
+      idempotent_call_sites: stripe_api_idempotent,
+      gap:                  stripe_api_gap,
+      samples:              stripe_api_samples,
     },
   }
 
@@ -2303,9 +2420,9 @@ Rules for the panel:
 - All four experts MUST be present; don't skip one because evidence is thin — if evidence is thin, confidence drops and verdict_summary says so.
 - American English, no Korean.` : ''}
 
-VIBE CODER 7-CATEGORY FRAMEWORK (priority lens for weaknesses):
+VIBE CODER FAILURE-MODE FRAMEWORK (priority lens for weaknesses):
 The structured signal block input.github.signals.vibe_concerns lists the
-seven failure modes that ~70% of AI-assisted projects ship without:
+failure modes that ~70% of AI-assisted projects ship without:
 
   1. webhook_idempotency  — Stripe / payment retry safety. .gap=true means
      handler files were found but no idempotency-key check pattern.
@@ -2322,6 +2439,25 @@ seven failure modes that ~70% of AI-assisted projects ship without:
      routes but no rate-limit lib or middleware → DoS / bill shock.
   7. prompt_injection     — uses_ai_sdk=true + raw_input_to_prompt_files
      non-empty = user input flowing unsanitized into a model prompt.
+  8. hardcoded_urls       — localhost:port leaks in shipped code. Will 404
+     in production for end users.
+  9. mock_data            — inline arrays of object literals in app paths.
+     Real backend was promised but not wired.
+ 10. webhook_signature    — handlers present but no HMAC / Stripe-Signature /
+     X-Hub-Signature verification. Anyone can POST forged events.
+ 11. cors_permissive      — Access-Control-Allow-Origin: * on auth endpoints.
+     Cross-site exfiltration risk.
+ 12. mobile_input_zoom    — input/textarea font-size <16px. iOS Safari
+     auto-zooms on focus, breaking mobile UX.
+ 13. column_grant_mismatch — Postgres table uses column-level GRANT SELECT
+     (privacy pattern hiding email/PII) but a later migration ADD COLUMN'd
+     a column without granting it. Result: 42501 'permission denied for
+     table' on every PostgREST read that includes the new column. Silent
+     fail in supabase-js. samples list (table, column, sql_file) tuples.
+ 14. stripe_api_idempotency — outbound POST to Stripe (Checkout sessions,
+     Charges, PaymentIntents, Customers) without { idempotencyKey }. Network
+     retry or double-clicked Pay button can spawn duplicate sessions →
+     duplicate charges. .gap=true when call_sites > idempotent_call_sites.
 
 When a vibe_concerns flag is set, weaknesses[] MUST surface it before
 generic concerns. Use exact phrasing the user can act on:
