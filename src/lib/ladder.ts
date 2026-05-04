@@ -75,6 +75,13 @@ export interface LadderRow {
   status:        string
   creator_id:    string | null
   creator_name:  string | null
+  // Streak signal · pulled from ladder_streaks, keyed by (project_id,
+  // current viewing time_window). Null when the project isn't currently
+  // in Top 50 for that window. `longest_streak_days` is the project's
+  // PB · `current_top_n` is what tier they're parked at right now.
+  current_top_n:        number | null
+  longest_streak_days:  number | null
+  total_days_in_top_50: number | null
 }
 
 const RANK_COLUMN: Record<LadderWindow, string> = {
@@ -124,21 +131,41 @@ export async function fetchLadder(
   }
 
   const ids = (mvRows as unknown as MvRaw[]).map(r => r.project_id)
-  const { data: pj } = await supabase
-    .from('projects')
-    .select('id, project_name, github_url, thumbnail_url, status, creator_id, creator_name')
-    .in('id', ids)
+  // Parallel: project rows + streak rows for the current time window.
+  // Each project has at most one streak row per (project_id, time_window)
+  // because a project belongs to exactly one category.
+  const [{ data: pj }, { data: streakRows }] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('id, project_name, github_url, thumbnail_url, status, creator_id, creator_name')
+      .in('id', ids),
+    supabase
+      .from('ladder_streaks')
+      .select('project_id, current_top_n, longest_streak_days, total_days_in_top_50')
+      .in('project_id', ids)
+      .eq('time_window', window),
+  ])
   type ProjRow = {
     id: string; project_name: string; github_url: string | null
     thumbnail_url: string | null; status: string
     creator_id: string | null; creator_name: string | null
   }
+  type StreakRow = {
+    project_id: string
+    current_top_n:        number | null
+    longest_streak_days:  number | null
+    total_days_in_top_50: number | null
+  }
   const pmap = new Map<string, ProjRow>(
     ((pj as unknown as ProjRow[]) ?? []).map(p => [p.id, p])
+  )
+  const smap = new Map<string, StreakRow>(
+    ((streakRows as unknown as StreakRow[]) ?? []).map(s => [s.project_id, s])
   )
 
   const result = (mvRows as unknown as MvRaw[]).map((r, i) => {
     const p = pmap.get(r.project_id)
+    const s = smap.get(r.project_id)
     return {
       project_id:    r.project_id,
       // 'all' view: assign sequential rank from sort order (score desc)
@@ -156,6 +183,9 @@ export async function fetchLadder(
       status:        p?.status ?? 'active',
       creator_id:    p?.creator_id ?? null,
       creator_name:  p?.creator_name ?? null,
+      current_top_n:        s?.current_top_n        ?? null,
+      longest_streak_days:  s?.longest_streak_days  ?? null,
+      total_days_in_top_50: s?.total_days_in_top_50 ?? null,
     }
   })
   listCache.set(cacheKey(category as LadderCategory, window), { data: result, fetchedAt: Date.now() })

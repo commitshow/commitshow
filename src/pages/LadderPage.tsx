@@ -374,6 +374,7 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
               <span>·</span>
               <span style={{ color: '#00D4AA' }}>graduated</span>
             </>}
+            <StreakBadge row={row} />
           </div>
         </div>
         <div className="flex-shrink-0 flex items-baseline gap-1">
@@ -384,6 +385,41 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
         </div>
       </button>
     </li>
+  )
+}
+
+// Streak badge · only renders when the project is currently inside the
+// Top 50 of the displayed window (`current_top_n` not null) AND the
+// streak has lasted at least 2 days. One day in Top 50 is just a hit,
+// not a streak — showing it dilutes the badge's signal value.
+//
+// Tier coloring mirrors the milestone palette so streak + milestone
+// chips read as one family on a project's row:
+//   Top 1   → gold (var(--gold-500))
+//   Top 10  → cream
+//   Top 50  → muted teal
+function StreakBadge({ row }: { row: LadderRow }) {
+  const tier = row.current_top_n
+  const days = row.longest_streak_days ?? 0
+  if (tier == null || days < 2) return null
+
+  const color =
+    tier === 1   ? 'var(--gold-500)' :
+    tier <= 10   ? 'var(--cream)' :
+                   '#6FA8A0'
+
+  const label =
+    tier === 1   ? `🔥 #1 · ${days}d streak` :
+    tier <= 10   ? `Top ${tier} · ${days}d streak` :
+                   `Top 50 · ${days}d streak`
+
+  return (
+    <>
+      <span>·</span>
+      <span style={{ color }} title={`Best streak: ${days} consecutive days in this tier · ${row.total_days_in_top_50 ?? days} total days in Top 50`}>
+        {label}
+      </span>
+    </>
   )
 }
 
