@@ -263,7 +263,8 @@ function FeedRow({ item }: { item: FeedItem }) {
       >
         <div className="flex items-start gap-3">
           {/* Avatar puck · three render modes:
-                · system event   → gold "CS" with brand mark
+                · system event   → favicon (the "C." brand mark) on a
+                                    gold-tinted navy background
                 · user w/avatar  → uploaded avatar img
                 · user w/o avatar → gradient initial circle
               All three use the same 32-px puck so the row rhythm holds. */}
@@ -272,16 +273,17 @@ function FeedRow({ item }: { item: FeedItem }) {
             className="flex-shrink-0 flex items-center justify-center font-mono text-xs font-bold overflow-hidden"
             style={{
               width: 32, height: 32,
-              background:  isSystem ? 'var(--gold-500)' : 'var(--navy-800)',
-              color:       isSystem ? 'var(--navy-900)' : 'var(--cream)',
-              border:      isSystem ? '1px solid var(--gold-500)' : `1px solid ${accent}55`,
+              background:  isSystem ? 'rgba(240,192,64,0.10)' : 'var(--navy-800)',
+              color:       isSystem ? 'var(--gold-500)' : 'var(--cream)',
+              border:      isSystem ? '1px solid rgba(240,192,64,0.55)' : `1px solid ${accent}55`,
               borderRadius: '50%',
+              padding:     isSystem ? 4 : 0,
             }}
           >
             {avatar ? (
               <img src={avatar} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
             ) : isSystem ? (
-              <span style={{ fontSize: 11, letterSpacing: '0.04em' }}>CS</span>
+              <img src="/favicon.svg" alt="commit.show" className="w-full h-full" style={{ objectFit: 'contain' }} />
             ) : (
               initial
             )}
