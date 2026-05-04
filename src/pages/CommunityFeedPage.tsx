@@ -39,10 +39,20 @@ interface CommentFeedItem {
   project_name:   string | null
   author_id:      string | null
   author_name:    string | null
+  author_avatar:  string | null
+  // System-generated comments (audit complete · score jump · registered ·
+  // etc.) carry kind='system' on the row. We rebrand them as "CS" with
+  // the site's mark so the feed doesn't read "Unnamed" for our own
+  // automated activity.
+  is_system:      boolean
   link:           string
 }
 
-type FeedItem = PostFeedItem | CommentFeedItem
+interface PostFeedItemWithAvatar extends PostFeedItem {
+  author_avatar: string | null
+}
+
+type FeedItem = PostFeedItemWithAvatar | CommentFeedItem
 
 const CATEGORY_REVEAL_THRESHOLD = 12   // hide sub-nav below this many posts
 
@@ -67,7 +77,7 @@ export function CommunityFeedPage() {
           .limit(40),
         supabase
           .from('comments')
-          .select('id, created_at, text, project_id, member_id')
+          .select('id, created_at, text, project_id, member_id, kind')
           .order('created_at', { ascending: false })
           .limit(60),
         supabase
@@ -77,19 +87,20 @@ export function CommunityFeedPage() {
       ])
       if (!alive) return
       const posts    = (postsRes.data    ?? []) as Array<{ id: string; created_at: string; type: string; subtype: string | null; title: string; tldr: string | null; author_id: string | null }>
-      const comments = (commentsRes.data ?? []) as Array<{ id: string; created_at: string; text: string; project_id: string; member_id: string | null }>
+      const comments = (commentsRes.data ?? []) as Array<{ id: string; created_at: string; text: string; project_id: string; member_id: string | null; kind: string | null }>
 
-      // Resolve author display_names for both sides.
+      // Resolve author display_names AND avatars for both sides. avatar
+      // shows up in the feed puck so user-authored items get a face.
       const authorIds = Array.from(new Set([
         ...posts.map(p => p.author_id).filter(Boolean) as string[],
         ...comments.map(c => c.member_id).filter(Boolean) as string[],
       ]))
       const { data: members } = authorIds.length > 0
-        ? await supabase.from('members').select('id, display_name').in('id', authorIds)
-        : { data: [] as Array<{ id: string; display_name: string | null }> }
-      const memberMap = new Map<string, string | null>(
-        ((members as Array<{ id: string; display_name: string | null }>) ?? [])
-          .map(m => [m.id, m.display_name]),
+        ? await supabase.from('members').select('id, display_name, avatar_url').in('id', authorIds)
+        : { data: [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }> }
+      const memberMap = new Map<string, { display_name: string | null; avatar_url: string | null }>(
+        ((members as Array<{ id: string; display_name: string | null; avatar_url: string | null }>) ?? [])
+          .map(m => [m.id, { display_name: m.display_name, avatar_url: m.avatar_url }]),
       )
 
       // Resolve project names for the comments side.
@@ -112,29 +123,41 @@ export function CommunityFeedPage() {
         }
       }
 
-      const postItems: PostFeedItem[] = posts.map(p => ({
-        kind:        'post',
-        id:          p.id,
-        created_at:  p.created_at,
-        title:       p.title,
-        tldr:        p.tldr,
-        type:        p.type,
-        subtype:     p.subtype,
-        author_id:   p.author_id,
-        author_name: p.author_id ? (memberMap.get(p.author_id) ?? null) : null,
-        link:        `/community/${typeSegment(p.type)}/${p.id}`,
-      }))
-      const commentItems: CommentFeedItem[] = comments.map(c => ({
-        kind:        'comment',
-        id:          c.id,
-        created_at:  c.created_at,
-        text:        c.text,
-        project_id:  c.project_id,
-        project_name: pjMap.get(c.project_id) ?? null,
-        author_id:   c.member_id,
-        author_name: c.member_id ? (memberMap.get(c.member_id) ?? null) : null,
-        link:        `/projects/${c.project_id}`,
-      }))
+      const postItems: PostFeedItemWithAvatar[] = posts.map(p => {
+        const m = p.author_id ? memberMap.get(p.author_id) : null
+        return {
+          kind:          'post',
+          id:            p.id,
+          created_at:    p.created_at,
+          title:         p.title,
+          tldr:          p.tldr,
+          type:          p.type,
+          subtype:       p.subtype,
+          author_id:     p.author_id,
+          author_name:   m?.display_name ?? null,
+          author_avatar: m?.avatar_url   ?? null,
+          link:          `/community/${typeSegment(p.type)}/${p.id}`,
+        }
+      })
+      const commentItems: CommentFeedItem[] = comments.map(c => {
+        const m = c.member_id ? memberMap.get(c.member_id) : null
+        return {
+          kind:          'comment',
+          id:            c.id,
+          created_at:    c.created_at,
+          text:          c.text,
+          project_id:    c.project_id,
+          project_name:  pjMap.get(c.project_id) ?? null,
+          author_id:     c.member_id,
+          author_name:   m?.display_name ?? null,
+          author_avatar: m?.avatar_url   ?? null,
+          // member_id NULL OR kind === 'system' both indicate platform-
+          // authored events (registered · score_jump · etc.). Either
+          // signal flips into the CS branded puck below.
+          is_system:     !c.member_id || c.kind === 'system',
+          link:          `/projects/${c.project_id}`,
+        }
+      })
 
       const merged: FeedItem[] = [...postItems, ...commentItems]
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -218,10 +241,16 @@ export function CommunityFeedPage() {
 }
 
 function FeedRow({ item }: { item: FeedItem }) {
-  const author = resolveCreatorName({ display_name: item.author_name })
+  const isSystem = item.kind === 'comment' && item.is_system
+  // Author label: system rows render as "CS" (commit.show) regardless
+  // of whether member_id was set; human rows fall through to the
+  // resolver. Avoids the 'Unnamed' fallback from leaking into our own
+  // automated feed entries.
+  const author = isSystem ? 'CS' : resolveCreatorName({ display_name: item.author_name })
   const ago = relAgo(item.created_at)
-  const initial = (author ?? '·').slice(0, 1).toUpperCase()
-  const accent  = item.kind === 'comment' ? '#00D4AA' : 'var(--gold-500)'
+  const accent  = isSystem ? 'var(--gold-500)' : (item.kind === 'comment' ? '#00D4AA' : 'var(--gold-500)')
+  const avatar  = !isSystem ? item.author_avatar : null
+  const initial = avatar ? '' : author.slice(0, 1).toUpperCase()
   return (
     <li>
       <Link
@@ -233,29 +262,42 @@ function FeedRow({ item }: { item: FeedItem }) {
         }}
       >
         <div className="flex items-start gap-3">
-          {/* Avatar puck · gives the feed an inbox-like vertical rhythm
-              instead of relying on a colored left bar. */}
+          {/* Avatar puck · three render modes:
+                · system event   → gold "CS" with brand mark
+                · user w/avatar  → uploaded avatar img
+                · user w/o avatar → gradient initial circle
+              All three use the same 32-px puck so the row rhythm holds. */}
           <span
             aria-hidden="true"
-            className="flex-shrink-0 flex items-center justify-center font-mono text-xs font-bold"
+            className="flex-shrink-0 flex items-center justify-center font-mono text-xs font-bold overflow-hidden"
             style={{
               width: 32, height: 32,
-              background: 'var(--navy-800)',
-              color: 'var(--cream)',
-              border: `1px solid ${accent}55`,
+              background:  isSystem ? 'var(--gold-500)' : 'var(--navy-800)',
+              color:       isSystem ? 'var(--navy-900)' : 'var(--cream)',
+              border:      isSystem ? '1px solid var(--gold-500)' : `1px solid ${accent}55`,
               borderRadius: '50%',
             }}
           >
-            {initial}
+            {avatar ? (
+              <img src={avatar} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
+            ) : isSystem ? (
+              <span style={{ fontSize: 11, letterSpacing: '0.04em' }}>CS</span>
+            ) : (
+              initial
+            )}
           </span>
           <div className="min-w-0 flex-1">
             {/* Header line · author · type chip · time */}
             <div className="flex items-center gap-2 flex-wrap font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--cream)' }}>{author}</strong>
+              <strong style={{ color: isSystem ? 'var(--gold-500)' : 'var(--cream)' }}>{author}</strong>
               <span className="px-1.5 py-0.5 text-[9px] tracking-widest uppercase" style={{
                 color: accent, border: `1px solid ${accent}55`, borderRadius: '2px',
               }}>
-                {item.kind === 'comment' ? 'comment' : (item.subtype ?? item.type ?? 'post').replace('_', ' ')}
+                {isSystem
+                  ? 'event'
+                  : item.kind === 'comment'
+                    ? 'comment'
+                    : (item.subtype ?? item.type ?? 'post').replace('_', ' ')}
               </span>
               {item.kind === 'comment' && item.project_name && (
                 <span>on <span style={{ color: 'var(--cream)' }}>{item.project_name}</span></span>
