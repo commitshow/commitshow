@@ -639,6 +639,7 @@ export type MemberStats = Member & {
   total_applauds_given: number
   monthly_vote_cap: number
   monthly_votes_remaining: number
+  comments_authored: number
 }
 
 // ── Scout tier vote quota ─────────────────────────────────────

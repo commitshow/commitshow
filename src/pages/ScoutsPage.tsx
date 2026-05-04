@@ -57,9 +57,14 @@ export function ScoutsPage() {
 
   useEffect(() => {
     ;(async () => {
+      // Require any scout-side activity — at least one vote, one
+      // applaud, or one (human) comment. Prevents the scout
+      // leaderboard from listing signed-up-but-silent members. The
+      // `or` here is PostgREST's syntax for OR'ing column predicates.
       const { data } = await supabase
         .from('member_stats')
         .select('*')
+        .or('total_votes_cast.gt.0,total_applauds_given.gt.0,comments_authored.gt.0')
         .order('activity_points', { ascending: false })
         .limit(200)
       setRows((data ?? []) as MemberStats[])

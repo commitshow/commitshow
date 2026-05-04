@@ -49,9 +49,14 @@ export function CreatorsPage() {
       // ranking reflects actual product portfolio · not the dormant
       // members.total_graduated / avg_auto_score columns that haven't
       // been touched since the season-end engine was retired.
+      // Require at least one registered product · members with zero
+      // products are conceptually not creators yet, even if their row
+      // exists in members. Prevents the leaderboard from being
+      // dominated by signed-up-but-inactive accounts.
       const { data } = await supabase
         .from('creator_stats')
         .select('*')
+        .gt('product_count', 0)
       if (!alive) return
       setRows((data ?? []) as unknown as CreatorRow[])
       setLoading(false)
