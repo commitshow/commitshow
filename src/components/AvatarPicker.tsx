@@ -43,7 +43,7 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96
   const displayUrl = local?.previewUrl || currentUrl
 
   return (
-    <div className="flex items-start gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
       <input
         ref={inputRef}
         type="file"

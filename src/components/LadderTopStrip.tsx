@@ -23,31 +23,35 @@ export function LadderTopStrip() {
     let alive = true
     ;(async () => {
       // Cross-category Top 3 by all-time rank · score_total desc.
-      // We fetch broader (top 30) then trim, so a single "other" doesn't
-      // dominate when other categories also have strong rows.
-      const { data } = await supabase
+      // Two-query path: PostgREST can't infer a FK from a materialized
+      // view to projects (MVs don't carry FK constraints), so the
+      // previous projects!inner(...) embed returned 400. Fetch the MV
+      // rows first, then the matching projects rows by id.
+      const { data: mvRows } = await supabase
         .from('ladder_rankings_mv')
-        .select(`
-          project_id, category, rank_all_time, score_total,
-          projects!inner(project_name, creator_name)
-        `)
+        .select('project_id, category, rank_all_time, score_total')
         .order('score_total', { ascending: false })
         .limit(3)
       if (!alive) return
       setLoaded(true)
-      if (!data) return
-      type Raw = {
-        project_id: string; category: LadderCategory
-        rank_all_time: number; score_total: number
-        projects: { project_name: string; creator_name: string | null } | null
-      }
-      const top3: TopRow[] = (data as unknown as Raw[]).map((r, i) => ({
+      if (!mvRows || mvRows.length === 0) return
+      const ids = (mvRows as Array<{ project_id: string }>).map(r => r.project_id)
+      const { data: projRows } = await supabase
+        .from('projects')
+        .select('id, project_name, creator_name')
+        .in('id', ids)
+      if (!alive) return
+      const projMap = new Map<string, { project_name: string; creator_name: string | null }>()
+      ;(projRows ?? []).forEach((p: { id: string; project_name: string; creator_name: string | null }) =>
+        projMap.set(p.id, { project_name: p.project_name, creator_name: p.creator_name }))
+      type MvRow = { project_id: string; category: LadderCategory; rank_all_time: number; score_total: number }
+      const top3: TopRow[] = (mvRows as unknown as MvRow[]).map((r, i) => ({
         project_id:   r.project_id,
         category:     r.category,
-        rank:         i + 1,                                // overall display rank
+        rank:         i + 1,
         score_total:  r.score_total,
-        project_name: r.projects?.project_name ?? '—',
-        creator_name: r.projects?.creator_name ?? null,
+        project_name: projMap.get(r.project_id)?.project_name ?? '—',
+        creator_name: projMap.get(r.project_id)?.creator_name ?? null,
       }))
       setRows(top3)
     })()

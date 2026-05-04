@@ -195,11 +195,11 @@ export function ProfilePage() {
                   </div>
                 ) : (
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <h1 className="font-display font-black text-2xl leading-tight" style={{ color: 'var(--cream)' }}>
+                    <h1 className="font-display font-black text-xl sm:text-2xl leading-tight min-w-0 break-words" style={{ color: 'var(--cream)', overflowWrap: 'anywhere' }}>
                       {displayNameResolved}
                     </h1>
                     <button onClick={() => setEditingName(true)}
-                      className="font-mono text-xs tracking-wide"
+                      className="font-mono text-xs tracking-wide whitespace-nowrap"
                       style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', padding: '8px 14px', cursor: 'pointer', minHeight: 36 }}>
                       ✎ EDIT
                     </button>
@@ -208,7 +208,7 @@ export function ProfilePage() {
                 {saveError && (
                   <div className="mt-1 font-mono text-[10px]" style={{ color: '#F87171' }}>{saveError}</div>
                 )}
-                <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                <div className="font-mono text-[10px] mt-1 break-all" style={{ color: 'var(--text-muted)' }}>
                   {user.email}
                 </div>
                 {/* Gentle nudge when display_name is still unset · others see your
