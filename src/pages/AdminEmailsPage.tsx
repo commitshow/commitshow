@@ -508,7 +508,11 @@ document.body.addEventListener('input',S);
         <iframe
           title="Email preview"
           srcDoc={srcDoc}
-          sandbox="allow-same-origin"
+          // allow-scripts so the inner contentEditable + postMessage
+          // sync runs. NO allow-same-origin — keeps the iframe at
+          // a null origin so its scripts can't reach into the admin
+          // shell's DOM. postMessage works cross-origin by design.
+          sandbox="allow-scripts"
           style={{
             width: '100%',
             height: iframeHeight,
