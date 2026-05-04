@@ -2432,7 +2432,7 @@ async function callClaude(
   const { includeExpertPanel } = opts
 
   const systemPrompt = `You are commit.show's senior evaluator for vibe-coded (AI-assisted) projects.
-commit.show is a league where creators submit apps, get objectively scored across multiple axes, and graduate after 3-week seasons.
+commit.show is a league where creators audit their apps, get objectively scored across multiple axes, and earn the Encore badge once the total score crosses 84 (Audit 50 + Scout 30 + Community 20).
 Your job: produce an evidence-backed, specific, and occasionally uncomfortable evaluation of a single project.
 
 Your voice:
@@ -2490,7 +2490,7 @@ After the axis scoring + tampering audit, speak as a four-person review panel wh
 
 Rules for the panel:
 - Each verdict is short — verdict_summary 1-2 sentences (≤200 chars). top_strength and top_issue are single sentences anchored in concrete evidence (cite a number or field).
-- verdict_label ∈ {ship, iterate, block}. "ship" = strong enough to graduate today on this dimension. "iterate" = clear path but notable gaps. "block" = would fail this lens in a real launch review.
+- verdict_label ∈ {ship, iterate, block}. "ship" = strong enough to clear the Encore line on this dimension today. "iterate" = clear path but notable gaps. "block" = would fail this lens in a real launch review.
 - Verdicts can DISAGREE with the numeric score on that axis — this is the POINT. A high Lighthouse score doesn't make a Security Officer say "ship".
 - NEVER name brand tools (Cursor, Claude Code, Lovable, etc.). Describe findings in product terms.
 - All four experts MUST be present; don't skip one because evidence is thin — if evidence is thin, confidence drops and verdict_summary says so.
@@ -2550,7 +2550,7 @@ SCOUT BRIEF — MANDATORY on every analysis (not just when expert_panel runs):
 Scouts forecast on these projects but most don't have Platinum clearance to read the full audit. Distill the review into a list they can read in 10 seconds.
 
 - strengths: exactly 5 items. Each = the single strongest thing you'd point a Scout at.
-- weaknesses: exactly 5 items. Each = the single thing most likely to stop this project from graduating.
+- weaknesses: exactly 5 items. Each = the single thing most likely to keep this project below the Encore line (84).
 
 Ordering matters:
 - Order by IMPORTANCE for scouting, most decision-moving first. Position 1 = the bullet a Scout would want to see before any other.
@@ -3575,7 +3575,7 @@ Deno.serve(async (req) => {
   // track) but README is rich AND the live URL is healthy. Lifts the
   // walk-on ceiling from /47 toward /50 for projects that ship real
   // documentation. Real Brief.pts always wins when present.
-  const briefSubst = brief ? { pts: 0, reason: 'graduation track · brief required' }
+  const briefSubst = brief ? { pts: 0, reason: 'Encore track · brief required' }
                            : walkOnBriefSubstitute(gh, health)
   const briefEffective = Math.max(briefScore.pts, briefSubst.pts)
   // Elite ecosystem · 0-5 separate cap above the regular +3 ecosystem
