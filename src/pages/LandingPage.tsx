@@ -88,10 +88,10 @@ export function LandingPage() {
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// HOW IT WORKS</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight">
-            Ranked always live<br />Score 84+ earns Encore
+            Ranked always live<br />Score 85+ earns Encore
           </h2>
           <p className="font-light max-w-xl mb-14" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            Continuous ranking. Every audited product climbs against its category. Cross the 84 line on
+            Continuous ranking. Every audited product climbs against its category. Cross the 85 line on
             total score — Audit 50 + Scout 30 + Community 20 — and the product carries a permanent Encore
             badge until it drops back below.
           </p>
@@ -123,15 +123,15 @@ export function LandingPage() {
                 Audit 50 + Scout 30 + Community 20
               </h3>
               <h3 className="font-display font-bold text-2xl mb-4" style={{ color: 'var(--cream)' }}>
-                Cross 84 → Encore.
+                Cross 85 → Encore.
               </h3>
               <p className="text-sm font-light leading-relaxed mb-5" style={{ color: 'rgba(248,245,238,0.55)' }}>
-                Total score crosses 84 → product earns the permanent Encore badge. No tiers, no
+                Total score crosses 85 → product earns the permanent Encore badge. No tiers, no
                 ceremony · score above the bar = Encore, score below = work in progress. The badge
                 sticks until it doesn't deserve to. Featured Lanes pull from the Encore set, so the rest of the platform amplifies what's actually shipping.
               </p>
               <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                Threshold · 84/100 · audit re-runs are free for owners
+                Threshold · 85/100 · audit re-runs are free for owners
               </div>
             </div>
           </div>
@@ -218,16 +218,16 @@ export function LandingPage() {
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// ENCORE PRODUCTS</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">
-            Score 84+ earns Encore
+            Score 85+ earns Encore
           </h2>
           <p className="font-light max-w-xl mb-12" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            One bar. Total score (Audit 50 + Scout 30 + Community 20) crosses 84 → Encore badge on the
+            One bar. Total score (Audit 50 + Scout 30 + Community 20) crosses 85 → Encore badge on the
             product, permanent. Drops back below the bar → badge disappears. No tiers, no ceremony,
             just a quality threshold visible on the product itself.
           </p>
           <div className="grid md:grid-cols-3 gap-4">
             {[
-              { band: 'Encore',   range: '84 – 100',  color: 'var(--gold-500)', desc: 'Permanent ★ badge on the product card · surfaced in Featured Lanes · creator grade boost.' },
+              { band: 'Encore',   range: '85 – 100',  color: 'var(--gold-500)', desc: 'Permanent ★ badge on the product card · surfaced in Featured Lanes · creator grade boost.' },
               { band: 'Strong',   range: '70 – 83',   color: '#00D4AA',         desc: 'Audited and shipped, climbing. One axis push (a Scout vote, an audit re-run after a fix) typically clears the bar.' },
               { band: 'Early',    range: 'Below 70',  color: '#6B7280',         desc: 'Fresh on the ladder. Pick a concern from the audit report, fix it, re-audit · the score moves with each commit.' },
             ].map(({ band, range, color, desc }) => (

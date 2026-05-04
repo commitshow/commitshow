@@ -22,7 +22,7 @@ export function EncoreBadge({ score, size = 'sm', className }: Props) {
   return (
     <span
       className={`font-mono tracking-widest uppercase ${className ?? ''}`}
-      title="Encore · score 84+"
+      title="Encore · score 85+"
       style={{
         display:      'inline-flex',
         alignItems:   'center',

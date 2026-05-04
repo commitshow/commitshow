@@ -13,7 +13,10 @@
 // (read by legacy components until they're swept) but new UI should
 // only depend on the score-derived encore signal.
 
-export const ENCORE_THRESHOLD = 84
+// 2026-05-05 · raised from 84 to 85. Hits a cleaner round-edge mark
+// and ensures sub-85 climbers (e.g. score 76) don't get surfaced in
+// any "Encore" lane / chart by accident.
+export const ENCORE_THRESHOLD = 85
 
 export function isEncoreScore(score: number | null | undefined): boolean {
   return typeof score === 'number' && score >= ENCORE_THRESHOLD

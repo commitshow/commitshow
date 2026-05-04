@@ -75,11 +75,11 @@ export function FeaturedLanes() {
       </Lane>
 
       <Lane
-        label="ENCORE TRACK"
-        hint="Score ≥ 70 · climbing toward the Encore line at 84"
+        label="ENCORE"
+        hint="Products that crossed the 85 line · permanent badge"
         tone="#F0C040"
         loading={graduating.loading}
-        empty="None at the Encore bar yet."
+        empty="None over the Encore line yet."
       >
         {graduating.rows.map(p => (
           <FeaturedLaneCard

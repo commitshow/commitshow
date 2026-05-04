@@ -155,7 +155,10 @@ export function CommunityFeedPage() {
           // authored events (registered · score_jump · etc.). Either
           // signal flips into the CS branded puck below.
           is_system:     !c.member_id || c.kind === 'system',
-          link:          `/projects/${c.project_id}`,
+          // #comments hash · ProjectComments auto-opens its modal when
+          // present, so users land directly on the thread instead of
+          // hunting for it on the project page.
+          link:          `/projects/${c.project_id}#comments`,
         }
       })
 
@@ -251,15 +254,28 @@ function FeedRow({ item }: { item: FeedItem }) {
   const accent  = isSystem ? 'var(--gold-500)' : (item.kind === 'comment' ? '#00D4AA' : 'var(--gold-500)')
   const avatar  = !isSystem ? item.author_avatar : null
   const initial = avatar ? '' : author.slice(0, 1).toUpperCase()
+  // Comment rows · render as a rounded card so they read as discrete
+  // bubbles · matches the inbox metaphor and softens the run-on look
+  // of stacked rows. Posts stay on the divider-only treatment so the
+  // feed mixes rhythm: large cards for back-and-forth comments, lean
+  // dividers for editorial posts.
+  const isComment = item.kind === 'comment'
   return (
     <li>
       <Link
         to={item.link}
-        className="block py-3"
-        style={{
+        className={isComment ? 'block px-4 py-3 mb-2 transition-colors' : 'block py-3'}
+        style={isComment ? {
+          background:    'rgba(15,32,64,0.45)',
+          border:        '1px solid rgba(255,255,255,0.07)',
+          borderRadius:  '14px',
+          textDecoration: 'none',
+        } : {
           borderBottom:   '1px solid rgba(255,255,255,0.06)',
           textDecoration: 'none',
         }}
+        onMouseEnter={isComment ? e => (e.currentTarget.style.borderColor = 'rgba(0,212,170,0.35)') : undefined}
+        onMouseLeave={isComment ? e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)') : undefined}
       >
         <div className="flex items-start gap-3">
           {/* Avatar puck · three render modes:

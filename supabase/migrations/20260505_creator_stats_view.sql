@@ -41,7 +41,7 @@ FROM public.members m
 LEFT JOIN LATERAL (
   SELECT
     count(*)                                                AS product_count,
-    count(*) FILTER (WHERE score_total >= 84)               AS encore_count,
+    count(*) FILTER (WHERE score_total >= 85)               AS encore_count,
     max(score_total)                                        AS best_score,
     avg(score_total) FILTER (WHERE score_total IS NOT NULL) AS avg_score,
     sum(audit_count)                                        AS total_audits

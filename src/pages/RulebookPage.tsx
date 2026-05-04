@@ -269,20 +269,20 @@ export function RulebookPage() {
         <Section title="7 · Encore · score-cut quality bar" anchor="encore">
           <P>
             Encore is a <B>continuous threshold</B>, not a season-end ceremony.
-            Cross 84 on total score (Audit 50 + Scout 30 + Community 20) and
+            Cross 85 on total score (Audit 50 + Scout 30 + Community 20) and
             the product earns the Encore badge. Drop back below the line and
             the badge disappears until you climb back. No tiers, no cohort,
             no graduation date.
           </P>
           <Table
             rows={[
-              ['Encore',  '84 — 100',  'Permanent ★ Encore badge on the product card · surfaced in Featured Lanes · counts toward Creator Grade.'],
+              ['Encore',  '85 — 100',  'Permanent ★ Encore badge on the product card · surfaced in Featured Lanes · counts toward Creator Grade.'],
               ['Strong',  '70 — 83',   'Audited and shipped · one axis push (a Scout vote, an audit re-run after a fix) typically clears the bar.'],
               ['Early',   'Below 70',  'Pick a concern from the audit report, fix it, re-audit · score moves with each commit.'],
             ]}
           />
           <P>
-            The badge is gated by three foundations, even if the score crosses 84:
+            The badge is gated by three foundations, even if the score crosses 85:
           </P>
           <ul className="pl-0 space-y-2 mb-4">
             <Bullet>Live URL <B>health check passes</B> (HTTP 200 + valid SSL).</Bullet>
@@ -315,7 +315,7 @@ export function RulebookPage() {
         <Section title="9 · Creator grade · career track" anchor="grade">
           <P>
             Creator Grade is your cumulative career tier. It advances through
-            <B> Encore products</B> (score ≥ 84) — a single great product
+            <B> Encore products</B> (score ≥ 85) — a single great product
             doesn't lift the grade on its own.
           </P>
           <Table

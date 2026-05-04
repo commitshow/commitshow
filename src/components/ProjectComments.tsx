@@ -41,7 +41,24 @@ const PREVIEW_COUNT = 3
 export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsProps) {
   const [rows, setRows] = useState<CommentRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
+  // Auto-open the modal when the URL hash is #comments. Lets external
+  // surfaces (e.g. /community feed) deep-link straight into the comment
+  // thread without a second click. Cleared after consuming so a manual
+  // close stays closed on subsequent navigations.
+  const [modalOpen, setModalOpen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.location.hash === '#comments'
+  })
+
+  useEffect(() => {
+    const onHash = () => {
+      if (typeof window !== 'undefined' && window.location.hash === '#comments') {
+        setModalOpen(true)
+      }
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   useEffect(() => {
     let cancelled = false

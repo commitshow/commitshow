@@ -2432,7 +2432,7 @@ async function callClaude(
   const { includeExpertPanel } = opts
 
   const systemPrompt = `You are commit.show's senior evaluator for vibe-coded (AI-assisted) projects.
-commit.show is a league where creators audit their apps, get objectively scored across multiple axes, and earn the Encore badge once the total score crosses 84 (Audit 50 + Scout 30 + Community 20).
+commit.show is a league where creators audit their apps, get objectively scored across multiple axes, and earn the Encore badge once the total score crosses 85 (Audit 50 + Scout 30 + Community 20).
 Your job: produce an evidence-backed, specific, and occasionally uncomfortable evaluation of a single project.
 
 Your voice:
@@ -2550,7 +2550,7 @@ SCOUT BRIEF — MANDATORY on every analysis (not just when expert_panel runs):
 Scouts forecast on these projects but most don't have Platinum clearance to read the full audit. Distill the review into a list they can read in 10 seconds.
 
 - strengths: exactly 5 items. Each = the single strongest thing you'd point a Scout at.
-- weaknesses: exactly 5 items. Each = the single thing most likely to keep this project below the Encore line (84).
+- weaknesses: exactly 5 items. Each = the single thing most likely to keep this project below the Encore line (85).
 
 Ordering matters:
 - Order by IMPORTANCE for scouting, most decision-moving first. Position 1 = the bullet a Scout would want to see before any other.

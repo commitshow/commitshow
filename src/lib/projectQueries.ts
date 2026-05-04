@@ -136,13 +136,16 @@ export async function fetchClimbing(): Promise<Array<Project & { delta: number }
     .slice(0, LANE_LIMIT)
 }
 
-// 3) Graduating — high-scoring projects still in-season (score_total >= 70).
+// 3) Encore — products that have crossed the Encore line (score ≥ 85).
+// 2026-05-05 · was the loose 'climbing toward Encore' (>= 70). User
+// feedback: a 76-score project shouldn't appear in any 'Encore' lane.
+// Lane is now strict — only products with the badge surface here.
 export async function fetchGraduating(): Promise<Project[]> {
   const { data } = await supabase
     .from('projects')
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq('status', 'active')
-    .gte('score_total', 70)
+    .gte('score_total', 85)
     .order('score_total', { ascending: false })
     .limit(LANE_LIMIT)
   return (data ?? []) as unknown as Project[]
