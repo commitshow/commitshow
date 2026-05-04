@@ -79,13 +79,14 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={busy}
-          className="font-mono text-xs tracking-wide px-3 py-1.5"
+          className="font-mono text-xs tracking-wide px-3 py-2.5"
           style={{
             background: 'transparent',
             border: '1px solid rgba(240,192,64,0.3)',
             color: 'var(--gold-500)',
             borderRadius: '2px',
             cursor: busy ? 'wait' : 'pointer',
+            minHeight: 36,
           }}
         >
           {currentUrl ? 'REPLACE AVATAR' : 'UPLOAD AVATAR'}

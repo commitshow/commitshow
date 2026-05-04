@@ -74,7 +74,16 @@
       "Bash(grep -E \"^CTO|^CMO|\\\\.md$\" /Users/hans1/vibe/.gitignore)",
       "Bash(curl -s \"https://skills.sh/commitshow/production-audit\" -o /dev/null -w \"status=%{http_code}\\\\n\")",
       "Bash(curl -s \"https://skills.sh/commitshow/production-audit\")",
-      "Bash(/opt/homebrew/bin/gh secret *)"
+      "Bash(/opt/homebrew/bin/gh secret *)",
+      "Bash(curl -sI \"https://api.commit.show/audit?repo=github.com/commitshow/production-audit&format=md\" -o /dev/null -w \"status=%{http_code}\\\\n\" --max-time 10)",
+      "Bash(curl -s \"https://registry.npmjs.org/commitshow-mcp\")",
+      "Bash(python3 -c \"import sys,json; r=json.load\\(sys.stdin\\); print\\('exists' if 'name' in r else 'no'\\)\")",
+      "Bash(python3 -c \"import sys,json; r=json.load\\(sys.stdin\\); print\\('latest:', r.get\\('dist-tags',{}\\).get\\('latest'\\)\\); print\\('maintainers:', r.get\\('maintainers',[]\\)\\); print\\('description:', r.get\\('description',''\\)\\)\")",
+      "Bash(curl -s \"https://api.commit.show/audit?repo=github.com/commitshow/production-audit\" --max-time 10)",
+      "Bash(curl -s \"https://commit.show/\" -o /dev/null -w \"status=%{http_code}\\\\n\")",
+      "Bash(xargs -I {} curl -s \"https://commit.show{}\")",
+      "Bash(xargs -I {} bash -c 'echo \"index hash: {}\"; curl -s \"https://commit.show/assets/{}\" | grep -oE \"AdminPage-[A-Za-z0-9_-]+\" | head -1')",
+      "Bash(curl -s \"https://commit.show/assets/AdminPage-DgQcDdrq.js\")"
     ],
     "additionalDirectories": [
       "/Users/hans1"

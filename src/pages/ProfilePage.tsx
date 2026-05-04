@@ -154,7 +154,7 @@ export function ProfilePage() {
       <div className="max-w-5xl mx-auto">
         {/* ── Header ── */}
         <header className="card-navy p-4 sm:p-6 mb-6" style={{ borderRadius: '2px' }}>
-          <div className="flex flex-wrap items-start gap-6">
+          <div className="flex flex-wrap items-start gap-4 sm:gap-6">
             <div className="flex-1 min-w-0 sm:min-w-[280px]">
               <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
                 // MEMBER PROFILE

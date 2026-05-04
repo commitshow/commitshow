@@ -1634,29 +1634,74 @@ function Loading() {
 
 // Provider badge · 사용자 표 의 로그인 방식 컬럼.
 // Supabase Auth provider keys: 'email' · 'google' · 'github' ·
-// 'twitter' (= X) · 'linkedin_oidc'.
-function ProviderBadge({ provider }: { provider: string }) {
-  const m: Record<string, { label: string; color: string; bg: string }> = {
-    email:          { label: 'mail',     color: 'rgba(255,255,255,0.85)', bg: 'rgba(255,255,255,0.08)' },
-    google:         { label: 'Google',   color: '#4285F4', bg: 'rgba(66,133,244,0.12)' },
-    github:         { label: 'GitHub',   color: '#fff',    bg: 'rgba(255,255,255,0.12)' },
-    twitter:        { label: 'X',        color: '#fff',    bg: '#000' },
-    linkedin_oidc:  { label: 'LinkedIn', color: '#0A66C2', bg: 'rgba(10,102,194,0.15)' },
+// 'twitter' (= X) · 'linkedin_oidc'. Branded inline SVG icons so the
+// column scans visually without reading labels.
+const PROVIDER_LABEL: Record<string, string> = {
+  email:         'Email',
+  google:        'Google',
+  github:        'GitHub',
+  twitter:       'X (Twitter)',
+  linkedin_oidc: 'LinkedIn',
+}
+
+function ProviderIcon({ provider, size = 14 }: { provider: string; size?: number }) {
+  const sz = { width: size, height: size, display: 'block' as const }
+  switch (provider) {
+    case 'google':
+      // Multi-color Google G · keeps brand recognition.
+      return (
+        <svg viewBox="0 0 48 48" style={sz} aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+          <path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.2C29.3 35 26.8 36 24 36c-5.3 0-9.6-3.4-11.3-8l-6.6 5.1C9.5 39.6 16.2 44 24 44z" />
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4 5.7l6.3 5.2c-.4.4 6.7-4.9 6.7-14.9 0-1.3-.1-2.4-.4-3.5z" />
+        </svg>
+      )
+    case 'github':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} fill="#fff" aria-hidden="true">
+          <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.36-3.88-1.36-.52-1.32-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.96.1-.74.4-1.25.72-1.54-2.55-.29-5.23-1.27-5.23-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17a10.95 10.95 0 0 1 5.74 0c2.18-1.48 3.14-1.17 3.14-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.36.78 1.06.78 2.14v3.18c0 .31.2.67.8.56 4.56-1.52 7.85-5.83 7.85-10.91C23.5 5.65 18.35.5 12 .5z" />
+        </svg>
+      )
+    case 'twitter':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} fill="#fff" aria-hidden="true">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+        </svg>
+      )
+    case 'linkedin_oidc':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} fill="#0A66C2" aria-hidden="true">
+          <path d="M20.5 2h-17A1.5 1.5 0 0 0 2 3.5v17A1.5 1.5 0 0 0 3.5 22h17a1.5 1.5 0 0 0 1.5-1.5v-17A1.5 1.5 0 0 0 20.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 1 1 8.25 6.5 1.75 1.75 0 0 1 6.5 8.25zM19 19h-3v-4.5c0-1.07-.93-2-2-2s-2 .93-2 2V19h-3v-9h3v1.4a3.5 3.5 0 0 1 6 2.4z" />
+        </svg>
+      )
+    case 'email':
+    default:
+      return (
+        <svg viewBox="0 0 24 24" style={sz} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+      )
   }
-  const meta = m[provider] ?? { label: provider, color: '#fff', bg: 'rgba(255,255,255,0.08)' }
+}
+
+function ProviderBadge({ provider }: { provider: string }) {
+  const label = PROVIDER_LABEL[provider] ?? provider
   return (
     <span
-      className="font-mono text-[9px] px-1.5 py-0.5"
+      className="inline-flex items-center justify-center"
       style={{
-        background: meta.bg,
-        color:      meta.color,
-        border:     '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 2,
-        whiteSpace: 'nowrap',
+        width: 24, height: 24,
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 3,
+        color: 'rgba(255,255,255,0.55)',
       }}
-      title={`signed in via ${provider}`}
+      title={`Signed in via ${label}`}
+      aria-label={`Provider: ${label}`}
     >
-      {meta.label}
+      <ProviderIcon provider={provider} size={14} />
     </span>
   )
 }
