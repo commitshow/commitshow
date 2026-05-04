@@ -209,12 +209,31 @@ npx tsc --noEmit     # type check (run before push)
 ### Audit a project from the terminal
 
 ```bash
-npx commitshow@latest audit github.com/owner/repo            # markdown report
-npx commitshow@latest audit github.com/owner/repo --json     # full JSON envelope
+npx commitshow@latest audit github.com/owner/repo                       # markdown report
+npx commitshow@latest audit github.com/owner/repo --json                # full JSON envelope
+npx commitshow@latest audit . --source=claude-code                      # tag the call origin
 ```
 
 The CLI lives in [github.com/commitshow/cli](https://github.com/commitshow/cli)
 and ships separately on npm as the `commitshow` package.
+
+The optional `--source=<tag>` flag lets agents and editors self-report
+how the call originated (e.g. `claude-code` · `cursor` · `antigravity` ·
+`production-audit-skill`). Source values feed the maintainer's funnel
+analytics in the admin dashboard. No PII; drop the flag to stay
+completely anonymous.
+
+### Sign in for higher rate limits
+
+```bash
+npx commitshow@latest login           # opens the browser for one-tap approval
+npx commitshow@latest whoami          # verify the saved token
+```
+
+Anonymous CLI users get **20 audits/IP/day**; signed-in users get
+**50/day** plus their audited repos auto-claim ownership (visible
+under [commit.show/me](https://commit.show/me) → MY AUDITS). Tokens
+are 90-day JWTs stored in `~/.commitshow/config.json`.
 
 ### Audit from any HTTP client (no shell required)
 
@@ -252,8 +271,9 @@ a fresh deploy; no `wrangler deploy` step needed.
 |---|---|
 | **V0** — audition flow · audit engine · score card · feed | shipped |
 | **V0.5** — auth · Scout tiers · forecast UI · Artifact Library · Creator Community | shipped |
-| **V1** — %-based season engine · Stripe audition fee · payouts · season-end automation · OAuth (Google · X · GitHub) · Terms / Privacy · CLI ANSI Shadow render · X share trigger | in progress |
-| **V1.5** — CLI login + install · Scaffold / BKit · talent market · MCP server · Twitter auto-post · Bundle curation | after V1 |
+| **V1** — %-based season engine · Stripe audition fee · OAuth (Google · X · GitHub · LinkedIn) · CLI login + MCP server · production-audit Skill · Terms / Privacy · CMO's Room | shipped |
+| **V1.1** — payouts · season-end automation · X auto-post triggers · per-project og:image | in progress |
+| **V1.5** — Scaffold / BKit · talent market · Twitter auto-post · Bundle curation · refresh-token flow | after V1.1 |
 
 ---
 
