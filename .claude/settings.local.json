@@ -77,7 +77,14 @@
       "Bash(curl -s \"https://commit.show/assets/index-Bex0kHYV.js\" -o /tmp/idx.js)",
       "Bash(curl -s \"https://commit.show/assets/SubmitPage-Dgayrry0.js\")",
       "Bash(deno check *)",
-      "Bash(supabase functions *)"
+      "Bash(supabase functions *)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s \"https://registry.npmjs.org/commitshow\")",
+      "WebSearch",
+      "Bash(gh repo *)",
+      "Read(//opt/homebrew/Cellar/gh/2.92.0/bin/**)",
+      "Bash(/opt/homebrew/bin/gh auth *)",
+      "Bash(/opt/homebrew/bin/gh repo *)"
     ]
   }
 }

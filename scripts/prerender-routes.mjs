@@ -95,6 +95,11 @@ const routes = [
     title:       'Asks · commit.show Community',
     description: 'Vibe-coder Q&A board: looking-for / available / feedback. Find co-builders, get reviews, swap leads.',
   },
+  {
+    path: '/cli/link',
+    title:       'Authorize CLI · commit.show',
+    description: 'Approve a commitshow CLI device-flow login. Enter the 6-character code your terminal showed and authorize a 90-day API token for your account.',
+  },
 ]
 
 const escape = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
