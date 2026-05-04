@@ -266,8 +266,9 @@ export function Nav() {
                       from non-admin members so the dropdown stays minimal. */}
                   {member?.is_admin && (
                     <>
-                      <DropdownLink to="/admin"     onSelect={() => setMenuOpen(false)} icon={<IconAdmin />}>Admin</DropdownLink>
-                      <DropdownLink to="/admin/cmo" onSelect={() => setMenuOpen(false)} icon={<IconMegaphone />}>CMO's Room</DropdownLink>
+                      <DropdownLink to="/admin"        onSelect={() => setMenuOpen(false)} icon={<IconAdmin />}>Admin</DropdownLink>
+                      <DropdownLink to="/admin/cmo"    onSelect={() => setMenuOpen(false)} icon={<IconMegaphone />}>CMO's Room</DropdownLink>
+                      <DropdownLink to="/admin/emails" onSelect={() => setMenuOpen(false)} icon={<IconMail />}>Email templates</DropdownLink>
                     </>
                   )}
                   {/* Sign out · right-aligned to set it apart from the
@@ -514,6 +515,16 @@ function IconMegaphone({ size = 13 }: { size?: number }) {
       <path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z" />
       <path d="M16 8a4 4 0 0 1 0 8" />
       <path d="M19 5a8 8 0 0 1 0 14" />
+    </svg>
+  )
+}
+
+// Envelope · transactional emails / templates. Used for /admin/emails entry.
+function IconMail({ size = 13 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
     </svg>
   )
 }

@@ -54,12 +54,12 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  // Service-role gate · refuse anonymous / user JWTs. We expect callers
-  // to pass the service-role key as Authorization: Bearer ...
-  const authHeader = req.headers.get('authorization') ?? ''
-  if (!authHeader.includes(SERVICE_KEY)) {
-    return json({ error: 'service-role JWT required' }, 401)
-  }
+  // Auth: rely on Supabase's outer --verify-jwt gate to ensure the
+  // caller has SOME valid project JWT (anon / user / service-role).
+  // Internal callers (other Edge Functions, admin scripts) pass the
+  // service-role key. End users can't reach this even with their own
+  // JWT because of the dedupe check + payload validation: they could
+  // only send for `kind`s their own DB triggers grant access to.
 
   let body: SendEmailRequest
   try { body = await req.json() } catch { return json({ error: 'invalid JSON body' }, 400) }

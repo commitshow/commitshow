@@ -33,6 +33,7 @@ const CommunityPostDetailPage = lazy(() => import('./pages/CommunityPostDetailPa
 const LeaderboardPage         = lazy(() => import('./pages/LeaderboardPage').then(m => ({ default: m.LeaderboardPage })))
 const LadderPage              = lazy(() => import('./pages/LadderPage').then(m => ({ default: m.LadderPage })))
 const SearchPage              = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })))
+const AdminEmailsPage         = lazy(() => import('./pages/AdminEmailsPage').then(m => ({ default: m.AdminEmailsPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/audit"            element={<AuditPage />} />
           <Route path="/admin"            element={<AdminPage />} />
           <Route path="/admin/cmo"        element={<CmoPreviewPage />} />
+          <Route path="/admin/emails"     element={<AdminEmailsPage />} />
           <Route path="/cli/link"         element={<CliLinkPage />} />
 
           {/* Creator Community (§13-B) */}
