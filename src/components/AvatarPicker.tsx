@@ -20,7 +20,7 @@ interface AvatarPickerProps {
 // Bottom-right camera badge reinforces 'clickable to change'. Top-right ⓘ
 // icon opens a small popover with format details. No separate big UPLOAD
 // button or caption — the tile + icons carry the affordance.
-export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 72 }: AvatarPickerProps) {
+export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96 }: AvatarPickerProps) {
   const { user } = useAuth()
   const inputRef  = useRef<HTMLInputElement>(null)
   const infoRef   = useRef<HTMLButtonElement>(null)
@@ -79,13 +79,16 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 72
         className="hidden"
       />
 
-      {/* Tile · entire surface is the upload click target. */}
+      {/* Tile · entire surface is the upload click target. The img is
+          clipped to rounded corners via inner overflow:hidden so the
+          corner badges (camera + info) can sit OUTSIDE the tile without
+          being clipped. */}
       <button
         type="button"
         onClick={click}
         disabled={busy}
         aria-label={currentUrl ? 'Replace avatar' : 'Upload avatar'}
-        className="relative flex items-center justify-center font-mono font-bold overflow-hidden"
+        className="relative flex items-center justify-center font-mono font-bold"
         style={{
           width: size, height: size,
           background: displayUrl ? 'var(--navy-800)' : 'var(--gold-500)',
@@ -95,6 +98,7 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 72
           fontSize: size / 3,
           padding: 0,
           cursor: busy ? 'wait' : 'pointer',
+          overflow: 'hidden',           // clips the inner img to the tile
         }}
       >
         {displayUrl
@@ -105,30 +109,35 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 72
             ↑
           </div>
         )}
-        {/* Camera badge · bottom-right corner · always visible · signals
-            'click to change'. */}
-        {!busy && (
-          <span
-            aria-hidden="true"
-            className="absolute flex items-center justify-center"
-            style={{
-              right: -4, bottom: -4,
-              width: 20, height: 20,
-              background: 'var(--gold-500)',
-              color: 'var(--navy-900)',
-              borderRadius: '50%',
-              border: '2px solid var(--navy-950)',
-            }}
-          >
-            <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14.5 4l2 2H21v14H3V6h4.5l2-2h5z" />
-              <circle cx="12" cy="13" r="3.5" />
-            </svg>
-          </span>
-        )}
       </button>
 
-      {/* Info ⓘ · separate button · click reveals format details. */}
+      {/* Camera badge · bottom-right · OUTSIDE the tile button so it
+          isn't clipped. Pointer-events:none so clicks pass through to
+          the tile underneath (uploading is the same gesture). */}
+      {!busy && (
+        <span
+          aria-hidden="true"
+          className="absolute flex items-center justify-center"
+          style={{
+            right: -6, bottom: -6,
+            width: 22, height: 22,
+            background: 'var(--gold-500)',
+            color: 'var(--navy-900)',
+            borderRadius: '50%',
+            border: '2px solid var(--navy-950)',
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 4l2 2H21v14H3V6h4.5l2-2h5z" />
+            <circle cx="12" cy="13" r="3.5" />
+          </svg>
+        </span>
+      )}
+
+      {/* Info ⓘ · top-right · OUTSIDE the tile button so it isn't
+          clipped. Click reveals format details via portal popover. */}
       <button
         type="button"
         ref={infoRef}
@@ -137,18 +146,19 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 72
         aria-expanded={info}
         className="absolute"
         style={{
-          top: -4, right: -4,
-          width: 18, height: 18,
+          top: -6, right: -6,
+          width: 20, height: 20,
           background: 'var(--navy-800)',
           color: 'rgba(248,245,238,0.7)',
-          border: '1px solid rgba(255,255,255,0.15)',
+          border: '1px solid rgba(255,255,255,0.2)',
           borderRadius: '50%',
           padding: 0,
           fontFamily: '"DM Mono", monospace',
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 700,
-          lineHeight: '16px',
+          lineHeight: '18px',
           cursor: 'pointer',
+          zIndex: 3,
         }}
       >
         i

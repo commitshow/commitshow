@@ -195,14 +195,30 @@ export function ProfilePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-baseline gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="font-display font-black text-xl sm:text-2xl leading-tight min-w-0 break-words" style={{ color: 'var(--cream)', overflowWrap: 'anywhere' }}>
                       {displayNameResolved}
                     </h1>
-                    <button onClick={() => setEditingName(true)}
-                      className="font-mono text-xs tracking-wide whitespace-nowrap"
-                      style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', padding: '8px 14px', cursor: 'pointer', minHeight: 36 }}>
-                      ✎ EDIT
+                    <button
+                      onClick={() => setEditingName(true)}
+                      aria-label="Edit display name"
+                      title="Edit display name"
+                      className="inline-flex items-center justify-center"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--gold-500)',
+                        border: '1px solid rgba(240,192,64,0.3)',
+                        borderRadius: '2px',
+                        width: 28, height: 28,
+                        padding: 0,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
                     </button>
                   </div>
                 )}
