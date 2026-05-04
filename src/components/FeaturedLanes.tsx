@@ -75,11 +75,11 @@ export function FeaturedLanes() {
       </Lane>
 
       <Lane
-        label="GRADUATION TRACK"
-        hint="Score ≥ 70 · within the season"
+        label="ENCORE TRACK"
+        hint="Score ≥ 70 · climbing toward the Encore line at 84"
         tone="#F0C040"
         loading={graduating.loading}
-        empty="None at the graduation bar yet."
+        empty="None at the Encore bar yet."
       >
         {graduating.rows.map(p => (
           <FeaturedLaneCard

@@ -53,7 +53,7 @@ export function SeasonProgressBar({ variant = 'banner' }: SeasonProgressBarProps
           {progress.daysRemaining > 0 ? (
             <>
               <div>{progress.daysRemaining} days</div>
-              <div style={{ color: 'rgba(248,245,238,0.3)' }}>to graduation</div>
+              <div style={{ color: 'rgba(248,245,238,0.3)' }}>to season end</div>
             </>
           ) : (
             <div>Season closed</div>

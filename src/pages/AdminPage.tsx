@@ -934,7 +934,7 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
             <span>티어</span>
             <span>등급</span>
             <span className="text-right">AP</span>
-            <span className="text-right">졸업</span>
+            <span className="text-right">Encore</span>
             <span>가입</span>
             <span className="text-right">권한</span>
           </div>
