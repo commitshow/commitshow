@@ -10,6 +10,7 @@
 //   per milestone · milestone (N rows)
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { shareWithTemplate, type UserShareTemplateId, type SlotMap } from '../lib/userShareTemplate'
 
 function IconX({ size = 14 }: { size?: number }) {
@@ -44,12 +45,41 @@ interface Props {
 export function ShareOnXMenu({ options, url, variant = 'default' }: Props) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const wrapRef = useRef<HTMLSpanElement>(null)
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(null)
+  const wrapRef    = useRef<HTMLSpanElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  // Position the portal-rendered popover anchored to the trigger button.
+  // Recompute on open + on window resize/scroll so it stays glued.
+  useEffect(() => {
+    if (!open) return
+    const recompute = () => {
+      const r = triggerRef.current?.getBoundingClientRect()
+      if (!r) return
+      setCoords({
+        top:   r.bottom + 6,
+        right: window.innerWidth - r.right,
+      })
+    }
+    recompute()
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll',  recompute, true)
+    return () => {
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll',  recompute, true)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      // Trigger button stays inside the wrap; popover lives in a portal,
+      // so we have to check both refs separately.
+      if (wrapRef.current?.contains(t))    return
+      if (popoverRef.current?.contains(t)) return
+      setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', onDoc)
@@ -74,9 +104,62 @@ export function ShareOnXMenu({ options, url, variant = 'default' }: Props) {
   // single-option fast path because it surprised owners who expected
   // the menu to be the canonical preview surface.
 
+  const popover = open && coords ? createPortal(
+    <div
+      ref={popoverRef}
+      role="listbox"
+      style={{
+        position: 'fixed',
+        top:      coords.top,
+        right:    coords.right,
+        zIndex:   1000,                       // above sticky nav (z-50) + project-detail layers
+        minWidth: 280,
+        maxWidth: 360,
+        background: 'var(--navy-800)',
+        border:    '1px solid rgba(240,192,64,0.35)',
+        borderRadius: 3,
+        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+        overflow: 'hidden',
+      }}
+    >
+      <div className="font-mono text-[10px] px-3 py-2"
+           style={{ color: 'rgba(248,245,238,0.5)', letterSpacing: 2, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        PICK WHAT TO SHARE
+      </div>
+      {options.map((opt, i) => (
+        <button
+          key={opt.key}
+          role="option"
+          type="button"
+          onClick={() => fire(opt)}
+          disabled={busy}
+          className="w-full text-left px-3 py-2.5 transition-colors"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: busy ? 'wait' : 'pointer',
+            borderBottom: i < options.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(240,192,64,0.08)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          <div className="font-mono text-[12px]"
+               style={{ color: opt.emphasis === 'primary' ? 'var(--gold-500)' : 'var(--cream)' }}>
+            {opt.label}
+          </div>
+          {opt.sub && (
+            <div className="font-mono text-[10px] mt-0.5" style={{ color: 'rgba(248,245,238,0.5)' }}>{opt.sub}</div>
+          )}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  ) : null
+
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         disabled={busy}
@@ -98,56 +181,7 @@ export function ShareOnXMenu({ options, url, variant = 'default' }: Props) {
         {busy ? 'OPENING…' : 'Share on X'}
         <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 2 }}>▼</span>
       </button>
-
-      {open && (
-        <div
-          role="listbox"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            right: 0,
-            zIndex: 50,
-            minWidth: 280,
-            maxWidth: 360,
-            background: 'var(--navy-800)',
-            border: '1px solid rgba(240,192,64,0.35)',
-            borderRadius: 3,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-            overflow: 'hidden',
-          }}
-        >
-          <div className="font-mono text-[10px] px-3 py-2"
-               style={{ color: 'rgba(248,245,238,0.5)', letterSpacing: 2, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            PICK WHAT TO SHARE
-          </div>
-          {options.map((opt, i) => (
-            <button
-              key={opt.key}
-              role="option"
-              type="button"
-              onClick={() => fire(opt)}
-              disabled={busy}
-              className="w-full text-left px-3 py-2.5 transition-colors"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: busy ? 'wait' : 'pointer',
-                borderBottom: i < options.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(240,192,64,0.08)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div className="font-mono text-[12px]"
-                   style={{ color: opt.emphasis === 'primary' ? 'var(--gold-500)' : 'var(--cream)' }}>
-                {opt.label}
-              </div>
-              {opt.sub && (
-                <div className="font-mono text-[10px] mt-0.5" style={{ color: 'rgba(248,245,238,0.5)' }}>{opt.sub}</div>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {popover}
     </span>
   )
 }
