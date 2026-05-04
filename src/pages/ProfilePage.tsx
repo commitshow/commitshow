@@ -261,7 +261,7 @@ export function ProfilePage() {
                   label="Creator Grade"
                   value={grade}
                   color={gradeColor}
-                  hint={`Career tier · based on graduated projects. ${stats?.graduated_count ?? 0} graduated / ${applications.length} total.`}
+                  hint={`Career tier · based on Encore products (score ≥ 84). ${stats?.graduated_count ?? 0} Encore / ${applications.length} total.`}
                 />
                 <StandingRow
                   label="Scout Tier"
@@ -276,14 +276,14 @@ export function ProfilePage() {
                   hint="Your Scout tier determines how many Forecasts you can cast each month."
                 />
                 {/* Early Spotter share · only when the most recent correct
-                    Forecast points at a graduated project. Slot fills:
+                    Forecast points at a product that earned Encore. Slot fills:
                     project_name + grade + days_before + scout tier +
                     cumulative correct count. Hidden when no hit yet. */}
                 {earlyHit && (
                   <div style={{ marginTop: 12, padding: 12, background: 'rgba(240,192,64,0.06)', border: '1px solid rgba(240,192,64,0.25)', borderRadius: '3px' }}>
                     <div className="font-mono text-[10px] mb-1" style={{ color: 'var(--gold-500)', letterSpacing: 2 }}>EARLY SPOTTER · HIT #{earlyHit.hit_count}</div>
                     <div className="text-xs mb-2" style={{ color: 'rgba(248,245,238,0.85)' }}>
-                      Called <strong>{earlyHit.project_name}</strong> · graduated <strong>{earlyHit.grade}</strong> · {earlyHit.days_before} days early.
+                      Called <strong>{earlyHit.project_name}</strong> · earned Encore · {earlyHit.days_before} days early.
                     </div>
                     <ShareUserTemplateButton
                       templateId="early_spotter"
@@ -398,14 +398,17 @@ function StandingRow({ label, value, color, hint }: { label: string; value: stri
   )
 }
 
-// ── Graduation explainer ──────────────────────────────────────
+// ── Encore career ladder ──────────────────────────────────────
+// Career tier criteria · 'graduated' replaced with 'Encore' (score ≥ 84)
+// per the 2026-05-05 rebrand. Variable name kept so call-sites in
+// GraduationExplainer don't churn while the rest of the file is rewritten.
 const GRADUATION_MILESTONES = [
-  { grade: 'Rookie',        threshold: '0 graduated',                      note: 'Starting line — your first application counts even before graduation.' },
-  { grade: 'Builder',       threshold: '1 graduated · avg score ≥ 60',    note: 'Prove you can ship one project cleanly through 3 weeks.' },
-  { grade: 'Maker',         threshold: '2 graduated · avg ≥ 70',          note: 'Consistency kicks in.' },
-  { grade: 'Architect',     threshold: '3 graduated · avg ≥ 75 · tech diversity', note: 'Range across infra, AI, frontend, Web3, etc.' },
-  { grade: 'Vibe Engineer', threshold: '5 graduated · avg ≥ 80 · 20+ applauds received', note: 'Craft quality recognized by the community.' },
-  { grade: 'Legend',        threshold: '10+ graduated · community influence', note: 'Permanent Hall of Fame resident.' },
+  { grade: 'Rookie',        threshold: '0 Encore',                                       note: 'Starting line — every audited product counts before Encore.' },
+  { grade: 'Builder',       threshold: '1 Encore · avg score ≥ 60',                      note: 'You can ship one product across the bar.' },
+  { grade: 'Maker',         threshold: '2 Encore · avg ≥ 70',                            note: 'Consistency kicks in.' },
+  { grade: 'Architect',     threshold: '3 Encore · avg ≥ 75 · tech diversity',           note: 'Range across infra, AI, frontend, Web3, etc.' },
+  { grade: 'Vibe Engineer', threshold: '5 Encore · avg ≥ 80 · 20+ applauds received',    note: 'Craft quality recognized by the community.' },
+  { grade: 'Legend',        threshold: '10+ Encore · community influence',               note: 'Permanent fixture at the top of /creators.' },
 ]
 
 // ── Your Stack section ────────────────────────────────────────
@@ -624,10 +627,10 @@ function GraduationExplainer({ currentGrade, graduatedCount }: { currentGrade: s
       >
         <div className="flex-1 min-w-0">
           <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
-            // WHAT "GRADUATION" MEANS
+            // WHAT "ENCORE" MEANS
           </div>
           <div className="font-display font-bold text-lg mt-1" style={{ color: 'var(--cream)' }}>
-            A project graduates when it clears the quarterly bar
+            A product earns Encore when its score crosses 84
           </div>
           {!open && next && (
             <div className="mt-1 font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
@@ -643,12 +646,12 @@ function GraduationExplainer({ currentGrade, graduatedCount }: { currentGrade: s
       {open && (
         <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(240,192,64,0.12)' }}>
           <p className="font-light text-sm mt-4 mb-4" style={{ color: 'var(--text-primary)', lineHeight: 1.7 }}>
-            Each project runs a <strong style={{ color: 'var(--cream)' }}>3-week season</strong>.
-            At the end, a project <strong style={{ color: 'var(--gold-500)' }}>graduates</strong> if it hits every bar:
-            total score <strong>≥ 75</strong>, automated score <strong>≥ 35 / 50</strong>,
-            <strong> 3+ Scout forecasts</strong>, score held for <strong>2 weeks</strong>,
-            and the live URL passed its health check. Your Creator Grade advances
-            only after graduations accumulate — it's a career track, not a single-score snapshot.
+            <strong style={{ color: 'var(--gold-500)' }}>Encore</strong> is a score threshold,
+            not a season-end ceremony. Total score (Audit 50 + Scout 30 + Community 20) crosses
+            <strong> 84</strong> and the product earns the badge — permanently visible on its card,
+            kept while the score holds. The product needs a live URL, two audit snapshots, and
+            a submitted Build Brief Phase 1 for the badge to apply. Creator Grade advances as
+            Encore products accumulate — career track, not a single-score snapshot.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -682,7 +685,7 @@ function GraduationExplainer({ currentGrade, graduatedCount }: { currentGrade: s
             <div className="mt-3 pl-3 py-2 pr-3 font-mono text-xs"
               style={{ borderLeft: '2px solid var(--gold-500)', background: 'rgba(240,192,64,0.04)', color: 'var(--text-primary)', lineHeight: 1.6 }}>
               Next: <strong style={{ color: 'var(--gold-500)' }}>{next.grade}</strong> · {next.threshold}
-              {graduatedCount > 0 ? ` · you have ${graduatedCount} graduated so far.` : ' · graduate your first project to start climbing.'}
+              {graduatedCount > 0 ? ` · you have ${graduatedCount} Encore product${graduatedCount === 1 ? '' : 's'} so far.` : ' · cross 84 on a product to start climbing.'}
             </div>
           )}
         </div>
