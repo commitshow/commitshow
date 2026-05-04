@@ -11,7 +11,7 @@
 // can sanity-check the rendered HTML in our own inbox without faking
 // signups.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -50,6 +50,10 @@ export function EmailTemplatesPanel() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [logs, setLogs] = useState<LogRow[]>([])
+  // Test-send recipient · default to han@commit.show (the operations
+  // monitoring inbox) so every admin sees their tests in one place
+  // regardless of which auth account they're logged in as.
+  const [testRecipient, setTestRecipient] = useState('han@commit.show')
 
   // Initial load
   useEffect(() => {
@@ -127,23 +131,25 @@ export function EmailTemplatesPanel() {
   // send-email → Resend → notification_log).
   const onSendTest = async () => {
     if (!draft || !user) return
+    const target = testRecipient.trim()
+    if (!target) { setError('Recipient empty'); return }
     setBusy(true); setError(null)
-    // Build a minimal payload from the variables list. Empty strings
-    // make missing-data render as blanks so the admin can see how the
-    // template handles unset values.
+    // Build a stub payload so admin sees how the template handles
+    // missing-data (each var renders as `[var]`).
     const payload: Record<string, string> = {}
     draft.variables.forEach(v => { payload[v] = `[${v}]` })
     const { error: e } = await supabase.rpc('dispatch_email', {
-      p_kind:          draft.kind,
-      p_recipient_id:  user.id,
-      p_payload:       payload,
-      p_dedupe_suffix: `admin_test_${Date.now()}`,
+      p_kind:                     draft.kind,
+      p_recipient_id:             user.id,
+      p_payload:                  payload,
+      p_dedupe_suffix:            `admin_test_${Date.now()}`,
+      p_recipient_addr_override:  target,
     })
     setBusy(false)
     if (e) { setError(e.message); return }
-    setSavedAt(`test sent ${new Date().toLocaleTimeString()}`)
+    setSavedAt(`test sent to ${target} · ${new Date().toLocaleTimeString()}`)
     // Reload logs to surface the new row immediately.
-    setActiveKind(activeKind)  // forces useEffect rerun via dep
+    setActiveKind(activeKind)
   }
 
   if (!isAdmin) return null
@@ -250,13 +256,27 @@ export function EmailTemplatesPanel() {
                     className="px-4 py-2 font-mono text-xs tracking-wide"
                     style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: busy ? 'wait' : 'pointer' }}
                   >Save</button>
+                  <input
+                    type="email"
+                    value={testRecipient}
+                    onChange={e => setTestRecipient(e.target.value)}
+                    placeholder="test recipient"
+                    className="px-2 py-2 font-mono text-xs"
+                    style={{
+                      background: 'rgba(6,12,26,0.6)',
+                      color: 'var(--cream)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '2px',
+                      minWidth: 220,
+                    }}
+                  />
                   <button
                     type="button"
                     onClick={onSendTest}
                     disabled={busy}
                     className="px-4 py-2 font-mono text-xs tracking-wide"
                     style={{ background: 'transparent', color: 'var(--cream)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '2px', cursor: busy ? 'wait' : 'pointer' }}
-                  >Send test to me</button>
+                  >Send test</button>
                   {savedAt && <span className="font-mono text-[11px]" style={{ color: '#00D4AA' }}>✓ {savedAt}</span>}
                   {error && <span className="font-mono text-[11px]" style={{ color: 'var(--scarlet)' }}>{error}</span>}
                 </div>
@@ -341,12 +361,18 @@ function FieldLabel({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-// HTML body editor with Edit / Preview toggle.
-// Preview substitutes [var] for {{var}} so the admin sees roughly what
-// the rendered email will look like with placeholder data, and renders
-// inside a sandboxed iframe so the email's inline CSS doesn't leak
-// into the admin shell (and vice versa). The iframe self-resizes to
-// fit its content via a postMessage from the inner script.
+// HTML body editor · two modes:
+//   Preview  · WYSIWYG. iframe renders the template with sample data;
+//              the body is contentEditable so admin can click any
+//              text and edit inline. Edits sync back via postMessage
+//              and we DON'T re-render the iframe on each keystroke
+//              (would blow away cursor position). Substituted vars
+//              are stripped before saving so [display_name] doesn't
+//              get persisted as literal text.
+//   Edit HTML· raw textarea for structural edits / power use.
+//
+// Sandbox keeps the email's inline CSS from leaking into the admin
+// shell. Self-reports scroll height so the iframe fits content.
 function HtmlBodyField({
   value, onChange, variables,
 }: {
@@ -357,53 +383,118 @@ function HtmlBodyField({
   const [mode, setMode] = useState<'edit' | 'preview'>('preview')
   const [iframeHeight, setIframeHeight] = useState(360)
 
-  // Build the preview HTML · stub {{var}} → [var]
-  const rendered = useMemo(() => {
-    let out = value
-    for (const v of variables) {
+  // Build the iframe srcDoc only when the EXTERNAL value changes
+  // (template switch, Edit-HTML edit, mode toggle to Preview). Inline
+  // edits in Preview mode flow back via postMessage WITHOUT setting
+  // srcDoc again — that would lose cursor + selection.
+  const baseline = useRef('')
+  const variablesRef = useRef(variables)
+  variablesRef.current = variables
+
+  const renderSrcDoc = (raw: string) => {
+    let out = raw
+    for (const v of variablesRef.current) {
       out = out.split(`{{${v}}}`).join(`[${v}]`)
     }
-    // Wrap so the iframe's own background sits behind the email — most
-    // mail clients show emails on a neutral panel, not transparent.
-    // Also self-reports its scrollHeight so the parent can fit it.
-    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#f4f1ea}body{padding:14px}</style></head><body>${out}<script>function r(){parent.postMessage({type:'commitshow:iframe-height',h:document.documentElement.scrollHeight},'*')}window.addEventListener('load',r);new ResizeObserver(r).observe(document.body);<\/script></body></html>`
-  }, [value, variables])
+    // Inner script:
+    //  - body is contentEditable
+    //  - on input, post the live innerHTML back to parent
+    //  - on first paint and on resize, post height
+    //  - input box-shadow flash on focus to hint clickable text
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+html,body{margin:0;padding:0;background:#f4f1ea}
+body{padding:14px;outline:none}
+[contenteditable=true]:focus{outline:1px dashed rgba(15,32,64,0.25);outline-offset:4px}
+[contenteditable=true]:hover{cursor:text}
+</style></head><body contenteditable="true">${out}<script>
+const parent_=parent;
+function H(){parent_.postMessage({type:'commitshow:iframe-height',h:document.documentElement.scrollHeight},'*')}
+function S(){parent_.postMessage({type:'commitshow:iframe-html',html:document.body.innerHTML},'*')}
+window.addEventListener('load',()=>{H();});
+new ResizeObserver(H).observe(document.body);
+document.body.addEventListener('input',S);
+// Strip the {contenteditable} attr from outgoing HTML by sending the
+// body's children's HTML rather than outerHTML.
+<\/script></body></html>`
+  }
 
-  // Listen for height messages from the iframe.
+  const [srcDoc, setSrcDoc] = useState(() => {
+    baseline.current = value
+    return renderSrcDoc(value)
+  })
+
+  // Re-render iframe ONLY when external value diverges from our
+  // tracked baseline (i.e. the change didn't come from us).
+  useEffect(() => {
+    if (mode !== 'preview') return
+    if (value === baseline.current) return
+    baseline.current = value
+    setSrcDoc(renderSrcDoc(value))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, mode])
+
+  // Re-render when entering Preview from Edit (so latest raw HTML
+  // gets reflected in the rendered view).
+  useEffect(() => {
+    if (mode === 'preview' && value !== baseline.current) {
+      baseline.current = value
+      setSrcDoc(renderSrcDoc(value))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
+  // Listen for height + html messages from the iframe.
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
-      const d = ev.data as { type?: string; h?: number } | null
-      if (d && d.type === 'commitshow:iframe-height' && typeof d.h === 'number') {
+      const d = ev.data as { type?: string; h?: number; html?: string } | null
+      if (!d) return
+      if (d.type === 'commitshow:iframe-height' && typeof d.h === 'number') {
         setIframeHeight(Math.max(120, Math.min(1400, d.h + 8)))
+      } else if (d.type === 'commitshow:iframe-html' && typeof d.html === 'string') {
+        // Reverse-substitute · turn [var] back into {{var}} so the
+        // saved template stays parameterized.
+        let raw = d.html
+        for (const v of variablesRef.current) {
+          raw = raw.split(`[${v}]`).join(`{{${v}}}`)
+        }
+        baseline.current = raw   // mark as our own change · don't re-render
+        onChange(raw)
       }
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
-  }, [])
+  }, [onChange])
 
   return (
     <div>
-      <div className="flex items-center gap-1 mb-2">
-        {(['preview', 'edit'] as const).map(m => {
-          const active = m === mode
-          return (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className="font-mono text-[11px] tracking-wide px-3 py-1"
-              style={{
-                background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
-                color:        active ? 'var(--gold-500)' : 'var(--text-secondary)',
-                border:       `1px solid ${active ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                borderRadius: '2px',
-                cursor:       'pointer',
-              }}
-            >
-              {m === 'preview' ? 'Preview' : 'Edit HTML'}
-            </button>
-          )
-        })}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1">
+          {(['preview', 'edit'] as const).map(m => {
+            const active = m === mode
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className="font-mono text-[11px] tracking-wide px-3 py-1"
+                style={{
+                  background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
+                  color:        active ? 'var(--gold-500)' : 'var(--text-secondary)',
+                  border:       `1px solid ${active ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                  borderRadius: '2px',
+                  cursor:       'pointer',
+                }}
+              >
+                {m === 'preview' ? 'Preview · click text to edit' : 'Edit HTML'}
+              </button>
+            )
+          })}
+        </div>
+        {mode === 'preview' && (
+          <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            structure broke? switch to Edit HTML
+          </span>
+        )}
       </div>
       {mode === 'edit' ? (
         <textarea
@@ -416,8 +507,8 @@ function HtmlBodyField({
       ) : (
         <iframe
           title="Email preview"
-          srcDoc={rendered}
-          sandbox=""
+          srcDoc={srcDoc}
+          sandbox="allow-same-origin"
           style={{
             width: '100%',
             height: iframeHeight,

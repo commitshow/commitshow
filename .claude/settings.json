@@ -128,7 +128,10 @@
       "Bash(sed -n '85,90p' src/pages/LandingPage.tsx)",
       "Bash(sed -n '215,225p' src/pages/LandingPage.tsx)",
       "Bash(dig +short MX commit.show)",
-      "Bash(dig +short commit.show)"
+      "Bash(dig +short commit.show)",
+      "Bash(curl -sI https://commit.show/admin/emails)",
+      "Bash(curl -s https://commit.show/assets/index-CZ1NhEa_.js)",
+      "Bash(curl -s https://commit.show/admin/emails)"
     ],
     "additionalDirectories": [
       "/Users/hans1"
