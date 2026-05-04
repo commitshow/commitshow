@@ -34,6 +34,8 @@ const LeaderboardPage         = lazy(() => import('./pages/LeaderboardPage').the
 const LadderPage              = lazy(() => import('./pages/LadderPage').then(m => ({ default: m.LadderPage })))
 const SearchPage              = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })))
 const AdminEmailsPage         = lazy(() => import('./pages/AdminEmailsPage').then(m => ({ default: m.AdminEmailsPage })))
+const ScoutDetailPage         = lazy(() => import('./pages/ScoutDetailPage').then(m => ({ default: m.ScoutDetailPage })))
+const CreatorsPage            = lazy(() => import('./pages/CreatorsPage').then(m => ({ default: m.CreatorsPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -71,6 +73,13 @@ export default function App() {
           <Route path="/products"         element={<LadderPage />} />
           <Route path="/ladder"           element={<Navigate to="/products" replace />} />
           <Route path="/search"           element={<SearchPage />} />
+          {/* Member-detail page · same component for both /scouts/:id and
+              /creators/:id since the data is one member's activity
+              (forecasts, applauds, builds). The two list surfaces
+              (/scouts, /creators) are the only thing that differs. */}
+          <Route path="/scouts/:id"       element={<ScoutDetailPage />} />
+          <Route path="/creators"         element={<CreatorsPage />} />
+          <Route path="/creators/:id"     element={<ScoutDetailPage />} />
           <Route path="/rulebook"         element={<RulebookPage />} />
           <Route path="/terms"            element={<TermsPage />} />
           <Route path="/privacy"          element={<PrivacyPage />} />

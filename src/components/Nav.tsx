@@ -38,6 +38,7 @@ function daysUntilNextReset(): number {
 //    external links + tweet history.
 const PRIMARY_LINKS: Array<{ to: string; label: string }> = [
   { to: '/products',  label: 'Products'  },
+  { to: '/creators',  label: 'Creators'  },
   { to: '/scouts',    label: 'Scouts'    },
   { to: '/community', label: 'Community' },
   { to: '/library',   label: 'Library'   },
@@ -220,14 +221,49 @@ export function Nav() {
                     <div className="font-mono text-[10px] truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>
                       {user.email}
                     </div>
-                    <div className="flex justify-between items-center mt-1.5">
-                      <span className="font-mono text-[10px]" style={{ color: tierColor }}>{tier}</span>
-                      <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>{grade}</span>
+                    {/* Tier + grade · both clickable to the corresponding
+                        activity detail page. Visually grouped as
+                        SCOUT (left, gold-tier-tinted) vs CREATOR (right,
+                        muted) so the user can see at a glance which side
+                        they're acting from. */}
+                    <div className="flex justify-between items-center gap-2 mt-1.5">
+                      <NavLink
+                        to={`/scouts/${user.id}`}
+                        onClick={() => setMenuOpen(false)}
+                        className="font-mono text-[10px] flex items-center gap-1.5 px-1.5 py-0.5 transition-colors"
+                        style={{
+                          color: tierColor,
+                          border: `1px solid ${tierColor}40`,
+                          borderRadius: '2px',
+                          textDecoration: 'none',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = `${tierColor}1a`)}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span style={{ color: 'var(--text-muted)' }}>SCOUT</span>
+                        <span>{tier}</span>
+                      </NavLink>
+                      <NavLink
+                        to={`/creators/${user.id}`}
+                        onClick={() => setMenuOpen(false)}
+                        className="font-mono text-[10px] flex items-center gap-1.5 px-1.5 py-0.5 transition-colors"
+                        style={{
+                          color: 'var(--cream)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: '2px',
+                          textDecoration: 'none',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)')}
+                        onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)')}
+                      >
+                        <span style={{ color: 'var(--text-muted)' }}>CREATOR</span>
+                        <span>{grade}</span>
+                      </NavLink>
                     </div>
                   </div>
 
                   <NavLink
-                    to="/ladder"
+                    to="/products"
                     onClick={() => setMenuOpen(false)}
                     className="block px-3 py-2 mb-1 transition-colors"
                     style={{

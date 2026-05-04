@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase, type ScoutTier, type MemberStats } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
 
 const TIER_COLOR: Record<ScoutTier, string> = {
   Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
@@ -47,6 +49,7 @@ const TIER_BENEFITS: Record<ScoutTier, {
 type SortMode = 'ap' | 'forecasts' | 'applauds' | 'newest'
 
 export function ScoutsPage() {
+  const { user } = useAuth()
   const [rows, setRows] = useState<MemberStats[]>([])
   const [loading, setLoading] = useState(true)
   const [tierFilter, setTierFilter] = useState<'any' | ScoutTier>('any')
@@ -170,6 +173,18 @@ export function ScoutsPage() {
               <div className="text-right">FORECASTS</div>
               <div className="text-right">APPLAUDS</div>
             </div>
+            {/* My row · pinned at top when authed. Renders BEFORE the
+                tier-filtered list so the user's own activity is always
+                one click away regardless of which tier filter is on.
+                The filtered list still includes them too — duplicating
+                is intentional, not a bug; the pin is a "you are here"
+                shortcut while the ranked position remains discoverable. */}
+            {user && (() => {
+              const me = rows.find(r => r.id === user.id)
+              if (!me) return null
+              const myRank = rows.findIndex(r => r.id === user.id) + 1
+              return <ScoutRow key={`me-${me.id}`} rank={myRank} member={me} isMine />
+            })()}
             {filtered.map((m, i) => <ScoutRow key={m.id} rank={i + 1} member={m} />)}
           </div>
         )}
@@ -231,20 +246,25 @@ function BenefitRow({ k, v, vColor }: { k: string; v: string; vColor: string }) 
   )
 }
 
-function ScoutRow({ rank, member: m }: { rank: number; member: MemberStats }) {
+function ScoutRow({ rank, member: m, isMine }: { rank: number; member: MemberStats; isMine?: boolean }) {
   const tier = m.tier as ScoutTier
   const tierColor = TIER_COLOR[tier]
   // display_name is always populated post 20260425130000_display_name_privacy.
   const displayName = m.display_name || 'Member'
   const initial = displayName.slice(0, 1).toUpperCase()
-  const rankBadge = `#${rank}`
+  const rankBadge = isMine ? 'YOU' : `#${rank}`
 
   return (
-    <div
+    <Link
+      to={`/scouts/${m.id}`}
       className="grid grid-cols-[48px_1fr_auto] md:grid-cols-[48px_1fr_100px_100px_100px_100px] items-center gap-3 px-4 py-3 transition-colors"
       style={{
         borderBottom: '1px solid rgba(255,255,255,0.04)',
+        textDecoration: 'none',
+        background: isMine ? 'rgba(240,192,64,0.05)' : undefined,
       }}
+      onMouseEnter={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.08)' : 'rgba(240,192,64,0.03)')}
+      onMouseLeave={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.05)' : 'transparent')}
     >
       <div className="font-mono text-xs font-medium" style={{ color: rank <= 3 ? tierColor : 'var(--text-muted)' }}>
         {rankBadge}
@@ -294,6 +314,6 @@ function ScoutRow({ rank, member: m }: { rank: number; member: MemberStats }) {
       <div className="hidden md:block text-right font-mono text-xs tabular-nums" style={{ color: 'var(--text-secondary)' }}>
         {m.total_applauds_given ?? 0}
       </div>
-    </div>
+    </Link>
   )
 }
