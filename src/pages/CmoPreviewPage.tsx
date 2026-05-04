@@ -154,7 +154,7 @@ type TemplateRow = {
 type DraftRow = {
   id:             string
   prompt:         string
-  variations:     Array<{ copy: string; hashtags?: string[]; pillar?: string; rationale?: string }>
+  variations:     Array<{ copy: string; hashtags?: string[]; inline_hashtag?: string; pillar?: string; rationale?: string }>
   selected_index: number | null
   status:         'draft' | 'approved' | 'posted' | 'archived'
   notes:          string | null
@@ -172,10 +172,13 @@ export function CmoPreviewPage() {
   const [loadErr,      setLoadErr]      = useState<string | null>(null)
 
   // Freeform generator state
-  const [prompt,       setPrompt]       = useState('')
-  const [genBusy,      setGenBusy]      = useState(false)
-  const [genErr,       setGenErr]       = useState<string | null>(null)
-  const [variations,   setVariations]   = useState<DraftRow['variations']>([])
+  const [prompt,        setPrompt]        = useState('')
+  const [genBusy,       setGenBusy]       = useState(false)
+  const [genErr,        setGenErr]        = useState<string | null>(null)
+  const [variations,    setVariations]    = useState<DraftRow['variations']>([])
+  const [strategy,      setStrategy]      = useState<string | null>(null)
+  const [recIndex,      setRecIndex]      = useState<number | null>(null)
+  const [recReason,     setRecReason]     = useState<string | null>(null)
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -206,6 +209,9 @@ export function CmoPreviewPage() {
     setGenBusy(true)
     setGenErr(null)
     setVariations([])
+    setStrategy(null)
+    setRecIndex(null)
+    setRecReason(null)
     setActiveDraftId(null)
     try {
       const { data: sessionRes } = await supabase.auth.getSession()
@@ -223,6 +229,9 @@ export function CmoPreviewPage() {
       const j = await res.json()
       if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`)
       setVariations(j.variations ?? [])
+      setStrategy(j.strategy ?? null)
+      setRecIndex(typeof j.recommended_index === 'number' ? j.recommended_index : null)
+      setRecReason(j.recommendation_reason ?? null)
       setActiveDraftId(j.draft_id ?? null)
       await loadAll()
     } catch (e) {
@@ -312,8 +321,26 @@ export function CmoPreviewPage() {
 
           {variations.length > 0 && (
             <div style={{ marginTop: 24, display: 'grid', gap: 16 }}>
+              {/* M's strategic read · top-level explanation before the 3 cards */}
+              {strategy && (
+                <div style={{ background: 'rgba(240,192,64,0.06)', border: '1px solid rgba(240,192,64,0.25)', borderRadius: 3, padding: 14 }}>
+                  <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: 'var(--gold-500)' }}>M의 전략</div>
+                  <div className="text-sm" style={{ color: 'rgba(248,245,238,0.85)', lineHeight: 1.55 }}>{strategy}</div>
+                  {recIndex !== null && variations[recIndex] && (
+                    <div className="font-mono text-[11px] mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(248,245,238,0.6)' }}>
+                      <span style={{ color: 'var(--gold-500)' }}>추천 → 변형 {recIndex + 1}</span>
+                      {recReason && <span> · {recReason}</span>}
+                    </div>
+                  )}
+                </div>
+              )}
               {variations.map((v, i) => (
-                <VariationCard key={i} v={v} index={i} draftId={activeDraftId} onChange={() => loadAll()} />
+                <VariationCard
+                  key={i} v={v} index={i}
+                  draftId={activeDraftId}
+                  isRecommended={recIndex === i}
+                  onChange={() => loadAll()}
+                />
               ))}
             </div>
           )}
@@ -528,15 +555,19 @@ function WorkspacePanel({ field, label, hint, md, updatedAt, onUpdate }: {
 }
 
 // ── Variation card · save / pick / copy ────────────────────────────────────
-function VariationCard({ v, index, draftId, onChange }: {
-  v: { copy: string; hashtags?: string[]; pillar?: string; rationale?: string }
+function VariationCard({ v, index, draftId, isRecommended, onChange }: {
+  v: { copy: string; hashtags?: string[]; inline_hashtag?: string; pillar?: string; rationale?: string }
   index: number
   draftId: string | null
+  isRecommended?: boolean
   onChange: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const [out, setOut]   = useState<string | null>(null)
   const charCount = v.copy.length
+  // Hashtag set excluding the inline one (which is already in copy).
+  const inline    = (v.inline_hashtag ?? '').replace(/^#/, '').trim().toLowerCase()
+  const altTags   = (v.hashtags ?? []).filter(t => t.replace(/^#/, '').toLowerCase() !== inline)
 
   const copyToClipboard = async () => {
     try { await navigator.clipboard.writeText(v.copy); setOut('copied to clipboard') }
@@ -552,11 +583,32 @@ function VariationCard({ v, index, draftId, onChange }: {
     else { setOut('saved · marked as approved'); onChange() }
   }
 
+  const PILLAR_LABEL: Record<string, string> = {
+    A: 'Pillar A · 구체적 gap',
+    B: 'Pillar B · 담론 react',
+    C: 'Pillar C · 사용자 win',
+    D: 'Pillar D · 제품 출시',
+  }
+  const variantLabel = ['safe', 'punchy', 'narrative'][index] ?? `variation ${index + 1}`
+
   return (
-    <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(240,192,64,0.18)', borderRadius: '3px', padding: 16 }}>
-      <div className="flex items-start justify-between mb-2 gap-3">
+    <div style={{
+      background: 'rgba(0,0,0,0.3)',
+      border: isRecommended ? '1px solid var(--gold-500)' : '1px solid rgba(240,192,64,0.18)',
+      borderRadius: '3px',
+      padding: 16,
+      boxShadow: isRecommended ? '0 0 0 2px rgba(240,192,64,0.18)' : 'none',
+    }}>
+      <div className="flex items-start justify-between mb-2 gap-3 flex-wrap">
         <div className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          variation {index + 1}{v.pillar ? ` · pillar ${v.pillar}` : ''} · {charCount} chars
+          <span style={{ color: 'var(--gold-500)' }}>변형 {index + 1} · {variantLabel}</span>
+          {v.pillar && PILLAR_LABEL[v.pillar] && <span> · {PILLAR_LABEL[v.pillar]}</span>}
+          <span> · {charCount} chars</span>
+          {isRecommended && (
+            <span className="ml-2 px-1.5 py-0.5" style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', borderRadius: 2, fontSize: 9, fontWeight: 700 }}>
+              추천
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           <button onClick={copyToClipboard} className="px-3 py-1 font-mono text-[10px]" style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.4)', borderRadius: 2, cursor: 'pointer' }}>COPY</button>
@@ -564,9 +616,14 @@ function VariationCard({ v, index, draftId, onChange }: {
         </div>
       </div>
       <pre className="font-mono text-[13px]" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--cream)', margin: 0, lineHeight: 1.55 }}>{v.copy}</pre>
-      {v.hashtags && v.hashtags.length > 0 && (
-        <div className="font-mono text-[11px] mt-2" style={{ color: 'rgba(248,245,238,0.55)' }}>
-          tags: {v.hashtags.map(t => `#${t}`).join(' ')}
+      {altTags.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[10px]" style={{ color: 'rgba(248,245,238,0.45)' }}>대체 태그:</span>
+          {altTags.map(t => (
+            <span key={t} className="font-mono text-[10px] px-1.5 py-0.5" style={{ background: 'rgba(240,192,64,0.06)', color: 'rgba(248,245,238,0.7)', border: '1px solid rgba(240,192,64,0.18)', borderRadius: 2 }}>
+              #{t.replace(/^#/, '')}
+            </span>
+          ))}
         </div>
       )}
       {v.rationale && (

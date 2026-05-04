@@ -57,19 +57,32 @@ Voice models: @levelsio · @swyx · @karpathy · @dhh (lowercase indie tone). NO
 Output format: ONLY a JSON object, no preamble or markdown.
 
 {
+  "strategy": "2-4 sentence paragraph · how you read this prompt · which ICP segment you're aiming at · the hook angle you picked · what reaction you're trying to provoke. Korean OK. Be specific, not generic.",
+  "recommended_index": 0,                             // 0|1|2 · which of the 3 you'd send if forced to pick one · MUST be set
+  "recommendation_reason": "one sentence · Korean OK · why this variation wins given the prompt's intent and the audience right now",
   "variations": [
-    { "copy": "tweet text · max 280 chars", "hashtags": ["optional", "tags", "without", "#"], "pillar": "A|B|C|D", "rationale": "one sentence why this version works" },
+    {
+      "copy":      "tweet body · ≤ 250 chars to leave room for hashtag(s) ≤ 280 total",
+      "hashtags":  ["3-5 candidate tags · without #", "vibe coders' tags only · NEVER #buildinpublic / #SaaS / #startup"],
+      "inline_hashtag": "the single hashtag you would append inline at the end of the copy field if forced to pick one · most relevant of the array · without #",
+      "pillar":    "A|B|C|D",
+      "rationale": "one sentence · why this variation reads · what tradeoff vs the others"
+    },
     { ... },
     { ... }
   ]
 }
 
-Generate 3 distinct variations:
-- Variation 1: "safe" — most likely to land with the core ICP (vibe coders shipping with Cursor/Claude/etc).
-- Variation 2: "punchy" — sharper hook, willing to be slightly contrarian or polarizing.
-- Variation 3: "narrative" — leads with a story or specific observation rather than a stat.
+Generate 3 DISTINCT variations:
+- Variation 1: "safe" — most likely to land with the core ICP (vibe coders shipping with Cursor/Claude/etc). Lead with a concrete number or file.
+- Variation 2: "punchy" — sharper hook · willing to be slightly contrarian or polarizing. Earns clicks at the cost of some replies disagreeing.
+- Variation 3: "narrative" — leads with a one-line story or specific observation rather than a stat. Best for thread starters or quote-tweets.
 
-Each "copy" field is the full tweet ≤ 280 chars (including any hashtags inline). hashtags array is for separate tag suggestions if user wants them appended; default to 0-1 hashtags total — vibe coders dislike hashtag spam. Avoid #buildinpublic / #SaaS / #startup. Use sparingly: #vibecoding · #claudecode · #cursor.
+Hashtag rules (NON-NEGOTIABLE):
+- Each variation MUST set inline_hashtag to a non-empty string. Pick the most relevant tag from your hashtags[] array. Common picks: vibecoding · claudecode · cursor · ai (only when describing tools, NOT our product). Never invent tags that wouldn't have prior X usage.
+- Each variation MUST set hashtags[] to 3-5 candidate tags (alternates the user can swap in).
+- The copy field ALREADY INCLUDES inline_hashtag at the end (e.g. "...just shipped. #vibecoding"). The user sees a complete tweet without manually appending. We don't double-append.
+- Banned hashtags everywhere: #buildinpublic · #SaaS · #startup · #100DaysOfCode · #devlife · generic hype tags.
 
 Always include the npx commitshow audit command if the prompt is about the engine, the audit, or onboarding new users.`
 
@@ -154,7 +167,18 @@ Deno.serve(async (req) => {
     return json({ error: 'Claude returned non-JSON output', raw: text.slice(0, 800) }, 502)
   }
 
-  let parsed: { variations?: Array<{ copy: string; hashtags?: string[]; pillar?: string; rationale?: string }> }
+  let parsed: {
+    strategy?:              string
+    recommended_index?:     number
+    recommendation_reason?: string
+    variations?: Array<{
+      copy:           string
+      hashtags?:      string[]
+      inline_hashtag?: string
+      pillar?:        string
+      rationale?:     string
+    }>
+  }
   try {
     parsed = JSON.parse(text.slice(start, end + 1))
   } catch (e) {
@@ -164,29 +188,51 @@ Deno.serve(async (req) => {
     return json({ error: 'Claude response missing variations[]', raw: text.slice(0, 800) }, 502)
   }
 
-  // Persist as a cmo_drafts row so admin can come back to it.
+  // Defensive: ensure each variation's `copy` ends with the inline_hashtag.
+  // Claude is told to do this in the prompt, but if it slips up we patch
+  // server-side so the user always sees a complete tweet (body + tag).
+  for (const v of parsed.variations) {
+    const tag = (v.inline_hashtag ?? '').replace(/^#/, '').trim()
+    if (tag && !new RegExp(`#${tag}\\b`, 'i').test(v.copy)) {
+      v.copy = `${v.copy.trimEnd()} #${tag}`
+    }
+  }
+
+  // Persist as a cmo_drafts row · variations is jsonb so the strategy +
+  // recommendation fields nest cleanly. We store them under
+  // variations._meta so the existing schema doesn't need a migration.
+  const enrichedVariations = parsed.variations as unknown as object
+  const draftPayload = {
+    prompt,
+    variations: enrichedVariations,
+    selected_index: typeof parsed.recommended_index === 'number' ? parsed.recommended_index : null,
+    notes: parsed.strategy
+      ? `STRATEGY: ${parsed.strategy}\n\nRECOMMENDED #${(parsed.recommended_index ?? 0) + 1}${parsed.recommendation_reason ? ` · ${parsed.recommendation_reason}` : ''}`
+      : null,
+    created_by: userId,
+  }
   const { data: draft, error: insertErr } = await admin
     .from('cmo_drafts')
-    .insert({
-      prompt,
-      variations: parsed.variations,
-      created_by: userId,
-    })
+    .insert(draftPayload)
     .select()
     .single()
   if (insertErr) {
-    // Non-fatal · still return the variations to the caller, just without
-    // a persisted draft id. Surface the error so we know if RLS broke.
     return json({
-      variations: parsed.variations,
-      draft_id: null,
-      persist_error: insertErr.message,
+      strategy:              parsed.strategy ?? null,
+      recommended_index:     parsed.recommended_index ?? null,
+      recommendation_reason: parsed.recommendation_reason ?? null,
+      variations:            parsed.variations,
+      draft_id:              null,
+      persist_error:         insertErr.message,
     })
   }
 
   return json({
-    variations: parsed.variations,
-    draft_id: draft.id,
-    usage: claudeJson?.usage ?? null,
+    strategy:              parsed.strategy ?? null,
+    recommended_index:     parsed.recommended_index ?? null,
+    recommendation_reason: parsed.recommendation_reason ?? null,
+    variations:            parsed.variations,
+    draft_id:              draft.id,
+    usage:                 claudeJson?.usage ?? null,
   })
 })
