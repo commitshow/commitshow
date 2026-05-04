@@ -7,7 +7,7 @@
 //   · 7 use-case categories (productivity / niche SaaS / creator / dev
 //     tools / AI agents / consumer / games)
 //   · Events (incl. quarterly = season) are admin-created drops
-//   · Quarterly events still produce graduation tiers
+//   · Quarterly events add a Scout-Forecast layer to the Encore line
 //   · Form factor / stage / pricing are orthogonal filters, not categories
 // No pricing details (live on each project's audit page).
 
@@ -39,7 +39,7 @@ export function RulebookPage() {
             How commit.show judges a project
           </h1>
           <p className="font-light text-base" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            Every rule that shapes a score, a rank, or a graduation tier lives
+            Every rule that shapes a score, a rank, or an Encore decision lives
             here. No secret sauce, no human ringmaster with a thumb on the
             scale. If a Scout, Creator, or lawyer ever asks "why is this
             project ranked above that one?", the answer is on this page.
@@ -61,7 +61,7 @@ export function RulebookPage() {
                 'Today/Week refresh every 5 minutes. Month / All-time every hour. Switch the chip at the top of /ladder.'],
               ['Tiebreaker',  '5-stage',
                 'Score total · last-audit recency · Audit pillar score · audit count (fewer = better — lucky-roll deterrent) · project creation date.'],
-              ['Coverage',    'Active + graduated',
+              ['Coverage',    'Active + Encore',
                 'Walk-on / preview audits stay out of the ladder · they appear only in the hero terminal demo. Categories with zero entries simply hide.'],
             ]}
           />
@@ -85,7 +85,7 @@ export function RulebookPage() {
                 'No Scout-Forecast pillar. Pure code-evidence + community reaction signal. This is what every project is ranked on by default.'],
               ['Quarterly event',
                 'Audit 50 + Scout 30 + Community 20',
-                'Only during a 3-week quarterly. Adds a Scout-Forecast pillar that lets verified Scouts predict project performance. Drives the graduation cut.'],
+                'Only during a 3-week quarterly. Adds a Scout-Forecast pillar to the Encore line so verified Scouts can weigh in on project trajectory.'],
               ['Other event templates',
                 'Per-template scoring',
                 'Tool Challenge / Theme Sprint / Quality Bar / Sponsored Showcase / Open Bounty — each picks its own scoring method (audit-only, audit+community, etc).'],
@@ -237,7 +237,7 @@ export function RulebookPage() {
           <Table
             rows={[
               ['Quarterly',           '3-week season',
-                'Adds Scout Forecast pillar · ends in graduation cut (top 20%) · Hall of Fame entry for Valedictorian.'],
+                'Adds Scout Forecast pillar · adds Scout Forecast pillar to the Encore line · top scorers get Featured-Lane spotlight.'],
               ['Tool Challenge',      'Per-tool 30-day',
                 'Audit-only scoring · entries filtered by tool used (Cursor / Claude / Lovable / etc) · 3 winners.'],
               ['Theme Sprint',        '7-day theme',
@@ -266,31 +266,28 @@ export function RulebookPage() {
           </P>
         </Section>
 
-        <Section title="7 · Graduation · only during quarterly events" anchor="graduation">
+        <Section title="7 · Encore · score-cut quality bar" anchor="encore">
           <P>
-            Graduation only happens during a <B>Quarterly event</B>. The
-            always-on ladder doesn't graduate anyone — it just ranks. When a
-            quarterly closes, the top 20% of <B>entered</B> projects earn a
-            graduation tier; the rest move to the Rookie Circle and can
-            re-enter next quarterly.
+            Encore is a <B>continuous threshold</B>, not a season-end ceremony.
+            Cross 84 on total score (Audit 50 + Scout 30 + Community 20) and
+            the product earns the Encore badge. Drop back below the line and
+            the badge disappears until you climb back. No tiers, no cohort,
+            no graduation date.
           </P>
           <Table
             rows={[
-              ['Valedictorian', '≈0.5% · 1 per quarterly',         'Hall of Fame (Spring/Summer/Fall/Winter cohort) · permanent archive · official @commitshow video · Build Brief Phase 2 auto-published.'],
-              ['Honors',        'Top 5% (excl. Valedictorian)',    'Hall of Fame · certified badge · featured · NFT.'],
-              ['Graduate',      'Top 20% (excl. Honors)',          'Graduation badge · full Build Brief publicly revealed · MD Library publishing rights.'],
-              ['Rookie Circle', 'Everyone else',                   'Audit findings + Scout commentary preserved. Brief stays private if you choose. Try again next quarterly.'],
+              ['Encore',  '84 — 100',  'Permanent ★ Encore badge on the product card · surfaced in Featured Lanes · counts toward Creator Grade.'],
+              ['Strong',  '70 — 83',   'Audited and shipped · one axis push (a Scout vote, an audit re-run after a fix) typically clears the bar.'],
+              ['Early',   'Below 70',  'Pick a concern from the audit report, fix it, re-audit · score moves with each commit.'],
             ]}
           />
           <P>
-            Even a top-20% score lands in Rookie Circle if any of these basic
-            filters fail:
+            The badge is gated by three foundations, even if the score crosses 84:
           </P>
           <ul className="pl-0 space-y-2 mb-4">
-            <Bullet>Live URL <B>health check passes</B> (HTTP 200 + valid SSL) — production readiness minimum.</Bullet>
-            <Bullet>At least <B>2 audit snapshots</B> recorded across the quarterly — single-shot luck doesn't graduate.</Bullet>
+            <Bullet>Live URL <B>health check passes</B> (HTTP 200 + valid SSL).</Bullet>
+            <Bullet>At least <B>2 audit snapshots</B> recorded — single-shot luck doesn't earn Encore.</Bullet>
             <Bullet>Build Brief Phase 1 <B>Core Intent submitted</B> (problem · features · target user).</Bullet>
-            <Bullet><B>No abuse adjudication</B> during the quarterly (see §11).</Bullet>
           </ul>
         </Section>
 
@@ -317,18 +314,18 @@ export function RulebookPage() {
 
         <Section title="9 · Creator grade · career track" anchor="grade">
           <P>
-            Creator Grade is your cumulative career tier across seasons. It
-            only advances through graduated projects — a single great project
-            doesn't change it.
+            Creator Grade is your cumulative career tier. It advances through
+            <B> Encore products</B> (score ≥ 84) — a single great product
+            doesn't lift the grade on its own.
           </P>
           <Table
             rows={[
-              ['Rookie',        '0 graduated',                                           'Every member starts here.'],
-              ['Builder',       '1 graduated · avg ≥ 60',                                'You can ship one project cleanly through 3 weeks.'],
-              ['Maker',         '2 graduated · avg ≥ 70',                                'Consistency shows.'],
-              ['Architect',     '3 graduated · avg ≥ 75 · tech diversity',               'Range across infra / AI / frontend / Web3.'],
-              ['Vibe Engineer', '5 graduated · avg ≥ 80 · 20+ applauds received',        'Craft quality recognized by the community.'],
-              ['Legend',        '10+ graduated · community influence',                   'Permanent Hall of Fame resident.'],
+              ['Rookie',        '0 Encore',                                              'Every member starts here.'],
+              ['Builder',       '1 Encore · avg ≥ 60',                                   'You can ship one product across the bar.'],
+              ['Maker',         '2 Encore · avg ≥ 70',                                   'Consistency shows.'],
+              ['Architect',     '3 Encore · avg ≥ 75 · tech diversity',                  'Range across infra / AI / frontend / Web3.'],
+              ['Vibe Engineer', '5 Encore · avg ≥ 80 · 20+ applauds received',           'Craft quality recognized by the community.'],
+              ['Legend',        '10+ Encore · community influence',                      'Permanent fixture at the top of /creators.'],
             ]}
           />
         </Section>
@@ -358,7 +355,7 @@ export function RulebookPage() {
           <P>
             Activity Points are credited in real time. <B>Applauds</B> are a
             lightweight reaction signal — 1 toggle per item, unlimited budget,
-            no effect on graduation score. They feed the Community pillar
+            no effect on the Encore line. They feed the Community pillar
             weakly as a "reactions present" signal.
           </P>
         </Section>

@@ -5,11 +5,15 @@ export type ProjectFilters = GridFilters
 
 const GRADES = ['Rookie', 'Builder', 'Maker', 'Architect', 'Vibe Engineer', 'Legend'] as const
 
+// 2026-05-05 rebrand · 'Graduated' / 'Rookie Circle' replaced. The
+// 'graduated' filter value is kept (still maps to projects.status =
+// 'graduated' / 'valedictorian' under the hood for legacy data), but
+// the label reads as Encore. 'retry' filter is dropped — Rookie
+// Circle as a status concept is retired.
 const STATUS_TABS: Array<{ value: NonNullable<ProjectFilters['status']>; label: string }> = [
-  { value: 'any',       label: 'All'       },
-  { value: 'active',    label: 'Active'    },
-  { value: 'graduated', label: 'Graduated' },
-  { value: 'retry',     label: 'Rookie Circle' },
+  { value: 'any',       label: 'All'    },
+  { value: 'active',    label: 'Active' },
+  { value: 'graduated', label: 'Encore' },
 ]
 
 // §11-NEW.1.1 · 7-category use-case taxonomy chip strip (2026-04-30 redesign).

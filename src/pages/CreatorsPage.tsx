@@ -151,8 +151,18 @@ export function CreatorsPage() {
           </select>
         </div>
 
-        {/* List */}
-        <div className="card-navy" style={{ borderRadius: '2px', overflow: 'hidden' }}>
+        {/* List · violet-tinted card so it visually parts ways with
+            ScoutsPage (gold-tinted card-navy default). Subtle but
+            consistent with the role accent (#A78BFA) applied across
+            this page (chips, YOU pin, score column). */}
+        <div
+          style={{
+            background: 'linear-gradient(180deg, rgba(167,139,250,0.07) 0%, rgba(167,139,250,0.03) 100%)',
+            border: '1px solid rgba(167,139,250,0.18)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}
+        >
           {loading ? (
             <div className="px-5 py-12 text-center font-mono text-xs" style={{ color: 'var(--text-muted)' }}>loading creators…</div>
           ) : filtered.length === 0 ? (
