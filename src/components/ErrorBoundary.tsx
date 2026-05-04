@@ -8,6 +8,7 @@
 // and a "home" link.
 
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import * as Sentry from '@sentry/react'
 
 interface Props {
   children: ReactNode
@@ -26,8 +27,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(err: Error, info: ErrorInfo) {
-    // Log so we can grep server-side / extension errors later.
+    // Local trace · grep-friendly during dev / browser extension issues.
     console.error('[commit.show] route error', err, info)
+    // Forward to Sentry so production render exceptions reach the
+    // dashboard. No-op when VITE_SENTRY_DSN is unset.
+    Sentry.captureException(err, { extra: { componentStack: info.componentStack } })
   }
 
   reload = () => {

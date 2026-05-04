@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User, AuthError } from '@supabase/supabase-js'
+import * as Sentry from '@sentry/react'
 import { supabase, PUBLIC_MEMBER_COLUMNS, type Member } from './supabase'
 
 export type OAuthProvider = 'google' | 'github' | 'twitter' | 'linkedin_oidc'
@@ -33,6 +34,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
+      // Tag Sentry events with the authenticated member id so production
+      // exceptions are attributable. No email / PII — Sentry init runs
+      // with sendDefaultPii: false, and we deliberately omit email here.
+      // No-op when Sentry isn't initialized (DSN missing).
+      Sentry.setUser(newSession?.user ? { id: newSession.user.id } : null)
     })
 
     return () => sub.subscription.unsubscribe()
