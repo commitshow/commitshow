@@ -265,6 +265,25 @@ export function LadderPage() {
                 </span>
               )
             })}
+            {/* Third option · navigates to /leaderboard rather than swapping
+                in-place because the 2D scatter is a different surface
+                (different data shape, dedicated controls). Keeping it
+                as a peer link in the same toggle preserves discovery
+                without redirecting in the URL state. */}
+            <span className="flex items-center gap-2">
+              <span aria-hidden="true" style={{ color: 'var(--text-faint)' }}>·</span>
+              <NavLink
+                to="/leaderboard"
+                className="font-mono text-[11px] tracking-wide"
+                style={({ isActive }) => ({
+                  textDecoration: 'none',
+                  color:      isActive ? 'var(--gold-500)' : 'var(--text-muted)',
+                  fontWeight: isActive ? 600 : 400,
+                })}
+              >
+                Map
+              </NavLink>
+            </span>
           </div>
         </div>
 
