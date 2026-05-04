@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { AuthModal } from './AuthModal'
 import { IconForecast, IconMenu, IconClose } from './icons'
 import { NotificationBell } from './NotificationBell'
+import { SideNav } from './SideNav'
 import { SCOUT_MONTHLY_VOTES, supabase, type ScoutTier } from '../lib/supabase'
 
 const TIER_COLOR: Record<string, string> = {
@@ -126,15 +127,10 @@ export function Nav() {
           </NavLink>
         </div>
 
-        {/* Center · 4 primary menus · desktop only */}
-        <div className="hidden md:flex items-center gap-8 flex-shrink-0">
-          {PRIMARY_LINKS.map(link => (
-            <NavLink key={link.to} to={link.to} className="text-sm font-mono tracking-wide"
-              style={({ isActive }) => linkStyle(isActive)}>
-              {link.label}
-            </NavLink>
-          ))}
-        </div>
+        {/* PRIMARY_LINKS were here · 2026-05-05 they moved to the
+            left SideNav rail (md+). On desktop the top bar now carries
+            only logo + search + audition + profile. Mobile slide-down
+            panel below still surfaces all primary links inline. */}
 
         {/* Right · Search + Audition CTA + Auth · desktop */}
         <div className="flex-1 hidden md:flex items-center justify-end gap-4">
@@ -358,6 +354,10 @@ export function Nav() {
           </button>
         </div>
       </nav>
+
+      {/* Desktop left sidebar · md+ only. Mobile keeps the slide-down
+          panel below for primary navigation. */}
+      <SideNav links={PRIMARY_LINKS} />
 
       {/* Mobile slide-down panel · slides from below the nav bar, fills viewport */}
       {mobileOpen && (

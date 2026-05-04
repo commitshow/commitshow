@@ -52,7 +52,10 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <div className="relative min-h-screen">
+    // 2026-05-05 · primary nav moved to a 200px left sidebar on md+.
+    // md:pl-[200px] reserves the space without changing any page-level
+    // padding (sections still set their own px-4/px-6 etc.).
+    <div className="relative min-h-screen md:pl-[200px]">
       <ScrollToTop />
       <Nav />
 
