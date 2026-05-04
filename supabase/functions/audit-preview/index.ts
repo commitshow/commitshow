@@ -322,6 +322,20 @@ Deno.serve(async (req) => {
   const force  = body.force === true
   const source = (body.source ?? '').toString().trim().slice(0, 64) || null
 
+  // Resolve authenticated caller (CLI device-flow JWT or browser session
+  // JWT). When present + not a project bot, we'll stamp creator_id on
+  // newly created preview projects so logged-in CLI users immediately
+  // own their audited repos. Best-effort · failure falls back to
+  // anonymous walk-on.
+  let authedUserId: string | null = null
+  if (isAuthed(req)) {
+    try {
+      const callerJwt = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
+      const { data: userData } = await admin.auth.getUser(callerJwt)
+      if (userData?.user?.id) authedUserId = userData.user.id
+    } catch { /* anonymous fallback */ }
+  }
+
   // Capture User-Agent for telemetry · format the CLI sends:
   //   commitshow-cli/<ver> node/<v> <platform>-<arch>
   // Falls back to the raw header for non-CLI callers (curl · web etc).
@@ -457,6 +471,10 @@ Deno.serve(async (req) => {
         github_url:   canon.canonical,
         live_url:     liveUrlEffective,
         project_name: canon.slug.split('/')[1],
+        // Authenticated CLI / web caller claims ownership immediately ·
+        // anon walk-ons stay creator_id=null and the project surfaces
+        // as a preview-only row that can be claimed later.
+        creator_id:   authedUserId,
         status:       'preview',
         season_id:    null,
         description:  `Preview audit · ${canon.slug}`,
@@ -465,6 +483,11 @@ Deno.serve(async (req) => {
       .single()
     if (createErr || !created) return json({ error: 'Failed to create preview project', detail: createErr?.message }, 500)
     projectId = created.id
+  } else if (existing && !existing.creator_id && authedUserId) {
+    // Existing anonymous preview row · authenticated caller claims it.
+    // Useful when the same repo was audited by the same user twice —
+    // first run was logged out, login happens, second run claims.
+    await admin.from('projects').update({ creator_id: authedUserId }).eq('id', projectId)
   } else if (liveUrlEffective && !existing?.live_url) {
     // Existing row · backfill live_url so analyze-project picks it up. No
     // delta-tracking needed — the next snapshot will reflect the change.
