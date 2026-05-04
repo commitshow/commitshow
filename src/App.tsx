@@ -36,6 +36,9 @@ const SearchPage              = lazy(() => import('./pages/SearchPage').then(m =
 const AdminEmailsPage         = lazy(() => import('./pages/AdminEmailsPage').then(m => ({ default: m.AdminEmailsPage })))
 const ScoutDetailPage         = lazy(() => import('./pages/ScoutDetailPage').then(m => ({ default: m.ScoutDetailPage })))
 const CreatorsPage            = lazy(() => import('./pages/CreatorsPage').then(m => ({ default: m.CreatorsPage })))
+const CreatorDetailPage       = lazy(() => import('./pages/CreatorDetailPage').then(m => ({ default: m.CreatorDetailPage })))
+const CommunityFeedPage       = lazy(() => import('./pages/CommunityFeedPage').then(m => ({ default: m.CommunityFeedPage })))
+const ProjectSlugRedirect     = lazy(() => import('./pages/ProjectSlugRedirect').then(m => ({ default: m.ProjectSlugRedirect })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -61,6 +64,10 @@ export default function App() {
               Card view lives at /ladder?view=cards. Direct project URLs unchanged. */}
           <Route path="/projects"         element={<Navigate to="/ladder?view=cards" replace />} />
           <Route path="/projects/:id"     element={<ProjectDetailPage />} />
+          {/* Slug-friendly URL · 2026-05-05 · resolves to canonical
+              /projects/:id. Used by user-share templates so tweet
+              cards display "/project/<name>" instead of a uuid. */}
+          <Route path="/project/:slug"    element={<ProjectSlugRedirect />} />
           <Route path="/submit"           element={<SubmitPage />} />
           <Route path="/me"               element={<ProfilePage />} />
           <Route path="/library"          element={<LibraryPage />} />
@@ -79,7 +86,7 @@ export default function App() {
               (/scouts, /creators) are the only thing that differs. */}
           <Route path="/scouts/:id"       element={<ScoutDetailPage />} />
           <Route path="/creators"         element={<CreatorsPage />} />
-          <Route path="/creators/:id"     element={<ScoutDetailPage />} />
+          <Route path="/creators/:id"     element={<CreatorDetailPage />} />
           <Route path="/rulebook"         element={<RulebookPage />} />
           <Route path="/terms"            element={<TermsPage />} />
           <Route path="/privacy"          element={<PrivacyPage />} />
@@ -91,7 +98,12 @@ export default function App() {
           <Route path="/cli/link"         element={<CliLinkPage />} />
 
           {/* Creator Community (§13-B) */}
-          <Route path="/community"                     element={<Navigate to="/community/build-logs" replace />} />
+          {/* /community lands on the unified feed (cold-start fix · 2026-05-05).
+              Was: redirect to /community/build-logs which displayed an
+              empty bucket on first visit. The feed aggregates posts AND
+              project comments so the page feels alive even when posts
+              are sparse. Category sub-pages still work directly. */}
+          <Route path="/community"                     element={<CommunityFeedPage />} />
           <Route path="/community/build-logs"          element={<BuildLogsPage />} />
           <Route path="/community/stacks"              element={<StacksPage />} />
           <Route path="/community/asks"                element={<AsksPage />} />

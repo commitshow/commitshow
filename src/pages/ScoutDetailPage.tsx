@@ -1,9 +1,10 @@
-// /scouts/:id · per-scout activity page.
+// /scouts/:id · per-scout JUDGMENT activity.
 //
-// Shows the scout's stats hero + recent forecasts (with project +
-// correctness) + recent applauds. Surfaces what their judgment looks
-// like over time so a creator landing here from /scouts can decide
-// whether to weigh this scout's vote on their project.
+// Shows the scout's forecast track record + applaud feed. Specifically
+// scoped to the "judging" side of a member's activity — a creator
+// landing here from /scouts uses this to decide whether to weigh this
+// scout's vote on their product. Builder-side activity (their own
+// products / audits) lives on /creators/:id (CreatorDetailPage).
 
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -156,6 +157,7 @@ export function ScoutDetailPage() {
     <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen">
       <div className="max-w-4xl mx-auto">
         <Link to="/scouts" className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>← Scouts</Link>
+        <div className="font-mono text-[10px] tracking-widest mt-3 mb-1" style={{ color: 'var(--gold-500)' }}>// SCOUT ACTIVITY</div>
         {!loaded && <div className="mt-8 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>loading scout…</div>}
         {loaded && error && <div className="mt-8 font-mono text-xs" style={{ color: 'var(--scarlet)' }}>{error}</div>}
         {loaded && !error && member && (

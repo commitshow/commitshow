@@ -249,10 +249,8 @@ function BenefitRow({ k, v, vColor }: { k: string; v: string; vColor: string }) 
 function ScoutRow({ rank, member: m, isMine }: { rank: number; member: MemberStats; isMine?: boolean }) {
   const tier = m.tier as ScoutTier
   const tierColor = TIER_COLOR[tier]
-  // display_name is always populated post 20260425130000_display_name_privacy.
   const displayName = m.display_name || 'Member'
   const initial = displayName.slice(0, 1).toUpperCase()
-  const rankBadge = isMine ? 'YOU' : `#${rank}`
 
   return (
     <Link
@@ -261,13 +259,16 @@ function ScoutRow({ rank, member: m, isMine }: { rank: number; member: MemberSta
       style={{
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         textDecoration: 'none',
-        background: isMine ? 'rgba(240,192,64,0.05)' : undefined,
+        // Differentiate the "you" pin · gold tint background + a 3-px
+        // gold left bar so the row visually hooks out of the list.
+        background: isMine ? 'rgba(240,192,64,0.10)' : undefined,
+        boxShadow:  isMine ? 'inset 3px 0 0 var(--gold-500)' : undefined,
       }}
-      onMouseEnter={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.08)' : 'rgba(240,192,64,0.03)')}
-      onMouseLeave={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.05)' : 'transparent')}
+      onMouseEnter={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.14)' : 'rgba(240,192,64,0.03)')}
+      onMouseLeave={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.10)' : 'transparent')}
     >
-      <div className="font-mono text-xs font-medium" style={{ color: rank <= 3 ? tierColor : 'var(--text-muted)' }}>
-        {rankBadge}
+      <div className="font-mono text-xs font-medium tabular-nums" style={{ color: isMine ? 'var(--gold-500)' : (rank <= 3 ? tierColor : 'var(--text-muted)') }}>
+        #{rank}
       </div>
       <div className="flex items-center gap-3 min-w-0">
         <div
@@ -276,7 +277,7 @@ function ScoutRow({ rank, member: m, isMine }: { rank: number; member: MemberSta
             width: 32, height: 32,
             background: m.avatar_url ? 'var(--navy-800)' : tierColor,
             color: 'var(--navy-900)',
-            border: '1px solid rgba(240,192,64,0.25)',
+            border: `1px solid ${isMine ? 'var(--gold-500)' : 'rgba(240,192,64,0.25)'}`,
             borderRadius: '2px',
           }}
         >
@@ -290,7 +291,7 @@ function ScoutRow({ rank, member: m, isMine }: { rank: number; member: MemberSta
           </div>
           <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
             Creator {m.creator_grade ?? 'Rookie'}
-            {m.graduated_count > 0 ? ` · ${m.graduated_count} graduated` : ''}
+            {m.graduated_count > 0 ? ` · ${m.graduated_count} Encore` : ''}
           </div>
         </div>
       </div>

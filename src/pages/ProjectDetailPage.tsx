@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
+import { projectSlug, projectShareUrl } from '../lib/projectSlug'
 import {
   fetchProjectById,
   fetchProjectTimeline,
@@ -515,7 +516,13 @@ export function ProjectDetailPage() {
                   const strengths   = snapshotResult?.rich?.scout_brief?.strengths  ?? []
                   const firstConcernBullet  = weaknesses.length > 0 ? weaknesses[0]?.bullet ?? '' : ''
                   const firstStrengthBullet = strengths.length  > 0 ? strengths[0]?.bullet  ?? '' : ''
-                  const projectUrl = `https://commit.show/projects/${project.id}`
+                  // Slug + owner name surfacing for share templates · {project_slug}
+                  // becomes /project/<slug> URL, {owner_name} reads the creator
+                  // display_name from the loaded project row (fallback to repo
+                  // owner login when display_name isn't set).
+                  const projectSlugStr = projectSlug(project.project_name ?? repoName)
+                  const ownerName      = (project.creator_name ?? owner ?? '').trim()
+                  const projectUrl     = projectShareUrl(project.project_name ?? repoName, project.id)
 
                   const options: ShareOption[] = []
                   if (project.graduation_grade) {
@@ -527,6 +534,8 @@ export function ProjectDetailPage() {
                       templateId: 'graduation',
                       slots: {
                         project_name:    project.project_name ?? repoName,
+                        project_slug:    projectSlugStr,
+                        owner_name:      ownerName,
                         grade:           project.graduation_grade,
                         score,
                         rank:            '',
@@ -543,6 +552,8 @@ export function ProjectDetailPage() {
                       templateId: 'milestone',
                       slots: {
                         project_name:    project.project_name ?? repoName,
+                        project_slug:    projectSlugStr,
+                        owner_name:      ownerName,
                         milestone_label: m.label,
                         rank:            project.audit_count ?? '',
                         category:        m.category ?? project.business_category ?? '',
@@ -559,6 +570,8 @@ export function ProjectDetailPage() {
                       score,
                       band,
                       owner,
+                      owner_name:     ownerName,
+                      project_slug:   projectSlugStr,
                       project_name:   repoName,
                       project_id:     project.id,
                       top_concern_1:  firstConcernBullet,

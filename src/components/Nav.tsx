@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth'
 import { AuthModal } from './AuthModal'
 import { IconForecast, IconMenu, IconClose } from './icons'
 import { NotificationBell } from './NotificationBell'
-import { SCOUT_MONTHLY_VOTES, type ScoutTier } from '../lib/supabase'
+import { SCOUT_MONTHLY_VOTES, supabase, type ScoutTier } from '../lib/supabase'
 
 const TIER_COLOR: Record<string, string> = {
   Bronze: '#CD7F32', Silver: '#C0C0C0', Gold: '#F0C040', Platinum: '#E5E4E2',
@@ -295,6 +295,13 @@ export function Nav() {
                       </div>
                     )}
                   </NavLink>
+
+                  {/* My Products · creator-side counterpart to the
+                      Forecast Balance callout above. Same callout
+                      pattern (callout with key info + accent border)
+                      so the two roles get equal weight in the menu. */}
+                  <MyProductsCallout onSelect={() => setMenuOpen(false)} />
+
                   {/* Profile dropdown is user-action only. Browsing entry points
                       (Ladder / Library / Community / Scouts) live in the main
                       Nav strip; explanatory pages (Backstage / Rulebook /
@@ -568,5 +575,73 @@ function IconMail({ size = 13 }: { size?: number }) {
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="M3 7l9 6 9-6" />
     </svg>
+  )
+}
+
+// My Products callout · shows the authed user's product portfolio
+// summary (total · Encore count · best score) inside the profile
+// dropdown. Routes to /me which lists all the user's audited
+// projects. Counts fetch lazily on mount; while loading the box
+// shows muted placeholders so the dropdown stays a fixed height.
+function MyProductsCallout({ onSelect }: { onSelect: () => void }) {
+  const { user } = useAuth()
+  const [counts, setCounts] = useState<{ total: number; encore: number; best: number | null }>({ total: 0, encore: 0, best: null })
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    let alive = true
+    ;(async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('score_total')
+        .eq('creator_id', user.id)
+      if (!alive) return
+      const rows = (data ?? []) as Array<{ score_total: number | null }>
+      const total = rows.length
+      const encore = rows.filter(r => (r.score_total ?? 0) >= 84).length
+      const best   = rows.length === 0 ? null : Math.max(0, ...rows.map(r => r.score_total ?? 0))
+      setCounts({ total, encore, best })
+      setLoaded(true)
+    })()
+    return () => { alive = false }
+  }, [user])
+
+  const accent     = '#A78BFA'   // creator-side violet · matches CreatorsPage
+  const hasEncore  = counts.encore > 0
+  const headerHint = hasEncore ? `${counts.encore} Encore` : counts.total === 0 ? 'No products yet' : 'Climb to 84+'
+
+  return (
+    <NavLink
+      to="/me"
+      onClick={onSelect}
+      className="block px-3 py-2 mb-1 transition-colors"
+      style={{
+        background: `${accent}12`,
+        border: `1px solid ${accent}40`,
+        borderRadius: '2px',
+        textDecoration: 'none',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = `${accent}80`)}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = `${accent}40`)}
+    >
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+          MY PRODUCTS
+        </span>
+        <span className="font-mono text-[10px] tabular-nums" style={{ color: hasEncore ? accent : 'var(--cream)' }}>
+          {loaded ? <><strong>{counts.total}</strong><span style={{ color: 'var(--text-muted)' }}> total</span></> : '—'}
+        </span>
+      </div>
+      <div className="font-mono text-[10px] flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-secondary)' }}>
+        <span style={{ color: hasEncore ? accent : 'var(--text-muted)' }}>{headerHint}</span>
+        {counts.best != null && counts.best > 0 && (
+          <>
+            <span style={{ color: 'var(--text-faint)' }}>·</span>
+            <span>best <strong style={{ color: 'var(--cream)' }}>{counts.best}</strong>/100</span>
+          </>
+        )}
+      </div>
+    </NavLink>
   )
 }

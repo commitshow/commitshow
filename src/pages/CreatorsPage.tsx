@@ -80,8 +80,11 @@ export function CreatorsPage() {
   return (
     <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen">
       <div className="max-w-5xl mx-auto">
+        {/* Creators page accent · violet (#A78BFA · "Architect" tone)
+            differentiates from Scouts, which uses brand gold. Reads as
+            "builders" vs "judges" at a glance. */}
         <header className="mb-5">
-          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// CREATORS</div>
+          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: '#A78BFA' }}>// CREATORS</div>
           <h1 className="font-display font-black text-3xl md:text-4xl mb-1" style={{ color: 'var(--cream)' }}>
             Who's actually shipping
           </h1>
@@ -92,7 +95,7 @@ export function CreatorsPage() {
 
         {/* Grade filter chips */}
         <div className="flex gap-2 mb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <GradeChip label="All" count={rows.length} active={gradeFilter === 'any'} onClick={() => setGradeFilter('any')} color="var(--gold-500)" />
+          <GradeChip label="All" count={rows.length} active={gradeFilter === 'any'} onClick={() => setGradeFilter('any')} color="#A78BFA" />
           {GRADES.map(g => (
             <GradeChip
               key={g}
@@ -181,7 +184,6 @@ function CreatorRow({ rank, member: m, isMine }: { rank: number; member: Creator
   const gradeColor = GRADE_COLOR[grade]
   const displayName = m.display_name || 'Member'
   const initial = displayName.slice(0, 1).toUpperCase()
-  const rankBadge = isMine ? 'YOU' : `#${rank}`
   return (
     <Link
       to={`/creators/${m.id}`}
@@ -189,13 +191,14 @@ function CreatorRow({ rank, member: m, isMine }: { rank: number; member: Creator
       style={{
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         textDecoration: 'none',
-        background: isMine ? 'rgba(240,192,64,0.05)' : undefined,
+        background: isMine ? 'rgba(167,139,250,0.10)' : undefined,
+        boxShadow:  isMine ? 'inset 3px 0 0 #A78BFA' : undefined,
       }}
-      onMouseEnter={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.08)' : 'rgba(240,192,64,0.03)')}
-      onMouseLeave={e => (e.currentTarget.style.background = isMine ? 'rgba(240,192,64,0.05)' : 'transparent')}
+      onMouseEnter={e => (e.currentTarget.style.background = isMine ? 'rgba(167,139,250,0.14)' : 'rgba(167,139,250,0.04)')}
+      onMouseLeave={e => (e.currentTarget.style.background = isMine ? 'rgba(167,139,250,0.10)' : 'transparent')}
     >
-      <div className="font-mono text-xs font-medium" style={{ color: rank <= 3 ? gradeColor : 'var(--text-muted)' }}>
-        {rankBadge}
+      <div className="font-mono text-xs font-medium tabular-nums" style={{ color: isMine ? '#A78BFA' : (rank <= 3 ? gradeColor : 'var(--text-muted)') }}>
+        #{rank}
       </div>
       <div className="flex items-center gap-3 min-w-0">
         <div
@@ -204,7 +207,7 @@ function CreatorRow({ rank, member: m, isMine }: { rank: number; member: Creator
             width: 32, height: 32,
             background: m.avatar_url ? 'var(--navy-800)' : gradeColor,
             color: 'var(--navy-900)',
-            border: '1px solid rgba(240,192,64,0.25)',
+            border: `1px solid ${isMine ? '#A78BFA' : 'rgba(240,192,64,0.25)'}`,
             borderRadius: '2px',
           }}
         >
@@ -213,7 +216,9 @@ function CreatorRow({ rank, member: m, isMine }: { rank: number; member: Creator
             : initial}
         </div>
         <div className="min-w-0">
-          <div className="font-display font-bold text-sm truncate" style={{ color: 'var(--cream)' }}>{displayName}</div>
+          <div className="font-display font-bold text-sm truncate" style={{ color: 'var(--cream)' }}>
+            {displayName}
+          </div>
           <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
             Scout {m.tier ?? 'Bronze'}
           </div>

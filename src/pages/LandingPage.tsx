@@ -51,12 +51,12 @@ const GRADE_ICONS: Record<string, React.ReactNode> = {
 }
 
 const GRADE_DATA = [
-  { name: 'Rookie',        cond: '1+ audit · 0 graduated' },
-  { name: 'Builder',       cond: '1 graduated · avg 60+' },
-  { name: 'Maker',         cond: '2 graduated · avg 70+' },
-  { name: 'Architect',     cond: '3 graduated · avg 75+ · tech diversity' },
-  { name: 'Vibe Engineer', cond: '5 graduated · 20+ applause · avg 80+' },
-  { name: 'Legend',        cond: '10+ graduated · community influence' },
+  { name: 'Rookie',        cond: '1+ audit · 0 Encore' },
+  { name: 'Builder',       cond: '1 Encore · avg 60+' },
+  { name: 'Maker',         cond: '2 Encore · avg 70+' },
+  { name: 'Architect',     cond: '3 Encore · avg 75+ · tech diversity' },
+  { name: 'Vibe Engineer', cond: '5 Encore · 20+ applause · avg 80+' },
+  { name: 'Legend',        cond: '10+ Encore · community influence' },
 ]
 
 const UNLOCK_DATA = [
@@ -83,21 +83,17 @@ export function LandingPage() {
       {/* ── LADDER TOP 3 · always-on · §11-NEW.1 ── */}
       <LadderTopStrip />
 
-      {/* ── HOW IT WORKS · two layers (always-on + quarterly) ──
-          v3 reframe: Ladder runs continuously; quarterly events
-          (Season Zero etc.) culminate in graduation. Audience needs
-          both surfaces in the same glance — left = always, right =
-          seasonal. */}
+      {/* ── HOW IT WORKS · two layers (always-on ladder + Encore bar) ── */}
       <section id="how" className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// HOW IT WORKS</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight">
-            Ladder always live<br />Quarterly graduation
+            Ranked always live<br />Score 84+ earns Encore
           </h2>
           <p className="font-light max-w-xl mb-14" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            Two layers. The ladder runs the whole year — every audited project ranks against its category.
-            Quarterly events drop in on the admin's schedule, stack a Scout-Forecast layer on top, and end
-            in a graduation tier.
+            Continuous ranking. Every audited product climbs against its category. Cross the 84 line on
+            total score — Audit 50 + Scout 30 + Community 20 — and the product carries a permanent Encore
+            badge until it drops back below.
           </p>
 
           <div className="grid md:grid-cols-2 gap-5 mb-16">
@@ -120,24 +116,22 @@ export function LandingPage() {
               </div>
             </div>
 
-            {/* Quarterly layer */}
+            {/* Encore layer */}
             <div className="card-navy p-7" style={{ borderLeft: '3px solid #A78BFA' }}>
-              <div className="font-mono text-[10px] tracking-widest mb-3" style={{ color: '#A78BFA' }}>QUARTERLY · GRADUATION</div>
+              <div className="font-mono text-[10px] tracking-widest mb-3" style={{ color: '#A78BFA' }}>QUALITY BAR · ENCORE</div>
               <h3 className="font-display font-bold text-2xl mb-1" style={{ color: 'var(--cream)' }}>
                 Audit 50 + Scout 30 + Community 20
               </h3>
               <h3 className="font-display font-bold text-2xl mb-4" style={{ color: 'var(--cream)' }}>
-                Real cohorts. Real outcomes.
+                Cross 84 → Encore.
               </h3>
               <p className="text-sm font-light leading-relaxed mb-5" style={{ color: 'rgba(248,245,238,0.55)' }}>
-                Every 3 weeks a Scout-Forecast layer adds expert prediction weight. The top 20% of the
-                quarterly cohort graduates: 1 Valedictorian, 5% Honors, 14.5% Graduate. The rest join the
-                Rookie Circle and come back next season.
+                Total score crosses 84 → product earns the permanent Encore badge. No tiers, no
+                ceremony · score above the bar = Encore, score below = work in progress. The badge
+                sticks until it doesn't deserve to. Featured Lanes pull from the Encore set, so the rest of the platform amplifies what's actually shipping.
               </p>
               <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                {currentQuarterly
-                  ? `${currentQuarterly.name} · ${currentQuarterly.status === 'active' ? 'running now' : currentQuarterly.status === 'upcoming' ? 'opens soon' : 'closed'}`
-                  : 'No quarterly running · ladder is open'}
+                Threshold · 84/100 · audit re-runs are free for owners
               </div>
             </div>
           </div>
@@ -219,28 +213,28 @@ export function LandingPage() {
       {/* ── THIS WEEK · 3-min digest ── */}
       <ThisWeekHighlight />
 
-      {/* ── QUARTERLY CULMINATION · graduation tiers ── */}
+      {/* ── ENCORE PRODUCTS · score-cut quality bar (was 'graduation tiers') ── */}
       <section className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
         <div className="max-w-5xl mx-auto">
-          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: '#A78BFA' }}>// QUARTERLY CULMINATION</div>
+          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// ENCORE PRODUCTS</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">
-            Top 20% graduates
+            Score 84+ earns Encore
           </h2>
           <p className="font-light max-w-xl mb-12" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            Relative cut against the season cohort — not an absolute score gate. Everything below 20%
-            joins the Rookie Circle and comes back next season.
+            One bar. Total score (Audit 50 + Scout 30 + Community 20) crosses 84 → Encore badge on the
+            product, permanent. Drops back below the bar → badge disappears. No tiers, no ceremony,
+            just a quality threshold visible on the product itself.
           </p>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
             {[
-              { grade: 'Valedictorian', pct: '≈0.5% (1 fixed)',  color: '#F0C040', perks: 'Hall of Fame · 10K media exposure · 1wk featured · Special NFT' },
-              { grade: 'Honors',        pct: 'Top 5%',           color: '#A78BFA', perks: 'Hall of Fame · Cert badge · Featured · NFT' },
-              { grade: 'Graduate',      pct: 'Top 20%',          color: '#60A5FA', perks: 'Grad badge · Brief full reveal · MD marketplace access' },
-              { grade: 'Rookie Circle', pct: 'Everyone else',    color: '#6B7280', perks: 'Audit report · Brief private option · Try again next season' },
-            ].map(({ grade, pct, color, perks }) => (
-              <div key={grade} className="card-navy p-5 transition-all hover:border-gold-500/20" style={{ borderTop: `3px solid ${color}` }}>
-                <div className="font-display font-bold text-base mb-0.5" style={{ color }}>{grade}</div>
-                <div className="font-mono text-xs mb-3" style={{ color: 'rgba(248,245,238,0.3)' }}>{pct}</div>
-                <div className="text-xs font-light leading-relaxed" style={{ color: 'rgba(248,245,238,0.4)' }}>{perks}</div>
+              { band: 'Encore',   range: '84 – 100',  color: 'var(--gold-500)', desc: 'Permanent ★ badge on the product card · surfaced in Featured Lanes · creator grade boost.' },
+              { band: 'Strong',   range: '70 – 83',   color: '#00D4AA',         desc: 'Audited and shipped, climbing. One axis push (a Scout vote, an audit re-run after a fix) typically clears the bar.' },
+              { band: 'Early',    range: 'Below 70',  color: '#6B7280',         desc: 'Fresh on the ladder. Pick a concern from the audit report, fix it, re-audit · the score moves with each commit.' },
+            ].map(({ band, range, color, desc }) => (
+              <div key={band} className="card-navy p-5 transition-all hover:border-gold-500/20" style={{ borderTop: `3px solid ${color}` }}>
+                <div className="font-display font-bold text-base mb-0.5" style={{ color }}>{band}</div>
+                <div className="font-mono text-xs mb-3 tabular-nums" style={{ color: 'rgba(248,245,238,0.3)' }}>{range}</div>
+                <div className="text-xs font-light leading-relaxed" style={{ color: 'rgba(248,245,238,0.4)' }}>{desc}</div>
               </div>
             ))}
           </div>

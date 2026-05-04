@@ -94,7 +94,12 @@ export function ShareOnXMenu({ options, url, variant = 'default' }: Props) {
 
   const fire = async (opt: ShareOption) => {
     setBusy(true)
-    await shareWithTemplate(opt.templateId, opt.slots, url)
+    // 2026-05-05 · don't pass url separately. Templates already embed
+    // the canonical commit.show/project/{slug} URL inside the body
+    // text; passing &url= on top of that produced a duplicate URL in
+    // the rendered tweet. Letting X auto-detect from the body keeps
+    // the unfurled card behavior without the duplication.
+    await shareWithTemplate(opt.templateId, opt.slots)
     setBusy(false)
     setOpen(false)
   }
