@@ -171,25 +171,27 @@ export function ProfilePage() {
                   DISPLAY NAME
                 </label>
                 {editingName ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <input
                       value={draftName}
                       onChange={e => setDraftName(e.target.value)}
                       maxLength={40}
                       placeholder="Your display name"
-                      className="flex-1 min-w-[200px] px-3 py-2 font-display text-lg"
+                      className="w-full sm:flex-1 sm:min-w-[200px] px-3 py-2 font-display text-lg"
                       style={{ background: 'rgba(6,12,26,0.5)', border: '1px solid rgba(240,192,64,0.35)', color: 'var(--cream)', borderRadius: '2px' }}
                     />
-                    <button onClick={saveName} disabled={saving}
-                      className="px-3 py-2 font-mono text-xs tracking-wide"
-                      style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: saving ? 'wait' : 'pointer' }}>
-                      {saving ? 'SAVING…' : 'SAVE'}
-                    </button>
-                    <button onClick={() => { setEditingName(false); setDraftName(member?.display_name || ''); setSaveError('') }}
-                      className="px-3 py-2 font-mono text-xs tracking-wide"
-                      style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '2px', cursor: 'pointer' }}>
-                      CANCEL
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={saveName} disabled={saving}
+                        className="flex-1 sm:flex-none px-3 py-2.5 font-mono text-xs tracking-wide"
+                        style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: saving ? 'wait' : 'pointer' }}>
+                        {saving ? 'SAVING…' : 'SAVE'}
+                      </button>
+                      <button onClick={() => { setEditingName(false); setDraftName(member?.display_name || ''); setSaveError('') }}
+                        className="flex-1 sm:flex-none px-3 py-2.5 font-mono text-xs tracking-wide"
+                        style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '2px', cursor: 'pointer' }}>
+                        CANCEL
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex items-baseline gap-3 flex-wrap">
@@ -198,7 +200,7 @@ export function ProfilePage() {
                     </h1>
                     <button onClick={() => setEditingName(true)}
                       className="font-mono text-xs tracking-wide"
-                      style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', padding: '4px 10px', cursor: 'pointer' }}>
+                      style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', padding: '8px 14px', cursor: 'pointer', minHeight: 36 }}>
                       ✎ EDIT
                     </button>
                   </div>
@@ -295,14 +297,14 @@ export function ProfilePage() {
 
         {/* ── My Audits ── */}
         <div className="mb-8">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3 mb-3">
             <div>
               <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY AUDITS</div>
               <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 Every product you've auditioned · click to open its dashboard
               </div>
             </div>
-            <NavLink to="/submit" className="font-mono text-xs font-medium tracking-wide px-3 py-1.5"
+            <NavLink to="/submit" className="font-mono text-xs font-medium tracking-wide px-3 py-2 text-center whitespace-nowrap"
               style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}>
               AUDITION A NEW PROJECT →
             </NavLink>

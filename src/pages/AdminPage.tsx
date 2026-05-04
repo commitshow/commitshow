@@ -30,6 +30,9 @@ interface UserRow {
   total_graduated: number
   is_admin:        boolean
   created_at:      string
+  // Populated by admin_member_login_methods RPC · provider keys are
+  // 'email' · 'google' · 'github' · 'twitter' · 'linkedin_oidc'.
+  providers?:      string[]
 }
 
 interface AuditStats {
@@ -204,12 +207,26 @@ export function AdminPage() {
   }
 
   async function loadUserList() {
-    const { data } = await supabase
-      .from('members')
-      .select('id, display_name, tier, creator_grade, activity_points, total_graduated, is_admin, created_at')
-      .order('created_at', { ascending: false })
-      .limit(50)
-    setUserList((data ?? []) as UserRow[])
+    const [{ data }, { data: methods }] = await Promise.all([
+      supabase
+        .from('members')
+        .select('id, display_name, tier, creator_grade, activity_points, total_graduated, is_admin, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50),
+      // admin_member_login_methods · SECURITY DEFINER · admin-gated RPC
+      // (20260504_admin_login_methods migration). Returns user_id +
+      // providers[] aggregated from auth.identities.
+      supabase.rpc('admin_member_login_methods'),
+    ])
+    const providerMap = new Map<string, string[]>()
+    for (const r of (methods ?? []) as Array<{ user_id: string; providers: string[] }>) {
+      providerMap.set(r.user_id, r.providers ?? [])
+    }
+    const rows = ((data ?? []) as UserRow[]).map(r => ({
+      ...r,
+      providers: providerMap.get(r.id) ?? [],
+    }))
+    setUserList(rows)
   }
 
   async function loadUserStats() {
@@ -906,10 +923,11 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
           // 사용자 리스트 · 최근 가입 50명
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
-          <div className="grid grid-cols-[1fr_minmax(0,1fr)_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 font-mono text-[10px] tracking-widest uppercase"
+          <div className="grid grid-cols-[1fr_minmax(0,1fr)_120px_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 font-mono text-[10px] tracking-widest uppercase"
                style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)' }}>
             <span>이름</span>
             <span className="hidden sm:block">ID</span>
+            <span>로그인</span>
             <span>티어</span>
             <span>등급</span>
             <span className="text-right">AP</span>
@@ -926,7 +944,7 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
             const disabled = busy || isSelf || !hasToken
             return (
               <div key={u.id}
-                   className="grid grid-cols-[1fr_minmax(0,1fr)_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 items-center text-xs"
+                   className="grid grid-cols-[1fr_minmax(0,1fr)_120px_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 items-center text-xs"
                    style={{
                      background:    u.is_admin ? 'rgba(240,192,64,0.08)' : i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
                      borderTop:     '1px solid rgba(255,255,255,0.04)',
@@ -937,6 +955,12 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
                   {isSelf && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)', borderRadius: '2px', fontSize: '10px' }}>본인</span>}
                 </span>
                 <span className="hidden sm:block font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{u.id.slice(0, 8)}</span>
+                <span className="flex flex-wrap gap-1">
+                  {(u.providers ?? []).length === 0 && (
+                    <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>—</span>
+                  )}
+                  {(u.providers ?? []).map(p => <ProviderBadge key={p} provider={p} />)}
+                </span>
                 <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.tier ?? '—'}</span>
                 <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.creator_grade ?? '—'}</span>
                 <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: '#fff' }}>{u.activity_points ?? 0}</span>
@@ -1606,6 +1630,35 @@ function Stat({ label, value, sub, tone, onClick, hint }: {
 
 function Loading() {
   return <div className="font-mono text-xs py-8 text-center" style={{ color: 'rgba(255,255,255,0.55)' }}>로딩 중…</div>
+}
+
+// Provider badge · 사용자 표 의 로그인 방식 컬럼.
+// Supabase Auth provider keys: 'email' · 'google' · 'github' ·
+// 'twitter' (= X) · 'linkedin_oidc'.
+function ProviderBadge({ provider }: { provider: string }) {
+  const m: Record<string, { label: string; color: string; bg: string }> = {
+    email:          { label: 'mail',     color: 'rgba(255,255,255,0.85)', bg: 'rgba(255,255,255,0.08)' },
+    google:         { label: 'Google',   color: '#4285F4', bg: 'rgba(66,133,244,0.12)' },
+    github:         { label: 'GitHub',   color: '#fff',    bg: 'rgba(255,255,255,0.12)' },
+    twitter:        { label: 'X',        color: '#fff',    bg: '#000' },
+    linkedin_oidc:  { label: 'LinkedIn', color: '#0A66C2', bg: 'rgba(10,102,194,0.15)' },
+  }
+  const meta = m[provider] ?? { label: provider, color: '#fff', bg: 'rgba(255,255,255,0.08)' }
+  return (
+    <span
+      className="font-mono text-[9px] px-1.5 py-0.5"
+      style={{
+        background: meta.bg,
+        color:      meta.color,
+        border:     '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 2,
+        whiteSpace: 'nowrap',
+      }}
+      title={`signed in via ${provider}`}
+    >
+      {meta.label}
+    </span>
+  )
 }
 
 // Top-N breakdown list · used for source/version/platform splits in /admin > CLI.
