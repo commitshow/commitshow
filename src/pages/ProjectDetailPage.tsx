@@ -31,14 +31,28 @@ import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
 import { BackstagePanel } from '../components/BackstagePanel'
 import { ProjectComments } from '../components/ProjectComments'
 import { ShareToXModal } from '../components/ShareToXModal'
-import { ShareUserTemplateButton } from '../components/ShareUserTemplateButton'
-import { MilestoneShareDropdown, MILESTONE_LABELS, type MilestoneRow } from '../components/MilestoneShareDropdown'
+import { ShareOnXMenu, type ShareOption } from '../components/ShareOnXMenu'
+import { MILESTONE_LABELS, type MilestoneRow } from '../components/MilestoneShareDropdown'
 import { GraduationStanding } from '../components/GraduationStanding'
 import { BadgeSnippet } from '../components/BadgeSnippet'
 import { useAuth } from '../lib/auth'
 import { computeSeasonProgress, loadCurrentSeason } from '../lib/season'
 import type { Season } from '../lib/supabase'
 import type { SeasonPhase, SeasonProgress } from '../lib/season'
+
+// Compact relative-time string · "today · yesterday · 3d ago · 2w ago · ...".
+// Inline-local because the project has multiple timeAgo helpers in
+// neighboring components but no shared lib export yet.
+function relativeTimeShort(iso: string): string {
+  const ms  = Date.now() - new Date(iso).getTime()
+  const day = Math.floor(ms / 86_400_000)
+  if (day < 1)   return 'today'
+  if (day === 1) return 'yesterday'
+  if (day < 7)   return `${day}d ago`
+  if (day < 30)  return `${Math.floor(day / 7)}w ago`
+  if (day < 365) return `${Math.floor(day / 30)}mo ago`
+  return `${Math.floor(day / 365)}y ago`
+}
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -485,13 +499,12 @@ export function ProjectDetailPage() {
                     GITHUB ↗
                   </a>
                 )}
-                {/* Owner one-click shares · pull user_share templates from
-                    cmo_templates and open X intent URL. Three flavors
-                    layer based on project state — most-meaningful event
-                    wins:
-                      graduated  → "Share my graduation"
-                      milestone  → "Share my milestone" (latest one)
-                      always     → "Share my audit"   (audit_complete) */}
+                {/* Owner unified Share on X menu · single entry point that
+                    expands to the right picker based on project state.
+                    Audit always available · graduation when graduated ·
+                    one row per milestone the project has hit. Order in
+                    the menu mirrors prestige (graduation first, then
+                    milestones desc by recency, then audit). */}
                 {isOwner && (() => {
                   const score = project.score_total ?? 0
                   const band  = score >= 80 ? 'strong' : score >= 60 ? 'mid' : 'early'
@@ -503,52 +516,57 @@ export function ProjectDetailPage() {
                   const firstConcernBullet  = weaknesses.length > 0 ? weaknesses[0]?.bullet ?? '' : ''
                   const firstStrengthBullet = strengths.length  > 0 ? strengths[0]?.bullet  ?? '' : ''
                   const projectUrl = `https://commit.show/projects/${project.id}`
-                  return (
-                    <>
-                      {/* Graduation share · only when project has graduated. */}
-                      {project.graduation_grade && (
-                        <ShareUserTemplateButton
-                          templateId="graduation"
-                          slots={{
-                            project_name:    project.project_name ?? repoName,
-                            grade:           project.graduation_grade,
-                            score,
-                            rank:            '',                  // TODO · season_standings join
-                            total_in_season: '',                  // TODO
-                            project_id:      project.id,
-                          }}
-                          url={projectUrl}
-                          variant="gold"
-                          label="Share graduation"
-                        />
-                      )}
-                      {/* Milestone share · dropdown picker · single button for
-                          1 milestone, popover list for 2+. Hidden when none. */}
-                      <MilestoneShareDropdown
-                        milestones={milestones}
-                        projectName={project.project_name ?? repoName}
-                        projectId={project.id}
-                        rankFallback={project.audit_count ?? ''}
-                        url={projectUrl}
-                      />
-                      {/* Audit share · always available for owners. */}
-                      <ShareUserTemplateButton
-                        templateId="audit_complete"
-                        slots={{
-                          score,
-                          band,
-                          owner,
-                          project_name:    repoName,
-                          project_id:      project.id,
-                          top_concern_1:   firstConcernBullet,
-                          top_strength_1:  firstStrengthBullet,
-                        }}
-                        url={projectUrl}
-                        variant="ghost"
-                        label="Share on X"
-                      />
-                    </>
-                  )
+
+                  const options: ShareOption[] = []
+                  if (project.graduation_grade) {
+                    options.push({
+                      key:        'graduation',
+                      label:      `graduation · ${project.graduation_grade}`,
+                      sub:        `final score ${score}/100`,
+                      emphasis:   'primary',
+                      templateId: 'graduation',
+                      slots: {
+                        project_name:    project.project_name ?? repoName,
+                        grade:           project.graduation_grade,
+                        score,
+                        rank:            '',
+                        total_in_season: '',
+                        project_id:      project.id,
+                      },
+                    })
+                  }
+                  for (const m of milestones) {
+                    options.push({
+                      key:        `milestone:${m.type}`,
+                      label:      `milestone · ${m.label}`,
+                      sub:        relativeTimeShort(m.achievedAt) + (m.category ? ` · ${m.category}` : ''),
+                      templateId: 'milestone',
+                      slots: {
+                        project_name:    project.project_name ?? repoName,
+                        milestone_label: m.label,
+                        rank:            project.audit_count ?? '',
+                        category:        m.category ?? project.business_category ?? '',
+                        project_id:      project.id,
+                      },
+                    })
+                  }
+                  options.push({
+                    key:        'audit',
+                    label:      `audit · ${score}/100`,
+                    sub:        `band ${band}`,
+                    templateId: 'audit_complete',
+                    slots: {
+                      score,
+                      band,
+                      owner,
+                      project_name:   repoName,
+                      project_id:     project.id,
+                      top_concern_1:  firstConcernBullet,
+                      top_strength_1: firstStrengthBullet,
+                    },
+                  })
+
+                  return <ShareOnXMenu options={options} url={projectUrl} />
                 })()}
                 {/* Forecast + Applaud — §4 emoji CTA carve-out for differentiation
                     from OPEN LIVE / GITHUB pills. Non-owner, phase-aware. */}
