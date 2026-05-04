@@ -32,6 +32,7 @@ const NewCommunityPostPage    = lazy(() => import('./pages/NewCommunityPostPage'
 const CommunityPostDetailPage = lazy(() => import('./pages/CommunityPostDetailPage').then(m => ({ default: m.CommunityPostDetailPage })))
 const LeaderboardPage         = lazy(() => import('./pages/LeaderboardPage').then(m => ({ default: m.LeaderboardPage })))
 const LadderPage              = lazy(() => import('./pages/LadderPage').then(m => ({ default: m.LadderPage })))
+const SearchPage              = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="/scouts"           element={<ScoutsPage />} />
           <Route path="/leaderboard"      element={<LeaderboardPage />} />
           <Route path="/ladder"           element={<LadderPage />} />
+          <Route path="/search"           element={<SearchPage />} />
           <Route path="/rulebook"         element={<RulebookPage />} />
           <Route path="/terms"            element={<TermsPage />} />
           <Route path="/privacy"          element={<PrivacyPage />} />

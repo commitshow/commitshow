@@ -129,8 +129,22 @@ export function Nav() {
           ))}
         </div>
 
-        {/* Right · Audition CTA + Auth · desktop */}
+        {/* Right · Search + Audition CTA + Auth · desktop */}
         <div className="flex-1 hidden md:flex items-center justify-end gap-4">
+          <NavLink
+            to="/search"
+            aria-label="Search"
+            title="Search · projects · creators · library"
+            className="flex items-center justify-center transition-colors"
+            style={{ width: 36, height: 36, color: 'var(--text-secondary)', textDecoration: 'none' }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--cream)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
+          </NavLink>
           <button
             onClick={handleApply}
             className="px-5 py-2 text-sm font-medium tracking-wide transition-all"
