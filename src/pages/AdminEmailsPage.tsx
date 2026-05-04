@@ -221,12 +221,10 @@ export function EmailTemplatesPanel() {
                   />
                 </FieldLabel>
                 <FieldLabel label="HTML body">
-                  <textarea
+                  <HtmlBodyField
                     value={draft.html_body}
-                    onChange={e => setDraft({ ...draft, html_body: e.target.value })}
-                    rows={14}
-                    className="w-full px-2 py-1.5 font-mono text-xs"
-                    style={{ lineHeight: 1.55, resize: 'vertical' }}
+                    onChange={v => setDraft({ ...draft, html_body: v })}
+                    variables={draft.variables}
                   />
                 </FieldLabel>
                 <FieldLabel label="Plain text body (multipart fallback)">
@@ -340,5 +338,95 @@ function FieldLabel({ label, children }: { label: string; children: React.ReactN
       <div className="font-mono text-[10px] tracking-widest uppercase mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
       {children}
     </label>
+  )
+}
+
+// HTML body editor with Edit / Preview toggle.
+// Preview substitutes [var] for {{var}} so the admin sees roughly what
+// the rendered email will look like with placeholder data, and renders
+// inside a sandboxed iframe so the email's inline CSS doesn't leak
+// into the admin shell (and vice versa). The iframe self-resizes to
+// fit its content via a postMessage from the inner script.
+function HtmlBodyField({
+  value, onChange, variables,
+}: {
+  value:     string
+  onChange:  (v: string) => void
+  variables: string[]
+}) {
+  const [mode, setMode] = useState<'edit' | 'preview'>('preview')
+  const [iframeHeight, setIframeHeight] = useState(360)
+
+  // Build the preview HTML · stub {{var}} → [var]
+  const rendered = useMemo(() => {
+    let out = value
+    for (const v of variables) {
+      out = out.split(`{{${v}}}`).join(`[${v}]`)
+    }
+    // Wrap so the iframe's own background sits behind the email — most
+    // mail clients show emails on a neutral panel, not transparent.
+    // Also self-reports its scrollHeight so the parent can fit it.
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:0;background:#f4f1ea}body{padding:14px}</style></head><body>${out}<script>function r(){parent.postMessage({type:'commitshow:iframe-height',h:document.documentElement.scrollHeight},'*')}window.addEventListener('load',r);new ResizeObserver(r).observe(document.body);<\/script></body></html>`
+  }, [value, variables])
+
+  // Listen for height messages from the iframe.
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      const d = ev.data as { type?: string; h?: number } | null
+      if (d && d.type === 'commitshow:iframe-height' && typeof d.h === 'number') {
+        setIframeHeight(Math.max(120, Math.min(1400, d.h + 8)))
+      }
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [])
+
+  return (
+    <div>
+      <div className="flex items-center gap-1 mb-2">
+        {(['preview', 'edit'] as const).map(m => {
+          const active = m === mode
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className="font-mono text-[11px] tracking-wide px-3 py-1"
+              style={{
+                background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
+                color:        active ? 'var(--gold-500)' : 'var(--text-secondary)',
+                border:       `1px solid ${active ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: '2px',
+                cursor:       'pointer',
+              }}
+            >
+              {m === 'preview' ? 'Preview' : 'Edit HTML'}
+            </button>
+          )
+        })}
+      </div>
+      {mode === 'edit' ? (
+        <textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          rows={14}
+          className="w-full px-2 py-1.5 font-mono text-xs"
+          style={{ lineHeight: 1.55, resize: 'vertical' }}
+        />
+      ) : (
+        <iframe
+          title="Email preview"
+          srcDoc={rendered}
+          sandbox=""
+          style={{
+            width: '100%',
+            height: iframeHeight,
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '2px',
+            background: '#f4f1ea',
+          }}
+        />
+      )}
+    </div>
   )
 }
