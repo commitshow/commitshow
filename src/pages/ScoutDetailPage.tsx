@@ -204,9 +204,21 @@ export function ScoutDetailPage() {
               {votes.length > 0 && (
                 <ol className="grid gap-1.5">
                   {votes.map(v => {
-                    const correct = v.is_correct
-                    const tone = correct === true ? '#00D4AA' : correct === false ? 'var(--scarlet)' : 'var(--text-muted)'
-                    const label = correct === true ? 'correct' : correct === false ? 'missed' : 'pending'
+                    const correct  = v.is_correct
+                    const tone     = correct === true  ? '#00D4AA'
+                                  : correct === false ? 'var(--scarlet)'
+                                  : 'var(--text-muted)'
+                    // Pending forecasts get "predicted/current (pending)"
+                    // so the user can see how their call is tracking
+                    // even before the season-end stamp lands. Resolved
+                    // forecasts keep the simple correct / missed label.
+                    const pred     = v.predicted_score
+                    const cur      = v.score_total
+                    const labelEl  = correct === true  ? 'correct'
+                                  : correct === false ? 'missed'
+                                  : pred != null
+                                    ? `${pred} / ${cur ?? '—'} (pending)`
+                                    : 'pending'
                     return (
                       <li key={v.id}>
                         <Link
@@ -218,14 +230,20 @@ export function ScoutDetailPage() {
                             <div className="font-display font-bold truncate min-w-0" style={{ color: 'var(--cream)' }}>
                               {v.project_name ?? '—'}
                             </div>
-                            <span className="font-mono text-[10px]" style={{ color: tone }}>{label}</span>
+                            <span
+                              className="font-mono text-[10px] tabular-nums whitespace-nowrap"
+                              style={{ color: tone }}
+                              title={correct === null && pred != null && cur != null
+                                ? `predicted ${pred} · current score ${cur} · ${cur >= pred ? 'tracking up' : 'below your call'}`
+                                : undefined}
+                            >
+                              {labelEl}
+                            </span>
                           </div>
                           <div className="font-mono text-[10px] mt-0.5 flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-muted)' }}>
                             <span>{new Date(v.created_at).toLocaleDateString()}</span>
                             <span>·</span>
                             <span>×{v.vote_count}</span>
-                            {v.predicted_score != null && <><span>·</span><span>predicted {v.predicted_score}</span></>}
-                            {v.score_total != null && <><span>·</span><span>now {v.score_total}/100</span></>}
                           </div>
                         </Link>
                       </li>
