@@ -316,10 +316,22 @@ Deno.serve(async (req) => {
   const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  let body: { github_url?: string; live_url?: string; force?: boolean }
+  let body: { github_url?: string; live_url?: string; force?: boolean; source?: string | null }
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
   if (!body.github_url) return json({ error: 'github_url required' }, 400)
-  const force = body.force === true
+  const force  = body.force === true
+  const source = (body.source ?? '').toString().trim().slice(0, 64) || null
+
+  // Capture User-Agent for telemetry · format the CLI sends:
+  //   commitshow-cli/<ver> node/<v> <platform>-<arch>
+  // Falls back to the raw header for non-CLI callers (curl · web etc).
+  const rawUA = req.headers.get('user-agent') ?? ''
+  const uaParts = rawUA.match(/commitshow-cli\/(\S+)\s+node\/(\S+)\s+(\S+)/i)
+  const cliVersion  = uaParts?.[1] ?? null
+  const nodeVersion = uaParts?.[2] ?? null
+  const platformStr = uaParts?.[3] ?? null
+  const xSource     = (req.headers.get('x-commitshow-source') ?? '').trim().slice(0, 64) || null
+  const sourceFinal = source || xSource || null
 
   const canon = canonicalGithub(body.github_url)
   if (!canon) return json({ error: 'Not a GitHub URL', input: body.github_url }, 400)
@@ -408,11 +420,32 @@ Deno.serve(async (req) => {
     quota:   rl.quota,
   }, 429)
 
+  // Telemetry · log every CLI call for the /admin > CLI 사용 dashboard.
+  // Best-effort · failure here doesn't block the response.
+  const logCall = async (extra: { engine_fired: boolean; snapshot_id?: string | null }) => {
+    try {
+      await admin.from('cli_audit_calls').insert({
+        source:        sourceFinal,
+        cli_version:   cliVersion,
+        node_version:  nodeVersion,
+        platform:      platformStr,
+        ip_hash:       ipKey(req),
+        url_hash:      urlKey(canon.slug),
+        github_url:    canon.canonical,
+        cache_hit:     isCacheHit,
+        engine_fired:  extra.engine_fired,
+        snapshot_id:   extra.snapshot_id ?? null,
+        raw_user_agent: rawUA.slice(0, 256),
+      })
+    } catch (e) { console.warn('[audit-preview] cli_audit_calls insert failed', (e as Error)?.message) }
+  }
+
   // Cache hit — return immediately. cache_reason surfaces WHY the
   // cached snapshot was reused (commit_sha match · TTL · etc.) so
   // downstream tooling can show "no recent push" UX without re-checking.
   if (isCacheHit && projectId) {
     const env = await buildEnvelope(admin, projectId, true)
+    void logCall({ engine_fired: false, snapshot_id: null })
     return json({ ...env, quota: rl.quota, cache_reason: cacheReason })
   }
 
@@ -448,6 +481,11 @@ Deno.serve(async (req) => {
 
   // @ts-ignore — EdgeRuntime is injected by Supabase
   if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(analyzePromise)
+
+  // engine_fired=true · we kicked off analyze-project (snapshot lands async).
+  // snapshot_id will be filled in by the analyze-project run; for the call
+  // log we just record that the engine was triggered.
+  void logCall({ engine_fired: true, snapshot_id: null })
 
   return new Response(JSON.stringify({
     project_id:    projectId,

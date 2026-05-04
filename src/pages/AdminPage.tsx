@@ -54,6 +54,14 @@ interface CliUsage {
     trigger_type: string
     created_at:   string
   }>
+  // From cli_audit_calls · per-call telemetry (source · cli_version ·
+  // platform). Distinct from preview_rate_limits which is per-day-counter.
+  callsToday:        number          // total CLI hits today (engine + cache)
+  cacheHitsToday:    number          // subset that were cache hits
+  bySource:          Array<{ source: string; count: number }>
+  byCliVersion:      Array<{ version: string; count: number }>
+  byPlatform:        Array<{ platform: string; count: number }>
+  callsLast7d:       Array<{ day: string; count: number }>
 }
 
 interface RecentAudit {
@@ -270,8 +278,9 @@ export function AdminPage() {
   }
 
   async function loadCliUsage() {
-    const today = new Date().toISOString().slice(0, 10)
-    const [allRes, globalRes, recentRes] = await Promise.all([
+    const today      = new Date().toISOString().slice(0, 10)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const [allRes, globalRes, recentRes, callsTodayRes, callsWeekRes] = await Promise.all([
       supabase.from('preview_rate_limits').select('ip_hash, count').eq('day', today).limit(500),
       supabase.from('preview_rate_limits').select('count').eq('ip_hash', 'global').eq('day', today).maybeSingle(),
       // §11-NEW.7 admin · latest 10 CLI calls = snapshots whose project is
@@ -281,6 +290,16 @@ export function AdminPage() {
         .eq('projects.status', 'preview')
         .order('created_at', { ascending: false })
         .limit(10),
+      // Per-call telemetry · today · for source/version/platform breakdown.
+      supabase.from('cli_audit_calls')
+        .select('source, cli_version, platform, cache_hit')
+        .gte('created_at', `${today}T00:00:00Z`)
+        .limit(2000),
+      // Last 7 days · for the trend chart.
+      supabase.from('cli_audit_calls')
+        .select('created_at')
+        .gte('created_at', sevenDaysAgo)
+        .limit(5000),
     ])
     const rows = (allRes.data ?? []) as Array<{ ip_hash: string; count: number }>
     const ips    = rows.filter(r => r.ip_hash.startsWith('ip:'))
@@ -305,12 +324,48 @@ export function AdminPage() {
       trigger_type: r.trigger_type ?? '?',
       created_at:   r.created_at,
     }))
+    // Aggregate per-call telemetry.
+    type CallRow = { source: string | null; cli_version: string | null; platform: string | null; cache_hit: boolean | null }
+    const calls = (callsTodayRes.data ?? []) as CallRow[]
+    const callsToday     = calls.length
+    const cacheHitsToday = calls.filter(c => c.cache_hit === true).length
+    const bucketize = (items: Array<string | null | undefined>, fallback: string) => {
+      const m = new Map<string, number>()
+      for (const v of items) {
+        const k = (v && v.toString().trim()) || fallback
+        m.set(k, (m.get(k) ?? 0) + 1)
+      }
+      return Array.from(m, ([k, count]) => ({ k, count })).sort((a, b) => b.count - a.count).slice(0, 10)
+    }
+    const bySource     = bucketize(calls.map(c => c.source),      '(unknown)').map(x => ({ source:   x.k, count: x.count }))
+    const byCliVersion = bucketize(calls.map(c => c.cli_version), '(unknown)').map(x => ({ version:  x.k, count: x.count }))
+    const byPlatform   = bucketize(calls.map(c => c.platform),    '(unknown)').map(x => ({ platform: x.k, count: x.count }))
+
+    // Last-7-days trend · group by date.
+    const week = (callsWeekRes.data ?? []) as Array<{ created_at: string }>
+    const trendMap = new Map<string, number>()
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10)
+      trendMap.set(d, 0)
+    }
+    for (const r of week) {
+      const d = r.created_at.slice(0, 10)
+      if (trendMap.has(d)) trendMap.set(d, (trendMap.get(d) ?? 0) + 1)
+    }
+    const callsLast7d = Array.from(trendMap, ([day, count]) => ({ day, count }))
+
     setCliUsage({
       totalToday,
       uniqueIps: ips.length,
       topRepos,
-      globalRemaining: 800 - globalCount,
+      globalRemaining: 2000 - globalCount,
       recentCalls,
+      callsToday,
+      cacheHitsToday,
+      bySource,
+      byCliVersion,
+      byPlatform,
+      callsLast7d,
     })
   }
 
@@ -1009,10 +1064,37 @@ function CliTab({ usage, onForceRefresh, rowBusy, rowOut, hasToken }: {
   if (!usage) return <Loading />
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Stat label="오늘 호출"        value={usage.totalToday}      sub="모든 IP 합산" />
-        <Stat label="고유 IP"          value={usage.uniqueIps}        sub="오늘" />
-        <Stat label="Global 남은 quota" value={usage.globalRemaining ?? '—'} sub="일 800 한도" />
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        <Stat label="오늘 IP 호출"      value={usage.totalToday}        sub="rate-limit 합산" />
+        <Stat label="고유 IP"           value={usage.uniqueIps}          sub="오늘" />
+        <Stat label="오늘 CLI 호출"     value={usage.callsToday}         sub={`캐시 ${usage.cacheHitsToday} · 엔진 ${usage.callsToday - usage.cacheHitsToday}`} />
+        <Stat label="Global 남은 quota" value={usage.globalRemaining ?? '—'} sub="일 2000 한도" />
+        <Stat label="7일 누적"          value={usage.callsLast7d.reduce((s, d) => s + d.count, 0)} sub="cli_audit_calls" />
+      </div>
+
+      {/* 7-day trend bars · simple inline visualization */}
+      <div>
+        <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 7일 호출 추이</div>
+        <div className="flex items-end gap-2" style={{ height: 80 }}>
+          {usage.callsLast7d.map(d => {
+            const max = Math.max(1, ...usage.callsLast7d.map(x => x.count))
+            const h   = Math.max(2, Math.round((d.count / max) * 70))
+            return (
+              <div key={d.day} className="flex-1 flex flex-col items-center gap-1">
+                <div title={`${d.day} · ${d.count}`} style={{ width: '100%', height: h, background: d.count > 0 ? 'var(--gold-500)' : 'rgba(255,255,255,0.08)', borderRadius: 2 }} />
+                <div className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>{d.day.slice(5)}</div>
+                <div className="font-mono text-[10px] tabular-nums" style={{ color: d.count > 0 ? 'var(--gold-500)' : 'rgba(255,255,255,0.4)' }}>{d.count}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Source / version / platform breakdown · 3 columns */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <BreakdownList title="// 호출 출처 (--source)"   rows={usage.bySource.map(x => ({ k: x.source,   count: x.count }))} hint="--source flag · 환경변수 COMMITSHOW_SOURCE · 에이전트가 self-report" />
+        <BreakdownList title="// CLI 버전"               rows={usage.byCliVersion.map(x => ({ k: x.version,  count: x.count }))} hint="User-Agent 헤더 · npm publish 마다 갱신 권장" />
+        <BreakdownList title="// 플랫폼"                 rows={usage.byPlatform.map(x => ({ k: x.platform, count: x.count }))} hint="Node 런타임 환경 · darwin / linux / win32" />
       </div>
       <div>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// 가장 자주 audit 된 repo (오늘)</div>
@@ -1524,6 +1606,35 @@ function Stat({ label, value, sub, tone, onClick, hint }: {
 
 function Loading() {
   return <div className="font-mono text-xs py-8 text-center" style={{ color: 'rgba(255,255,255,0.55)' }}>로딩 중…</div>
+}
+
+// Top-N breakdown list · used for source/version/platform splits in /admin > CLI.
+function BreakdownList({ title, rows, hint }: {
+  title: string
+  rows:  Array<{ k: string; count: number }>
+  hint?: string
+}) {
+  const max = Math.max(1, ...rows.map(r => r.count))
+  return (
+    <div>
+      <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>{title}</div>
+      <div className="space-y-1">
+        {rows.length === 0 && <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>(아직 없음)</div>}
+        {rows.map(r => (
+          <div key={r.k} className="px-3 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 2 }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono truncate" style={{ color: '#fff' }} title={r.k}>{r.k}</span>
+              <span className="font-mono tabular-nums" style={{ color: 'var(--gold-500)' }}>{r.count}</span>
+            </div>
+            <div style={{ marginTop: 4, height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.round((r.count / max) * 100)}%`, height: '100%', background: 'var(--gold-500)' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      {hint && <div className="font-mono text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.4)' }}>{hint}</div>}
+    </div>
+  )
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
