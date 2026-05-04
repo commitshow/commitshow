@@ -1,18 +1,18 @@
-// %-based relative standing card (§6.2 · replaces GraduationChecklist).
-// Surfaces the project's live rank, percentile, projected graduation tier,
-// and the basic eligibility filter strip. Transparent-by-default for Scouts
-// and Creators; owner mode adds a "what moves you up" hint.
+// Encore Standing card · 2026-05-05 rebrand of the legacy
+// GraduationStanding tier ladder. Now a single threshold-bar that
+// shows the project's current total score relative to the Encore
+// line (84). When the score crosses the line, the card flips into
+// "Encore" mode (gold accent + ★ Encore badge); when below, it
+// shows distance-to-Encore and the eligibility filter.
+//
+// Component name kept (still imported as GraduationStanding) so the
+// ProjectDetailPage mount point doesn't churn — file path is the
+// stable contract. New mounts should use the named export.
 
 import { useEffect, useState } from 'react'
-import {
-  fetchProjectStanding,
-  nextTierTargetRank,
-  TIER_LABEL,
-  TIER_COLOR,
-  type ProjectStanding,
-  type ProjectedTier,
-} from '../lib/standing'
-import { IconGraduation } from './icons'
+import { fetchProjectStanding, type ProjectStanding } from '../lib/standing'
+import { ENCORE_THRESHOLD, isEncoreScore } from '../lib/encore'
+import { EncoreBadge } from './EncoreBadge'
 
 interface Props {
   projectId: string
@@ -36,19 +36,16 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
 
   if (loading || !s) return null
 
-  const tier        = s.projected_tier
-  const tone        = TIER_COLOR[tier]
-  const isOwner     = viewerMode === 'owner'
+  const score      = s.score_total ?? 0
+  const isEncore   = isEncoreScore(score)
   const eligibleAll = s.live_url_ok && s.snapshots_ok && s.brief_ok
-  const next        = nextTierTargetRank(s)
-
-  // Progress-bar semantics: 100% = rank 1. Flip the percentile so lower-is-better
-  // reads intuitively as a left-to-right fill.
-  const pct = Math.max(0, Math.min(100, Math.round(100 - s.percentile)))
+  const accent     = isEncore ? 'var(--gold-500)' : '#60A5FA'
+  const distance   = Math.max(0, ENCORE_THRESHOLD - score)
+  // Bar fill: 0-100 → 0-100%. Past the threshold, fill stays full.
+  const pct = Math.min(100, Math.max(0, score))
 
   return (
     <div className="card-navy" style={{ borderRadius: '2px' }}>
-      {/* Header */}
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
@@ -56,35 +53,47 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
         style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
       >
         <div className="flex-1 min-w-0">
-          <div className="font-mono text-xs tracking-widest" style={{ color: tone }}>
-            // PROJECTED STANDING
+          <div className="font-mono text-xs tracking-widest" style={{ color: accent }}>
+            // ENCORE STANDING
           </div>
-          <div className="font-display font-bold text-lg mt-1 flex items-center gap-2" style={{ color: 'var(--cream)' }}>
-            <span style={{ color: tone }}><IconGraduation size={20} /></span>
-            <span>{TIER_LABEL[tier]}</span>
-            <span className="font-mono text-sm font-normal tabular-nums" style={{ color: 'var(--text-muted)' }}>
-              · rank {s.rank} of {s.total_in_season}
-            </span>
+          <div className="font-display font-bold text-lg mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
+            <span className="tabular-nums" style={{ color: accent }}>{score}/100</span>
+            {isEncore ? (
+              <EncoreBadge score={score} size="md" />
+            ) : (
+              <span className="font-mono text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+                · {distance} to Encore
+              </span>
+            )}
           </div>
           {!expanded && (
             <div className="mt-1 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              Top {Math.max(1, Math.round(100 - pct))}% · tap to inspect the graduation cutoffs
+              {isEncore
+                ? 'Above the Encore line · tap to see what keeps you here'
+                : 'Below the Encore line · tap to see what to fix first'}
             </div>
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="relative" style={{ width: 120, height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: '2px' }}>
-            {/* Cutoff markers */}
-            <CutoffMarker pct={99.5} />{/* Valedictorian (top 0.5%) */}
-            <CutoffMarker pct={95} />  {/* Honors (top 5%) */}
-            <CutoffMarker pct={80} />  {/* Graduate (top 20%) */}
+          <div className="relative" style={{ width: 140, height: 10, background: 'rgba(255,255,255,0.06)', borderRadius: '2px' }}>
+            {/* Encore threshold marker · the only line that matters now. */}
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0"
+              style={{
+                left: `${ENCORE_THRESHOLD}%`,
+                width: 2,
+                background: 'var(--gold-500)',
+              }}
+              title={`Encore @ ${ENCORE_THRESHOLD}`}
+            />
             <div
               className="absolute inset-y-0 left-0 transition-all duration-500"
               style={{
                 width: `${pct}%`,
-                background: tone,
+                background: accent,
                 borderRadius: '2px',
-                boxShadow: `0 0 8px ${tone}55`,
+                boxShadow: `0 0 8px ${accent}55`,
               }}
             />
           </div>
@@ -95,47 +104,28 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
       </button>
 
       {expanded && (
-        <div className="px-5 pb-5" style={{ borderTop: `1px solid ${tone}22` }}>
+        <div className="px-5 pb-5" style={{ borderTop: `1px solid ${accent}22` }}>
           <p className="font-light text-sm mt-4 mb-5" style={{ color: 'var(--text-primary)', lineHeight: 1.65 }}>
-            Graduation is a relative cut. When the season ends the top 20% of the league auto-graduates
-            — 1 Valedictorian, 5% Honors, 14.5% Graduate. The rest join the Rookie Circle and come back next season.
-            {isOwner && next && ' The row below shows the rank you need to move up a tier.'}
+            {isEncore
+              ? `This product cleared the ${ENCORE_THRESHOLD} bar — Encore badge active. Re-audits keep score moving; if it dips below ${ENCORE_THRESHOLD} the badge drops off until you climb back.`
+              : `Encore is a quality threshold, not a season. Cross ${ENCORE_THRESHOLD} on total score (Audit 50 + Scout 30 + Community 20) and the badge appears on the product card. ${viewerMode === 'owner' ? 'The audit report below names the highest-leverage gap to close first.' : ''}`}
           </p>
 
-          {/* Tier cutoff ladder */}
-          <div className="space-y-2.5 mb-5">
-            <TierRow label="Valedictorian" cutoff="Rank 1"                          active={tier === 'valedictorian'} tone={TIER_COLOR.valedictorian} />
-            <TierRow label="Honors"        cutoff={`Top 5% · rank ≤ ${Math.max(2, Math.ceil(s.total_in_season * 0.05))}`}  active={tier === 'honors'}        tone={TIER_COLOR.honors} />
-            <TierRow label="Graduate"      cutoff={`Top 20% · rank ≤ ${Math.ceil(s.total_in_season * 0.20)}`}              active={tier === 'graduate'}      tone={TIER_COLOR.graduate} />
-            <TierRow label="Rookie Circle" cutoff="Everyone else · retry next season" active={tier === 'rookie_circle'}   tone={TIER_COLOR.rookie_circle} />
+          {/* Pillar breakdown · most-actionable view of the score */}
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            <PillarCell label="Audit"    max={50} />
+            <PillarCell label="Scout"    max={30} />
+            <PillarCell label="Community" max={20} />
           </div>
 
-          {/* Rookie Circle tone copy · only shown when projected here ·
-              encouraging without being patronizing. Reinforces that
-              audit is iterable and the season cap doesn't define you. */}
-          {tier === 'rookie_circle' && (
-            <div className="mb-5 pl-3 py-3 pr-3" style={{
-              borderLeft: `2px solid ${TIER_COLOR.rookie_circle}`,
-              background: 'rgba(255,255,255,0.02)',
-              color: 'var(--text-primary)',
-              lineHeight: 1.7,
-            }}>
-              <div className="font-display font-bold text-sm mb-1.5" style={{ color: 'var(--cream)' }}>Rookie Circle</div>
-              <div className="font-light text-[13px]">
-                Most great vibe-coded projects spent their first season here.
-                Fix the index, ship the rate-limit, then come back. The audit
-                doesn't care how many tries it takes.
-              </div>
-            </div>
-          )}
-
-          {/* Eligibility strip · basic filter (§6.3) */}
+          {/* Eligibility strip · still useful (Encore = score-only, but
+              live URL + brief make the score meaningful in the first place) */}
           <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
-            ELIGIBILITY FILTER
+            FOUNDATIONS
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-            <EligibilityPill ok={s.live_url_ok} label="Live URL reachable" />
-            <EligibilityPill ok={s.snapshots_ok} label={`Analysis ${s.snapshots_count} of 2+`} />
+            <EligibilityPill ok={s.live_url_ok}  label="Live URL reachable" />
+            <EligibilityPill ok={s.snapshots_ok} label={`${s.snapshots_count} audit snapshot${s.snapshots_count === 1 ? '' : 's'}`} />
             <EligibilityPill ok={s.brief_ok}     label="Core Intent captured" />
           </div>
           {!eligibleAll && (
@@ -145,21 +135,7 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
               color: '#F88771',
               lineHeight: 1.6,
             }}>
-              One or more basic filters are pending. Even a top-20% score ends up in Rookie Circle until these pass.
-            </div>
-          )}
-
-          {/* Owner next-step hint */}
-          {isOwner && next && eligibleAll && (
-            <div className="mt-4 pl-3 py-2.5 pr-3 font-mono text-[11px]" style={{
-              borderLeft: '2px solid var(--gold-500)',
-              background: 'rgba(240,192,64,0.06)',
-              color: 'var(--gold-500)',
-              lineHeight: 1.6,
-            }}>
-              Next: move into the top {Math.max(1, Math.round((next.rank / s.total_in_season) * 100))}%
-              (rank {next.rank}) to land in {TIER_LABEL[next.tier]}. That's {Math.max(0, s.rank - next.rank)} places
-              to climb.
+              One foundation pending. Encore evaluates score on a live, audited, briefed product — the badge holds back until those land, even if the number says you'd qualify.
             </div>
           )}
         </div>
@@ -168,49 +144,19 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
   )
 }
 
-// Small vertical tick on the progress bar at `pct` from the left.
-function CutoffMarker({ pct }: { pct: number }) {
+// Tiny placeholder for pillar breakdown · the actual pillar-score
+// component already lives elsewhere on ProjectDetailPage so this is a
+// label-only stub. Could later be wired to live pillar values via
+// fetchProjectStanding (would require expanding the standing query).
+function PillarCell({ label, max }: { label: string; max: number }) {
   return (
-    <span
-      aria-hidden="true"
-      className="absolute inset-y-0"
-      style={{
-        left: `${pct}%`,
-        width: 1,
-        background: 'rgba(255,255,255,0.25)',
-      }}
-    />
-  )
-}
-
-function TierRow({
-  label, cutoff, active, tone,
-}: {
-  label: string; cutoff: string; active: boolean; tone: string
-}) {
-  return (
-    <div className="p-3 flex items-center gap-3" style={{
-      background: active ? `${tone}14` : 'rgba(255,255,255,0.015)',
-      border: `1px solid ${active ? `${tone}4D` : 'rgba(255,255,255,0.05)'}`,
-      borderLeft: `3px solid ${tone}`,
+    <div className="px-2.5 py-2" style={{
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid rgba(255,255,255,0.06)',
       borderRadius: '2px',
     }}>
-      <span className="font-mono text-xs font-medium flex-1" style={{ color: active ? tone : 'var(--cream)' }}>
-        {label}
-      </span>
-      <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
-        {cutoff}
-      </span>
-      {active && (
-        <span className="font-mono text-[10px] tracking-widest px-1.5 py-0.5 flex-shrink-0" style={{
-          background: `${tone}22`,
-          color: tone,
-          border: `1px solid ${tone}55`,
-          borderRadius: '2px',
-        }}>
-          PROJECTED
-        </span>
-      )}
+      <div className="font-mono text-[9px] tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="font-mono text-[11px] tabular-nums mt-0.5" style={{ color: 'var(--cream)' }}>0–{max}</div>
     </div>
   )
 }
@@ -223,7 +169,8 @@ function EligibilityPill({ ok, label }: { ok: boolean; label: string }) {
       border: `1px solid ${tone}55`,
       borderRadius: '2px',
     }}>
-      <span aria-hidden="true" style={{ color: tone, width: 10, height: 10, display: 'inline-block',
+      <span aria-hidden="true" style={{
+        color: tone, width: 10, height: 10, display: 'inline-block',
         background: tone, borderRadius: '50%',
       }} />
       <span className="font-mono text-[10px] tracking-wide" style={{ color: 'var(--text-primary)' }}>
@@ -232,5 +179,3 @@ function EligibilityPill({ ok, label }: { ok: boolean; label: string }) {
     </div>
   )
 }
-
-export type { ProjectedTier }

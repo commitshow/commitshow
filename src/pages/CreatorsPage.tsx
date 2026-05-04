@@ -24,10 +24,14 @@ const GRADE_COLOR: Record<CreatorGrade, string> = {
   Legend:          '#C8102E',
 }
 
-type SortMode = 'graduated' | 'avg_score' | 'newest'
+type SortMode = 'encore' | 'best_score' | 'products' | 'newest'
 
 interface CreatorRow extends Member {
-  encore_count?: number
+  product_count: number
+  encore_count:  number
+  best_score:    number | null
+  avg_score:     number
+  total_audits:  number
 }
 
 export function CreatorsPage() {
@@ -35,17 +39,20 @@ export function CreatorsPage() {
   const [rows, setRows] = useState<CreatorRow[]>([])
   const [loading, setLoading] = useState(true)
   const [gradeFilter, setGradeFilter] = useState<'any' | CreatorGrade>('any')
-  const [sort, setSort] = useState<SortMode>('graduated')
+  const [sort, setSort] = useState<SortMode>('encore')
 
   useEffect(() => {
     let alive = true
     ;(async () => {
+      // Read from creator_stats view (lateral-joined to projects) so
+      // ranking reflects actual product portfolio · not the dormant
+      // members.total_graduated / avg_auto_score columns that haven't
+      // been touched since the season-end engine was retired.
       const { data } = await supabase
-        .from('members')
-        .select('id, display_name, avatar_url, tier, creator_grade, total_graduated, avg_auto_score, x_handle, github_handle, created_at, activity_points')
-        .order('total_graduated', { ascending: false, nullsFirst: false })
+        .from('creator_stats')
+        .select('*')
       if (!alive) return
-      setRows((data ?? []) as CreatorRow[])
+      setRows((data ?? []) as unknown as CreatorRow[])
       setLoading(false)
     })()
     return () => { alive = false }
@@ -54,12 +61,23 @@ export function CreatorsPage() {
   const filtered = useMemo(() => {
     let list = rows.slice()
     if (gradeFilter !== 'any') list = list.filter(m => (m.creator_grade ?? 'Rookie') === gradeFilter)
+    const cmpAsc = (a: number | null | undefined, b: number | null | undefined) => (a ?? 0) - (b ?? 0)
     switch (sort) {
-      case 'graduated':
-        list.sort((a, b) => (b.total_graduated ?? 0) - (a.total_graduated ?? 0))
+      case 'encore':
+        // Default · most Encore products, then best score, then portfolio
+        // size, then earliest member (rewards consistency over recency).
+        list.sort((a, b) =>
+          (b.encore_count - a.encore_count)
+          || cmpAsc(b.best_score, a.best_score)
+          || (b.product_count - a.product_count)
+          || (a.created_at ?? '').localeCompare(b.created_at ?? '')
+        )
         break
-      case 'avg_score':
-        list.sort((a, b) => (b.avg_auto_score ?? 0) - (a.avg_auto_score ?? 0))
+      case 'best_score':
+        list.sort((a, b) => cmpAsc(b.best_score, a.best_score) || (b.product_count - a.product_count))
+        break
+      case 'products':
+        list.sort((a, b) => (b.product_count - a.product_count) || cmpAsc(b.best_score, a.best_score))
         break
       case 'newest':
         list.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
@@ -116,9 +134,10 @@ export function CreatorsPage() {
             className="px-2.5 py-2 font-mono text-xs"
             style={{ background: 'rgba(6,12,26,0.6)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--cream)', borderRadius: '2px', cursor: 'pointer' }}
           >
-            <option value="graduated">Sort · Most graduated</option>
-            <option value="avg_score">Sort · Highest avg score</option>
-            <option value="newest">Sort · Newest</option>
+            <option value="encore">Sort · Most Encore products</option>
+            <option value="best_score">Sort · Highest single score</option>
+            <option value="products">Sort · Largest portfolio</option>
+            <option value="newest">Sort · Newest member</option>
           </select>
         </div>
 
@@ -132,7 +151,7 @@ export function CreatorsPage() {
             </div>
           ) : (
             <div>
-              <div className="hidden md:grid grid-cols-[48px_1fr_120px_100px_100px] items-center gap-3 px-4 py-2.5 font-mono text-[10px] tracking-widest" style={{
+              <div className="hidden md:grid grid-cols-[48px_1fr_120px_80px_80px_80px] items-center gap-3 px-4 py-2.5 font-mono text-[10px] tracking-widest" style={{
                 borderBottom: '1px solid rgba(255,255,255,0.05)',
                 color: 'var(--text-label)',
                 background: 'rgba(255,255,255,0.02)',
@@ -140,8 +159,9 @@ export function CreatorsPage() {
                 <div>RANK</div>
                 <div>CREATOR</div>
                 <div className="text-right">GRADE</div>
-                <div className="text-right">GRADUATED</div>
-                <div className="text-right">AVG SCORE</div>
+                <div className="text-right">PRODUCTS</div>
+                <div className="text-right">ENCORE</div>
+                <div className="text-right">BEST</div>
               </div>
               {/* My pin · same pattern as ScoutsPage */}
               {user && (() => {
@@ -187,7 +207,7 @@ function CreatorRow({ rank, member: m, isMine }: { rank: number; member: Creator
   return (
     <Link
       to={`/creators/${m.id}`}
-      className="grid grid-cols-[48px_1fr_auto] md:grid-cols-[48px_1fr_120px_100px_100px] items-center gap-3 px-4 py-3 transition-colors"
+      className="grid grid-cols-[48px_1fr_auto] md:grid-cols-[48px_1fr_120px_80px_80px_80px] items-center gap-3 px-4 py-3 transition-colors"
       style={{
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         textDecoration: 'none',
@@ -226,14 +246,22 @@ function CreatorRow({ rank, member: m, isMine }: { rank: number; member: Creator
       </div>
       <div className="md:hidden flex items-center gap-2 flex-shrink-0 font-mono text-[10px]">
         <span style={{ color: gradeColor }}>{grade}</span>
-        <span style={{ color: 'var(--text-muted)' }}>· {m.total_graduated ?? 0} grad</span>
+        {m.encore_count > 0 && (
+          <span style={{ color: 'var(--gold-500)' }}>· {m.encore_count} Encore</span>
+        )}
+        {m.encore_count === 0 && m.product_count > 0 && (
+          <span style={{ color: 'var(--text-muted)' }}>· {m.product_count} product{m.product_count === 1 ? '' : 's'}</span>
+        )}
       </div>
       <div className="hidden md:block text-right font-mono text-xs" style={{ color: gradeColor }}>{grade}</div>
       <div className="hidden md:block text-right font-mono text-xs tabular-nums" style={{ color: 'var(--cream)' }}>
-        {m.total_graduated ?? 0}
+        {m.product_count}
+      </div>
+      <div className="hidden md:block text-right font-mono text-xs tabular-nums" style={{ color: m.encore_count > 0 ? 'var(--gold-500)' : 'var(--text-muted)' }}>
+        {m.encore_count}
       </div>
       <div className="hidden md:block text-right font-mono text-xs tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-        {m.avg_auto_score != null ? Math.round(m.avg_auto_score) : '—'}
+        {m.best_score ?? '—'}
       </div>
     </Link>
   )

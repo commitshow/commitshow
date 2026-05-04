@@ -1,11 +1,11 @@
 // Public-facing Backstage panel — surfaces the Phase 2 brief data on a
 // project detail page. Per CLAUDE.md §12, Phase 2 (Stack Fingerprint ·
 // Failure Log · Decision Archaeology · AI Delegation Map · Live Proof ·
-// Next Blocker) is private until graduation, then permanently public.
+// Next Blocker) is private until Encore (score ≥ 84), then permanently public.
 //
 // This component shows:
-//   · graduated projects → full content + Verified mark
-//   · pre-graduation     → locked teaser with counts (proves data exists)
+//   · Encore products    → full content + Verified mark
+//   · below the bar       → locked teaser with counts (proves data exists)
 //   · no brief           → renders nothing (don't tease emptiness)
 //
 // Owner still has the editable OwnerBriefPanel below this, separately.
@@ -18,7 +18,11 @@ interface Props {
   project: Project
 }
 
-const UNLOCKED_STATUSES = new Set(['graduated', 'valedictorian', 'honors', 'graduate'])
+// 2026-05-05 rebrand · was status-based ('graduated'/'valedictorian'/...).
+// Backstage is now Encore-gated · score_total ≥ 84 unlocks the panel,
+// score below keeps it teased. Score is the only thing that earns the
+// reveal, consistent with the rest of the rebrand.
+import { isEncoreScore } from '../lib/encore'
 
 export function BackstagePanel({ project }: Props) {
   const [brief, setBrief] = useState<BuildBrief | null>(null)
@@ -48,7 +52,7 @@ export function BackstagePanel({ project }: Props) {
   const totalDocumented = failures.length + decisions.length + delegation.length
   if (totalDocumented === 0 && !brief.next_blocker) return null
 
-  const unlocked = UNLOCKED_STATUSES.has(project.status as string)
+  const unlocked = isEncoreScore(project.score_total)
 
   return (
     <div
@@ -151,7 +155,7 @@ function LockedTeaser({ projectName }: { projectName: string }) {
       </div>
       <div className="font-light text-xs mb-4" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
         Failure log · decisions · delegation map · next blocker · live proof —
-        the entries above are real. Their content is reserved for graduation.
+        the entries above are real. Their content unlocks when the product earns Encore (score 84+).
       </div>
       <Link
         to="/backstage"

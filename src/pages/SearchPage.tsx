@@ -198,7 +198,7 @@ export function SearchPage() {
               {members.map(m => (
                 <Link
                   key={m.id}
-                  to={`/u/${m.x_handle ?? m.github_handle ?? m.id}`}
+                  to={`/creators/${m.id}`}
                   className="flex items-center gap-3"
                   style={{ ...sectionStyle, textDecoration: 'none' }}
                 >
