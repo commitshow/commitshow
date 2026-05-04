@@ -154,22 +154,23 @@ export function ProfilePage() {
       <div className="max-w-5xl mx-auto">
         {/* ── Header ── */}
         <header className="card-navy p-4 sm:p-6 mb-6" style={{ borderRadius: '2px' }}>
-          <div className="flex flex-wrap items-start gap-4 sm:gap-6">
-            <div className="flex-1 min-w-0 sm:min-w-[280px]">
-              <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
-                // MEMBER PROFILE
-              </div>
+          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>
+            // MEMBER PROFILE
+          </div>
 
-              <AvatarPicker
-                currentUrl={member?.avatar_url ?? null}
-                displayInitial={initial}
-                onUploaded={onAvatarUploaded}
-              />
-
-              <div className="mt-5">
-                <label className="font-mono text-[10px] tracking-widest block mb-1.5" style={{ color: 'var(--text-label)' }}>
-                  DISPLAY NAME
-                </label>
+          {/* Identity row · avatar inline-left of name/email/edit. Always
+              horizontal so the page reads like a typical profile header. */}
+          <div className="flex items-start gap-4 mb-5">
+            <AvatarPicker
+              currentUrl={member?.avatar_url ?? null}
+              displayInitial={initial}
+              onUploaded={onAvatarUploaded}
+              size={72}
+            />
+            <div className="flex-1 min-w-0">
+              <label className="font-mono text-[10px] tracking-widest block mb-1.5" style={{ color: 'var(--text-label)' }}>
+                DISPLAY NAME
+              </label>
                 {editingName ? (
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <input
@@ -231,14 +232,16 @@ export function ProfilePage() {
                   </div>
                 )}
 
-                <VerifiedIdentities />
-              </div>
             </div>
+          </div>
 
-            {/* ── Three-axis standings ── */}
-            <div className="flex-1 min-w-0 sm:min-w-[260px]">
-              <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// YOUR STANDINGS</div>
-              <div className="space-y-2">
+          {/* Verified-by chip strip · spans full row below identity. */}
+          <VerifiedIdentities />
+
+          {/* ── Three-axis standings · full-width vertical stack ── */}
+          <div className="mt-6">
+            <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// YOUR STANDINGS</div>
+            <div className="space-y-2">
                 <StandingRow
                   label="Creator Grade"
                   value={grade}
@@ -284,7 +287,6 @@ export function ProfilePage() {
                     />
                   </div>
                 )}
-              </div>
             </div>
           </div>
         </header>

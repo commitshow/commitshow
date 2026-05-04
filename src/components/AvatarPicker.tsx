@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   processAvatar,
   uploadAvatar,
@@ -15,14 +16,39 @@ interface AvatarPickerProps {
   size?: number                 // render size in px · default 96
 }
 
-export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96 }: AvatarPickerProps) {
+// Compact avatar control · the entire tile is the clickable upload target.
+// Bottom-right camera badge reinforces 'clickable to change'. Top-right ⓘ
+// icon opens a small popover with format details. No separate big UPLOAD
+// button or caption — the tile + icons carry the affordance.
+export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 72 }: AvatarPickerProps) {
   const { user } = useAuth()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
+  const inputRef  = useRef<HTMLInputElement>(null)
+  const infoRef   = useRef<HTMLButtonElement>(null)
+  const [busy,  setBusy]  = useState(false)
   const [error, setError] = useState('')
   const [local, setLocal] = useState<ProcessedImage | null>(null)
+  const [info,  setInfo]  = useState(false)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
 
   useEffect(() => () => { if (local?.previewUrl) URL.revokeObjectURL(local.previewUrl) }, [local])
+
+  // Position the info popover anchored to the ⓘ button (portal renders
+  // it at body-level so parent overflow:hidden doesn't clip).
+  useEffect(() => {
+    if (!info) return
+    const r = infoRef.current?.getBoundingClientRect()
+    if (r) setCoords({ top: r.bottom + 6, left: r.left })
+    const close = (e: MouseEvent) => {
+      if (!infoRef.current?.contains(e.target as Node)) setInfo(false)
+    }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setInfo(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown',   esc)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown',   esc)
+    }
+  }, [info])
 
   const handleFile = async (file: File) => {
     if (!user?.id) return
@@ -41,9 +67,10 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96
   }
 
   const displayUrl = local?.previewUrl || currentUrl
+  const click = () => { if (!busy) inputRef.current?.click() }
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+    <div className="inline-block" style={{ position: 'relative' }}>
       <input
         ref={inputRef}
         type="file"
@@ -52,7 +79,12 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96
         className="hidden"
       />
 
-      <div
+      {/* Tile · entire surface is the upload click target. */}
+      <button
+        type="button"
+        onClick={click}
+        disabled={busy}
+        aria-label={currentUrl ? 'Replace avatar' : 'Upload avatar'}
         className="relative flex items-center justify-center font-mono font-bold overflow-hidden"
         style={{
           width: size, height: size,
@@ -61,46 +93,97 @@ export function AvatarPicker({ currentUrl, displayInitial, onUploaded, size = 96
           borderRadius: '2px',
           border: '1px solid rgba(240,192,64,0.35)',
           fontSize: size / 3,
-          flexShrink: 0,
+          padding: 0,
+          cursor: busy ? 'wait' : 'pointer',
         }}
       >
         {displayUrl
           ? <img src={displayUrl} alt="Avatar" className="w-full h-full" style={{ objectFit: 'cover' }} />
           : <span>{displayInitial}</span>}
         {busy && (
-          <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px]" style={{ background: 'rgba(6,12,26,0.7)', color: 'var(--gold-500)' }}>
-            UPLOADING…
+          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px]" style={{ background: 'rgba(6,12,26,0.7)', color: 'var(--gold-500)' }}>
+            ↑
           </div>
         )}
-      </div>
+        {/* Camera badge · bottom-right corner · always visible · signals
+            'click to change'. */}
+        {!busy && (
+          <span
+            aria-hidden="true"
+            className="absolute flex items-center justify-center"
+            style={{
+              right: -4, bottom: -4,
+              width: 20, height: 20,
+              background: 'var(--gold-500)',
+              color: 'var(--navy-900)',
+              borderRadius: '50%',
+              border: '2px solid var(--navy-950)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 4l2 2H21v14H3V6h4.5l2-2h5z" />
+              <circle cx="12" cy="13" r="3.5" />
+            </svg>
+          </span>
+        )}
+      </button>
 
-      <div className="flex-1 min-w-0">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={busy}
-          className="font-mono text-xs tracking-wide px-3 py-2.5"
+      {/* Info ⓘ · separate button · click reveals format details. */}
+      <button
+        type="button"
+        ref={infoRef}
+        onClick={(e) => { e.stopPropagation(); setInfo(o => !o) }}
+        aria-label="Avatar upload info"
+        aria-expanded={info}
+        className="absolute"
+        style={{
+          top: -4, right: -4,
+          width: 18, height: 18,
+          background: 'var(--navy-800)',
+          color: 'rgba(248,245,238,0.7)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '50%',
+          padding: 0,
+          fontFamily: '"DM Mono", monospace',
+          fontSize: 10,
+          fontWeight: 700,
+          lineHeight: '16px',
+          cursor: 'pointer',
+        }}
+      >
+        i
+      </button>
+
+      {info && coords && createPortal(
+        <div
+          role="tooltip"
           style={{
-            background: 'transparent',
-            border: '1px solid rgba(240,192,64,0.3)',
-            color: 'var(--gold-500)',
-            borderRadius: '2px',
-            cursor: busy ? 'wait' : 'pointer',
-            minHeight: 36,
+            position: 'fixed',
+            top: coords.top, left: coords.left,
+            zIndex: 1000,
+            maxWidth: 240,
+            padding: 10,
+            background: 'var(--navy-800)',
+            border: '1px solid rgba(240,192,64,0.35)',
+            borderRadius: 3,
+            color: 'rgba(248,245,238,0.85)',
+            fontFamily: '"DM Mono", monospace',
+            fontSize: 11,
+            lineHeight: 1.5,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
           }}
         >
-          {currentUrl ? 'REPLACE AVATAR' : 'UPLOAD AVATAR'}
-        </button>
-        <div className="font-mono text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
-          JPG / PNG / WebP — cropped to a 256×256 square, converted to WebP automatically.
+          Click the avatar tile to upload. JPG / PNG / WebP, cropped to 256×256, converted to WebP automatically. Max 10 MB.
+        </div>,
+        document.body,
+      )}
+
+      {error && (
+        <div className="mt-2 pl-2 py-1 pr-2 font-mono text-[10px]"
+          style={{ borderLeft: '2px solid var(--scarlet)', background: 'rgba(200,16,46,0.05)', color: 'rgba(248,120,113,0.85)', maxWidth: 240 }}>
+          {error}
         </div>
-        {error && (
-          <div className="mt-2 pl-2 py-1 pr-2 font-mono text-[10px]"
-            style={{ borderLeft: '2px solid var(--scarlet)', background: 'rgba(200,16,46,0.05)', color: 'rgba(248,120,113,0.85)' }}>
-            {error}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
