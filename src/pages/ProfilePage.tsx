@@ -165,7 +165,6 @@ export function ProfilePage() {
               currentUrl={member?.avatar_url ?? null}
               displayInitial={initial}
               onUploaded={onAvatarUploaded}
-              size={72}
             />
             <div className="flex-1 min-w-0">
               <label className="font-mono text-[10px] tracking-widest block mb-1.5" style={{ color: 'var(--text-label)' }}>
