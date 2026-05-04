@@ -36,8 +36,12 @@ interface LogRow {
   provider_id:    string | null
 }
 
-export function AdminEmailsPage() {
-  const { user, member, loading: authLoading } = useAuth()
+// Inner panel · the 3-column editor without the page chrome. Embedded
+// as a tab inside /admin AND mounted as the body of /admin/emails so
+// either entry point shows the same UI.
+export function EmailTemplatesPanel() {
+  const { user, member } = useAuth()
+  const isAdmin = !!member?.is_admin
 
   const [templates, setTemplates] = useState<Template[]>([])
   const [activeKind, setActiveKind] = useState<string | null>(null)
@@ -46,8 +50,6 @@ export function AdminEmailsPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [logs, setLogs] = useState<LogRow[]>([])
-
-  const isAdmin = !!member?.is_admin
 
   // Initial load
   useEffect(() => {
@@ -144,30 +146,14 @@ export function AdminEmailsPage() {
     setActiveKind(activeKind)  // forces useEffect rerun via dep
   }
 
-  if (authLoading) {
-    return <div className="pt-32 pb-20 px-6 text-center font-mono text-xs" style={{ color: 'var(--text-muted)' }}>checking session…</div>
-  }
-  if (!user || !isAdmin) {
-    return <Navigate to="/" replace />
-  }
+  if (!isAdmin) return null
 
   return (
-    <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen admin-shell">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="mb-5 flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// ADMIN · 이메일 템플릿</div>
-            <h1 className="font-display font-black text-3xl md:text-4xl mb-1" style={{ color: 'var(--cream)' }}>
-              Transactional emails
-            </h1>
-            <p className="font-light text-sm" style={{ color: 'var(--text-secondary)' }}>
-              kind 별 메시지 편집 · 보내는 시점은 DB 트리거 / 코드가 결정. <Link to="/admin" className="underline" style={{ color: 'var(--gold-500)' }}>← 어드민 홈</Link>
-            </p>
-          </div>
-        </header>
-
-        <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)_280px]">
+    <div>
+      <p className="font-mono text-[11px] mb-4" style={{ color: 'var(--text-secondary)' }}>
+        kind 별 메시지 편집 · 보내는 시점은 DB 트리거가 결정. 새 kind 추가는 마이그레이션 + 트리거 작업 필요.
+      </p>
+      <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)_280px]">
           {/* Left rail · kind list */}
           <aside className="card-navy p-3" style={{ borderRadius: '2px' }}>
             <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Templates</div>
@@ -316,7 +302,33 @@ export function AdminEmailsPage() {
               })}
             </ol>
           </aside>
-        </div>
+      </div>
+    </div>
+  )
+}
+
+// Standalone-page wrapper · /admin/emails route. Same panel content
+// rendered inside the §-style page chrome plus an auth gate so direct
+// URL access still works for admins.
+export function AdminEmailsPage() {
+  const { user, member, loading: authLoading } = useAuth()
+  if (authLoading) {
+    return <div className="pt-32 pb-20 px-6 text-center font-mono text-xs" style={{ color: 'var(--text-muted)' }}>checking session…</div>
+  }
+  if (!user || !member?.is_admin) return <Navigate to="/" replace />
+  return (
+    <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen admin-shell">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-5">
+          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// ADMIN · 이메일 템플릿</div>
+          <h1 className="font-display font-black text-3xl md:text-4xl mb-1" style={{ color: 'var(--cream)' }}>
+            Transactional emails
+          </h1>
+          <p className="font-light text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <Link to="/admin" className="underline" style={{ color: 'var(--gold-500)' }}>← 어드민 홈</Link>
+          </p>
+        </header>
+        <EmailTemplatesPanel />
       </div>
     </section>
   )

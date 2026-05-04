@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { invalidateLadderCache } from '../lib/ladder'
+import { EmailTemplatesPanel } from './AdminEmailsPage'
 
 const ADMIN_TOKEN_KEY = 'commitshow.admin.token'
 
@@ -121,7 +122,7 @@ export function AdminPage() {
 
   const [token, setToken] = useState<string>(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
   const [tokenInput, setTokenInput] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'policy' | 'tools'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'policy' | 'emails' | 'tools'>('overview')
 
   const [userStats, setUserStats]   = useState<UserStats   | null>(null)
   const [auditStats, setAuditStats] = useState<AuditStats  | null>(null)
@@ -781,6 +782,7 @@ export function AdminPage() {
             ['audits',   'Audit'],
             ['cli',      'CLI 사용'],
             ['policy',   '정책'],
+            ['emails',   '이메일'],
             ['tools',    '도구'],
           ] as const).map(([k, label]) => (
             <button
@@ -811,6 +813,7 @@ export function AdminPage() {
         {tab === 'audits'   && <AuditsTab stats={auditStats} recent={recent} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
         {tab === 'cli'      && <CliTab usage={cliUsage} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
         {tab === 'policy'   && <PolicyTab />}
+        {tab === 'emails'   && <EmailTemplatesPanel />}
         {tab === 'tools'    && (
           <ToolsTab
             token={token}
