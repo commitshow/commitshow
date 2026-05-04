@@ -22,7 +22,7 @@ export function RulebookPage() {
             here directly (no referrer in same-app history). */}
         <button
           type="button"
-          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/ladder'))}
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/products'))}
           className="mb-5 font-mono text-xs tracking-wide"
           style={{ background: 'transparent', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer', padding: 0 }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}

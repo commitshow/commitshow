@@ -65,7 +65,11 @@ export default function App() {
           <Route path="/library/:id"      element={<LibraryDetailPage />} />
           <Route path="/scouts"           element={<ScoutsPage />} />
           <Route path="/leaderboard"      element={<LeaderboardPage />} />
-          <Route path="/ladder"           element={<LadderPage />} />
+          {/* /products is canonical (2026-05-05 rebrand · was /ladder).
+              Old /ladder URL preserved as redirect for links in the
+              wild · keeps tweets, blog posts, AI agent memory working. */}
+          <Route path="/products"         element={<LadderPage />} />
+          <Route path="/ladder"           element={<Navigate to="/products" replace />} />
           <Route path="/search"           element={<SearchPage />} />
           <Route path="/rulebook"         element={<RulebookPage />} />
           <Route path="/terms"            element={<TermsPage />} />

@@ -70,7 +70,7 @@ export function LadderTopStrip() {
             <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--gold-500)' }}>
               // ON THE LADDER · LIVE
             </div>
-            <Link to="/ladder" className="font-mono text-[11px] tracking-wide" style={{
+            <Link to="/products" className="font-mono text-[11px] tracking-wide" style={{
               color: 'var(--text-secondary)', textDecoration: 'none',
             }}>
               See full ladder →

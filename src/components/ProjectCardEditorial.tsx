@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { type Project, LADDER_CATEGORY_LABELS } from '../lib/supabase'
 import type { CreatorIdentity } from '../lib/projectQueries'
-import { IconForecast, IconApplaud, IconGraduation } from './icons'
+import { IconForecast, IconApplaud } from './icons'
+import { EncoreBadge } from './EncoreBadge'
 import { resolveCreatorName } from '../lib/creatorName'
 
 // Editorial-style card. Treat every submission as a crafted piece —
@@ -42,7 +43,11 @@ export function ProjectCardEditorial({
   const sc = hideScore ? 'rgba(255,255,255,0.35)' : scoreColor(p.score_total)
   const metaBits = (p.tech_layers ?? []).slice(0, 3).map(t => t.toUpperCase())
   if (metaBits.length === 0 && p.creator_grade) metaBits.push(p.creator_grade.toUpperCase())
-  const isGraduated = p.status === 'graduated' || p.status === 'valedictorian'
+  // 2026-05-05 rebrand · "Graduated" / "Valedictorian" labels replaced
+  // by the score-derived Encore badge (lib/encore · ENCORE_THRESHOLD = 84).
+  // The flag is renamed to keep the bottom-left/top-left chip layout
+  // logic intact without dragging the legacy graduation tier in.
+  const isEncore = (p.score_total ?? 0) >= 84
 
   // "Issue number" cue — short project id slice, magazine-like.
   const issueTag = `#${p.id.slice(0, 4).toUpperCase()}`
@@ -85,22 +90,15 @@ export function ProjectCardEditorial({
             {delta > 0 ? '+' : ''}{delta}
           </span>
         )}
-        {isGraduated && (
-          <span className="absolute top-3 left-3 inline-flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5" style={{
-            background: 'rgba(0,212,170,0.15)',
-            color: '#00D4AA',
-            border: '1px solid rgba(0,212,170,0.4)',
-            borderRadius: '2px',
-            backdropFilter: 'blur(6px)',
-          }}>
-            <IconGraduation size={10} />
-            {p.status === 'valedictorian' ? 'Valedictorian' : 'Graduated'}
+        {isEncore && (
+          <span className="absolute top-3 left-3" style={{ backdropFilter: 'blur(6px)' }}>
+            <EncoreBadge score={p.score_total} />
           </span>
         )}
         {/* §11-NEW.1.1 ladder category + rank · grouped pill. Category sits
             on the left, rank ('#3') trails to the right when present. */}
         {p.business_category && (
-          <span className={`absolute ${isGraduated ? 'bottom-3' : 'top-3'} left-3 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5`} style={{
+          <span className={`absolute ${isEncore ? 'bottom-3' : 'top-3'} left-3 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5`} style={{
             background: 'rgba(15,32,64,0.7)',
             color: 'var(--cream)',
             border: '1px solid rgba(255,255,255,0.15)',

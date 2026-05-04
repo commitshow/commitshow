@@ -146,13 +146,13 @@ export function LadderPage() {
         <header className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div className="min-w-0">
             <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-              // LADDER
+              // PRODUCTS
             </div>
             <h1 className="font-display font-bold text-3xl md:text-4xl mb-3" style={{ color: 'var(--cream)' }}>
-              Every audited project, ranked
+              Every audited product, ranked
             </h1>
             <p className="font-light text-sm md:text-base max-w-2xl" style={{ color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-              Six categories. Four time windows. Live ranking updates the moment any audit finishes.
+              Seven categories. Four time windows. Score 84+ earns Encore. Live ranking updates the moment any audit finishes.
             </p>
           </div>
           {!user && (

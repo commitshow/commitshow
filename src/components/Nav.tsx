@@ -30,11 +30,17 @@ function daysUntilNextReset(): number {
   return Math.max(0, Math.ceil((next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
 }
 
+// Primary nav · 2026-05-05 reorder + rebrand:
+//  - Ladder → Products (continuous ranking · "graduation" framing dropped)
+//  - Order Products → Scouts → Community → Library reads as
+//    "what's shipped → who judges → where talk happens → reusable craft"
+//  - /products is the canonical route; /ladder kept as a redirect for
+//    external links + tweet history.
 const PRIMARY_LINKS: Array<{ to: string; label: string }> = [
-  { to: '/ladder',    label: 'Ladder'    },     // absorbed /projects (2026-04-30 · single-surface)
+  { to: '/products',  label: 'Products'  },
+  { to: '/scouts',    label: 'Scouts'    },
   { to: '/community', label: 'Community' },
   { to: '/library',   label: 'Library'   },
-  { to: '/scouts',    label: 'Scouts'    },
 ]
 
 export function Nav() {
