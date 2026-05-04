@@ -247,12 +247,19 @@ export function LibraryPage() {
           )}
         </header>
 
-        {/* ── Intent primary strip (§15.1) ──────── */}
+        {/* ── Intent primary strip (§15.1) · horizontal scroll on mobile ── */}
         <div className="mb-4">
           <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--text-muted)' }}>
             INTENT
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div
+            className="flex items-center gap-1.5 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
             <IntentChip
               active={intent === 'all'}
               onClick={() => patchParams({ intent: null })}
@@ -274,8 +281,19 @@ export function LibraryPage() {
           </div>
         </div>
 
-        {/* ── Secondary: time + format + tool + price + sort ─ */}
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        {/* ── Secondary: time + format + tool + price + sort ──
+            Also horizontal-scrolls on mobile so 5 controls don't wrap into
+            3 awkward rows. The negative-margin/padding pattern lets the
+            scroll area bleed to the viewport edge while content keeps the
+            section's normal indent. */}
+        <div
+          className="flex items-center gap-2 mb-3 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
           <TimeToggle
             value={timeWindow}
             onChange={v => patchParams({ t: v === 'week' ? null : v })}
@@ -417,7 +435,7 @@ function IntentChip({
       type="button"
       onClick={onClick}
       title={hint}
-      className="font-mono text-[11px] tracking-wide px-3 py-1.5 transition-colors flex items-center gap-1.5"
+      className="font-mono text-[11px] tracking-wide px-3 py-1.5 transition-colors flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap"
       style={{
         background:   active ? `${tone}1C` : 'transparent',
         color:        active ? tone : 'var(--text-secondary)',
@@ -448,7 +466,7 @@ function TimeToggle({ value, onChange }: { value: TimeWindow; onChange: (v: Time
   ]
   return (
     <div
-      className="flex items-center gap-0 overflow-hidden"
+      className="flex items-center gap-0 overflow-hidden flex-shrink-0"
       style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}
     >
       {opts.map(o => {
@@ -480,7 +498,7 @@ function Select({ value, onChange, options }: { value: string; onChange: (v: str
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      className="px-2.5 py-2 font-mono text-xs"
+      className="px-2.5 py-2 font-mono text-xs flex-shrink-0"
       style={{
         background: 'rgba(6,12,26,0.6)',
         border: '1px solid rgba(255,255,255,0.08)',

@@ -69,7 +69,7 @@ export function LibraryPackRow({ item }: Props) {
   return (
     <Link
       to={`/library/${item.id}`}
-      className="block card-navy px-5 py-4 transition-all"
+      className="block card-navy px-3 py-3 md:px-5 md:py-4 transition-all overflow-hidden"
       style={{
         borderRadius: '2px',
         borderLeft: `3px solid ${intentTone}`,
@@ -86,7 +86,7 @@ export function LibraryPackRow({ item }: Props) {
         e.currentTarget.style.boxShadow   = ''
       }}
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 md:gap-4">
         {/* Left icon · single color · §4 rule */}
         <span
           aria-hidden="true"
@@ -96,13 +96,18 @@ export function LibraryPackRow({ item }: Props) {
           <FormatIcon size={24} />
         </span>
 
-        {/* Main content */}
+        {/* Main content · min-w-0 so the flex parent's width is enforced
+            and long titles can truncate instead of expanding the row past
+            the card edge on narrow viewports. */}
         <div className="flex-1 min-w-0">
-          {/* Title row + right-aligned actions (placeholder · Apply CTA lives on detail for now) */}
-          <div className="flex items-start justify-between gap-3 mb-0.5 flex-wrap">
+          {/* Title row + right-aligned price + verified badge.
+              flex-wrap so the badge can drop below on narrow screens
+              instead of pushing the title off-canvas. min-w-0 on the
+              title is what actually lets `truncate` clip an overlong name. */}
+          <div className="flex items-start justify-between gap-2 mb-0.5 flex-wrap">
             <h3
-              className="font-display font-bold leading-tight truncate"
-              style={{ color: 'var(--cream)', fontSize: '1.15rem', letterSpacing: '-0.005em' }}
+              className="font-display font-bold leading-tight truncate min-w-0"
+              style={{ color: 'var(--cream)', fontSize: '1.05rem', letterSpacing: '-0.005em' }}
             >
               {item.title}
             </h3>
@@ -121,7 +126,7 @@ export function LibraryPackRow({ item }: Props) {
                 </span>
               )}
               <span
-                className="font-mono text-xs tracking-wide px-2.5 py-1"
+                className="font-mono text-[11px] md:text-xs tracking-wide px-2 py-0.5 md:px-2.5 md:py-1"
                 style={{
                   background: item.is_free ? 'rgba(0,212,170,0.1)' : 'rgba(240,192,64,0.12)',
                   color:      item.is_free ? '#00D4AA' : 'var(--gold-500)',
@@ -134,8 +139,9 @@ export function LibraryPackRow({ item }: Props) {
             </div>
           </div>
 
-          {/* Author strip */}
-          <div className="flex items-center gap-2 font-mono text-[11px] mb-2" style={{ color: 'var(--text-secondary)' }}>
+          {/* Author strip · wraps on narrow screens so a long name +
+              grade + "from <source_project>" doesn't push past the card. */}
+          <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap font-mono text-[11px] mb-2" style={{ color: 'var(--text-secondary)' }}>
             <span
               className="inline-flex items-center justify-center overflow-hidden"
               style={{
@@ -220,9 +226,11 @@ export function LibraryPackRow({ item }: Props) {
             ))}
           </div>
 
-          {/* Stats row — downloads · applied · graduated-with-this */}
+          {/* Stats row — downloads · applied · graduated-with-this.
+              flex-wrap so a long stack of "graduated" + "applied" + downloads
+              + source-score doesn't bleed past the card edge on narrow phones. */}
           <div
-            className="flex items-center gap-4 font-mono text-[11px] tabular-nums"
+            className="flex items-center gap-x-4 gap-y-1 flex-wrap font-mono text-[11px] tabular-nums"
             style={{ color: 'var(--text-muted)' }}
           >
             <span title="Downloads">
