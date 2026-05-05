@@ -42,6 +42,32 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
 
   if (!open) return null
 
+  // Map raw supabase auth errors into something the user can act on.
+  // Rate-limit copy in particular: the upstream message ("Email rate
+  // limit exceeded.") is technically accurate but reads as a server
+  // problem. Tell people what to do — wait, try again, or use OAuth.
+  const friendlyAuthError = (e: { message?: string; code?: string; status?: number } | null): string => {
+    if (!e) return ''
+    const msg  = (e.message ?? '').toLowerCase()
+    const code = (e.code    ?? '').toLowerCase()
+    if (code.includes('rate_limit') || msg.includes('rate limit') || msg.includes('rate-limit') || e.status === 429) {
+      return 'Too many sign-up attempts in a short window. Wait ~1 hour and try again, or sign in with Google / GitHub / X / LinkedIn instead — those have no email throttle.'
+    }
+    if (code === 'email_exists' || code === 'user_already_exists' || msg.includes('already registered') || msg.includes('user already')) {
+      return 'An account with this email already exists. Try signing in, or use the password reset link.'
+    }
+    if (code === 'weak_password' || msg.includes('password should be') || msg.includes('weak password')) {
+      return 'Password is too weak. Use 8+ characters with a mix of letters and numbers.'
+    }
+    if (code === 'invalid_credentials' || msg.includes('invalid login') || msg.includes('invalid credentials')) {
+      return 'Email or password incorrect. If you signed up with Google / GitHub, use that button instead.'
+    }
+    if (code === 'email_not_confirmed' || msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+      return 'Email not confirmed yet. Check your inbox for the confirmation link before signing in.'
+    }
+    return e.message ?? 'Something went wrong. Try again or use a social login.'
+  }
+
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -53,12 +79,12 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
     if (mode === 'signin') {
       const { error: err } = await signInWithEmail(email, password)
       setBusy(false)
-      if (err) { setError(err.message); return }
+      if (err) { setError(friendlyAuthError(err as any)); return }
       onClose()
     } else {
       const res = await signUpWithEmail(email, password)
       setBusy(false)
-      if (res.error) { setError(res.error.message); return }
+      if (res.error) { setError(friendlyAuthError(res.error as any)); return }
       // When Supabase Auth has "Confirm email" enabled, signUp
       // returns no session — render the check-your-inbox screen
       // instead of closing the modal silently.
@@ -281,11 +307,13 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
           )}
 
           {error && (
-            <div className="font-mono text-xs px-3 py-2" style={{
+            <div className="font-light text-[13px] px-3 py-2.5" style={{
               background: 'rgba(200,16,46,0.08)',
               border: '1px solid rgba(200,16,46,0.25)',
               color: 'var(--scarlet)',
               borderRadius: '2px',
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
             }}>
               {error}
             </div>

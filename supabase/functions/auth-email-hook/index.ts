@@ -135,22 +135,33 @@ Deno.serve(async (req) => {
 
   const action = payload.email_data.email_action_type
   const templateKind = ACTION_TO_TEMPLATE[action]
+  console.log('[auth-email-hook] verify ok', {
+    action,
+    templateKind,
+    user_email: payload.user.email,
+  })
   if (!templateKind) {
-    // Unknown action · let Auth handle it via its default SMTP rather
-    // than swallow silently. We respond 200 so Auth doesn't retry,
-    // but no email goes out our side.
     console.warn(`[auth-email-hook] unknown email_action_type: ${action}`)
     return json({ skipped: true, reason: 'unknown email_action_type' }, 200)
   }
 
   // Look up the template.
-  const { data: tpl } = await admin
+  const { data: tpl, error: tplErr } = await admin
     .from('email_templates')
     .select('subject, html_body, text_body, enabled')
     .eq('kind', templateKind)
     .maybeSingle()
-  if (!tpl || !tpl.enabled) {
-    return json({ error: `template missing or disabled: ${templateKind}` }, 500)
+  if (tplErr) {
+    console.error('[auth-email-hook] template fetch error', tplErr)
+    return json({ error: 'template fetch failed', detail: tplErr.message }, 500)
+  }
+  if (!tpl) {
+    console.error(`[auth-email-hook] template missing: ${templateKind}`)
+    return json({ error: `template missing: ${templateKind}` }, 500)
+  }
+  if (!tpl.enabled) {
+    console.warn(`[auth-email-hook] template disabled: ${templateKind}`)
+    return json({ error: `template disabled: ${templateKind}` }, 500)
   }
 
   // Compose confirmation_url. Supabase format:
@@ -217,6 +228,7 @@ Deno.serve(async (req) => {
     if ((insertErr as { code?: string }).code === '23505') {
       return json({ ok: true, deduped: true }, 200)
     }
+    console.error('[auth-email-hook] log insert failed', insertErr)
     return json({ error: 'log insert failed', detail: insertErr.message }, 500)
   }
 
@@ -263,7 +275,9 @@ Deno.serve(async (req) => {
     .eq('id', logRow.id)
 
   if (errorMessage) {
+    console.error('[auth-email-hook] resend send failed', errorMessage)
     return json({ error: errorMessage, log_id: logRow.id }, 502)
   }
+  console.log('[auth-email-hook] sent', { provider_id: providerId, log_id: logRow.id })
   return json({ ok: true, log_id: logRow.id, provider_id: providerId }, 200)
 })
