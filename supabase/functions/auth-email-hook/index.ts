@@ -124,7 +124,19 @@ Deno.serve(async (req) => {
     return json({ error: 'missing webhook headers' }, 401)
   }
   const ok = await verifySignature(rawBody, hookId, hookTs, hookSig, HOOK_SECRET)
-  if (!ok) return json({ error: 'invalid signature' }, 401)
+  if (!ok) {
+    // Diagnostic logging · the secret_prefix lets us tell from the
+    // Function logs whether the keychain stored the raw whsec_ form,
+    // a v1, prefix, or something else, without exposing the value.
+    console.warn('[auth-email-hook] signature verify failed', {
+      hook_id_prefix:        hookId.slice(0, 8),
+      hook_ts:               hookTs,
+      sig_prefix:            hookSig.slice(0, 16),
+      secret_starts:         HOOK_SECRET.slice(0, 8),
+      secret_len:            HOOK_SECRET.length,
+    })
+    return json({ error: 'invalid signature' }, 401)
+  }
 
   let payload: AuthHookPayload
   try { payload = JSON.parse(rawBody) } catch { return json({ error: 'invalid JSON body' }, 400) }

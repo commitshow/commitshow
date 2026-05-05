@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth, type OAuthProvider } from '../lib/auth'
 
 type Mode = 'signin' | 'signup'
@@ -96,7 +97,12 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
     }
   }
 
-  return (
+  // Portal to document.body so the modal escapes the Nav's stacking
+  // context. Nav is `fixed z-50` and renders <AuthModal> as a child;
+  // without the portal, the modal's z-[100] only competes within Nav's
+  // context (effective max = Nav's z-50). On mobile that put the
+  // overlay behind the header strip and any sticky bottom UI.
+  return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center px-4"
       style={{ background: 'rgba(6,12,26,0.8)', backdropFilter: 'blur(8px)' }}
@@ -322,7 +328,8 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
         </div>
         </>}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
