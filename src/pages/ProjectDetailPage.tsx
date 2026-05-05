@@ -366,21 +366,41 @@ export function ProjectDetailPage() {
 
         {/* ── Compact Hero (description moved to Overview pullquote) ── */}
         <header className="card-navy overflow-hidden mb-4 relative" style={{ borderRadius: '2px' }}>
-          {isOwner && (
-            <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-1.5">
-              <div className="flex items-center gap-2">
+          {/* Top-right cluster · Open Live (everyone) + owner controls
+              (Re-audit / EDIT). 2026-05-05 · pulled OPEN LIVE out of
+              the inline action row so the action row could shrink to
+              just Forecast + Applaud (the engagement primitives).
+              flex-wrap-reverse keeps Open Live at the top-right edge
+              when wrapping; owner buttons fall to the second line. */}
+          <div className="absolute top-3 right-3 z-10 flex flex-wrap-reverse justify-end items-center gap-1.5 max-w-[calc(100%-1.5rem)]">
+            {project.live_url && (
+              <a href={project.live_url} target="_blank" rel="noopener noreferrer"
+                className="font-mono text-[11px] tracking-wide px-3 py-1.5"
+                style={{
+                  background: 'var(--gold-500)',
+                  color: 'var(--navy-900)',
+                  border: 'none',
+                  borderRadius: '2px',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                }}>
+                OPEN LIVE ↗
+              </a>
+            )}
+            {isOwner && (
+              <>
                 <button
                   type="button"
                   onClick={handleHeroReanalyze}
                   disabled={heroRerunBusy}
                   className="font-mono text-[11px] tracking-wide px-3 py-1.5"
                   style={{
-                    background:   heroRerunBusy ? 'rgba(240,192,64,0.25)' : 'var(--gold-500)',
-                    color:        heroRerunBusy ? 'var(--text-muted)' : 'var(--navy-900)',
-                    border:       'none',
+                    background:   heroRerunBusy ? 'rgba(240,192,64,0.25)' : 'rgba(6,12,26,0.8)',
+                    color:        heroRerunBusy ? 'var(--text-muted)' : 'var(--gold-500)',
+                    border:       '1px solid rgba(240,192,64,0.4)',
                     borderRadius: '2px',
                     cursor:       heroRerunBusy ? 'wait' : 'pointer',
-                    fontWeight:   600,
+                    backdropFilter: 'blur(4px)',
                   }}
                   aria-label="Re-audit this build"
                 >
@@ -403,20 +423,20 @@ export function ProjectDetailPage() {
                 >
                   EDIT
                 </button>
-              </div>
-              {heroRerunError && (
-                <div className="font-mono text-[10px] tracking-wide px-2 py-1"
-                     style={{
-                       maxWidth: '320px',
-                       textAlign: 'right',
-                       color: '#F87871',
-                       background: 'rgba(200,16,46,0.08)',
-                       borderLeft: '2px solid var(--scarlet)',
-                       borderRadius: '2px',
-                     }}>
-                  {heroRerunError}
-                </div>
-              )}
+              </>
+            )}
+          </div>
+          {isOwner && heroRerunError && (
+            <div className="absolute top-12 right-3 z-10 font-mono text-[10px] tracking-wide px-2 py-1"
+                 style={{
+                   maxWidth: '320px',
+                   textAlign: 'right',
+                   color: '#F87871',
+                   background: 'rgba(200,16,46,0.08)',
+                   borderLeft: '2px solid var(--scarlet)',
+                   borderRadius: '2px',
+                 }}>
+              {heroRerunError}
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
@@ -485,21 +505,12 @@ export function ProjectDetailPage() {
                 </div>
               </div>
 
+              {/* Action row · 2026-05-05 trimmed to engagement primitives only.
+                  Open Live / GitHub / Re-audit / EDIT moved up to the
+                  hero card's top-right cluster. Owner Share menu kept
+                  here because it's contextual to the project state
+                  (audit/graduation/milestone options). */}
               <div className="flex flex-wrap gap-2">
-                {project.live_url && (
-                  <a href={project.live_url} target="_blank" rel="noopener noreferrer"
-                    className="font-mono text-xs tracking-wide px-3 py-1.5"
-                    style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}>
-                    OPEN LIVE ↗
-                  </a>
-                )}
-                {isOwner && project.github_url && (
-                  <a href={project.github_url} target="_blank" rel="noopener noreferrer"
-                    className="font-mono text-xs tracking-wide px-3 py-1.5"
-                    style={{ background: 'transparent', color: 'rgba(248,245,238,0.7)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '2px', textDecoration: 'none' }}>
-                    GITHUB ↗
-                  </a>
-                )}
                 {/* Owner unified Share on X menu · single entry point that
                     expands to the right picker based on project state.
                     Audit always available · graduation when graduated ·
@@ -581,20 +592,40 @@ export function ProjectDetailPage() {
 
                   return <ShareOnXMenu options={options} url={projectUrl} />
                 })()}
-                {/* Forecast + Applaud — §4 emoji CTA carve-out for differentiation
-                    from OPEN LIVE / GITHUB pills. Non-owner, phase-aware. */}
-                {canForecast && isVotingPhase && (
-                  <button
-                    onClick={() => setForecastOpen(true)}
-                    className="font-mono text-xs font-medium tracking-wide px-3 py-1.5"
-                    style={{ background: 'rgba(240,192,64,0.08)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', cursor: 'pointer' }}
-                  >
-                    <span className="inline-flex items-center justify-center gap-1.5">
-                      <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>🎯</span>
-                      FORECAST
-                    </span>
-                  </button>
-                )}
+                {/* Forecast + Applaud — §4 emoji CTA carve-out.
+                    Forecast button surfaces participation count + avg
+                    of all submitted predicted_score values so a viewer
+                    sees what the room is calling before tapping in. */}
+                {canForecast && isVotingPhase && (() => {
+                  const predicted    = forecasts.filter(f => typeof f.predicted_score === 'number')
+                  const forecastN    = forecasts.length
+                  const avgPredicted = predicted.length === 0
+                    ? null
+                    : Math.round(predicted.reduce((s, f) => s + (f.predicted_score ?? 0), 0) / predicted.length)
+                  return (
+                    <button
+                      onClick={() => setForecastOpen(true)}
+                      className="font-mono text-xs font-medium tracking-wide px-3 py-1.5"
+                      style={{ background: 'rgba(240,192,64,0.08)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px', cursor: 'pointer' }}
+                      title={forecastN === 0
+                        ? 'No forecasts yet · be the first to call it'
+                        : avgPredicted == null
+                          ? `${forecastN} forecast${forecastN === 1 ? '' : 's'} · no predicted scores yet`
+                          : `${forecastN} forecast${forecastN === 1 ? '' : 's'} · room is calling ${avgPredicted}/100 on average`}
+                    >
+                      <span className="inline-flex items-center justify-center gap-1.5">
+                        <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>🎯</span>
+                        <span>FORECAST</span>
+                        {forecastN > 0 && (
+                          <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--gold-500)', opacity: 0.8 }}>
+                            · {forecastN}
+                            {avgPredicted != null && <> · avg {avgPredicted}</>}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })()}
                 {!isOwner && (
                   <ApplaudButton
                     targetType="product"
