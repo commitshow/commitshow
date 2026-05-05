@@ -360,13 +360,18 @@ export function ScoutDetailPage() {
                                       : s.forecast_outcome === 'missed'  ? 'var(--scarlet)'
                                       : s.forecast_outcome === 'mixed'   ? 'var(--gold-500)'
                                       : 'var(--text-muted)'
-                    const outcomeLabel = s.forecast_outcome === 'correct' ? 'correct'
+                    // Outcome label as JSX so the predicted-score
+                    // portion (the scout's actual call) reads in mint
+                    // — same color cue as a 'correct' outcome, telegraphing
+                    // 'this is the number they put on the line'.
+                    const PRED_COLOR = '#00D4AA'
+                    const outcomeLabel: React.ReactNode = s.forecast_outcome === 'correct' ? 'correct'
                                        : s.forecast_outcome === 'missed'  ? 'missed'
                                        : s.forecast_outcome === 'mixed'   ? 'mixed'
                                        : s.predicted_avg != null && currentScore != null
-                                         ? `called ${s.predicted_avg} → ${currentScore} (pending)`
+                                         ? <>called <span style={{ color: PRED_COLOR }}>{s.predicted_avg}</span> → {currentScore} (pending)</>
                                          : s.predicted_avg != null
-                                           ? `called ${s.predicted_avg} (pending)`
+                                           ? <>called <span style={{ color: PRED_COLOR }}>{s.predicted_avg}</span> (pending)</>
                                            : 'pending'
                     return (
                       <li key={s.project_id}>
@@ -429,10 +434,14 @@ export function ScoutDetailPage() {
                                   : 'var(--text-muted)'
                     const pred    = v.predicted_score
                     const cur     = v.score_total
-                    const labelEl = correct === true  ? 'correct'
+                    // Predicted-score portion stays mint regardless of
+                    // outcome — the scout's call color, never the
+                    // resolution color.
+                    const PRED_COLOR = '#00D4AA'
+                    const labelEl: React.ReactNode = correct === true  ? 'correct'
                                   : correct === false ? 'missed'
                                   : pred != null
-                                    ? `${pred} / ${cur ?? '—'} (pending)`
+                                    ? <><span style={{ color: PRED_COLOR }}>{pred}</span> / {cur ?? '—'} (pending)</>
                                     : 'pending'
                     return (
                       <li key={v.id}>
