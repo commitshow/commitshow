@@ -82,6 +82,14 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'POST required' }, 405)
 
+  console.log('[auth-email-hook] request received', {
+    method:   req.method,
+    has_id:   !!req.headers.get('webhook-id'),
+    has_ts:   !!req.headers.get('webhook-timestamp'),
+    has_sig:  !!req.headers.get('webhook-signature'),
+    sig_pre:  (req.headers.get('webhook-signature') ?? '').slice(0, 20),
+  })
+
   // Read raw body once · we need the exact bytes for signature
   // verification. Re-parse as JSON afterwards.
   const rawBody = await req.text()
@@ -91,15 +99,18 @@ Deno.serve(async (req) => {
     return json({ error: 'AUTH_HOOK_SECRET not configured' }, 500)
   }
 
-  // Standard Webhooks library · accepts the secret in its full
-  // `v1,whsec_<base64>` form (exactly what Supabase Dashboard
-  // displays). The library strips the version + decodes internally.
-  // Throws on bad signature / stale timestamp / etc., which we map
-  // to a 401 with a short diagnostic log so we can spot a mismatch
-  // from the Function logs.
+  // standardwebhooks library wants the secret in `whsec_<base64>`
+  // form · its constructor base64-decodes whatever follows whsec_.
+  // Supabase Dashboard displays the secret as `v1,whsec_<base64>`
+  // (the v1, is the scheme version of the SIGNATURE, not the secret).
+  // Pass v1, through and the library tries to decode `v1,xxx` and
+  // throws "Base64Coder: incorrect characters for decoding". Strip
+  // it inside the function so callers can paste either form into
+  // AUTH_HOOK_SECRET without surgery.
   let payload: AuthHookPayload
   try {
-    const wh = new Webhook(HOOK_SECRET)
+    const cleaned = HOOK_SECRET.replace(/^v1,/, '')
+    const wh = new Webhook(cleaned)
     const headers = {
       'webhook-id':        req.headers.get('webhook-id')        ?? '',
       'webhook-timestamp': req.headers.get('webhook-timestamp') ?? '',
