@@ -171,17 +171,38 @@ export function ScoutDetailPage() {
         .order('created_at', { ascending: false })
         .limit(15)
       const aRows = ((aRaw ?? []) as Array<{ id: string; created_at: string; target_type: string; target_id: string }>)
-      // Resolve product target_ids → project_name for the most common case.
+      // Resolve target_ids per type so the row can show a human label
+      // instead of the raw uuid prefix ('comment 2223644c'). Product +
+      // comment cover most of the volume; build_log / stack / brief /
+      // recommit fall back to the type label until those surfaces grow.
       const productIds = aRows.filter(a => a.target_type === 'product').map(a => a.target_id)
-      const { data: aPjRows } = productIds.length > 0
-        ? await supabase.from('projects').select('id, project_name').in('id', productIds)
-        : { data: [] as Array<{ id: string; project_name: string }> }
+      const commentIds = aRows.filter(a => a.target_type === 'comment').map(a => a.target_id)
+      const [{ data: aPjRows }, { data: aCmRows }] = await Promise.all([
+        productIds.length > 0
+          ? supabase.from('projects').select('id, project_name').in('id', productIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; project_name: string }> }),
+        commentIds.length > 0
+          ? supabase.from('comments').select('id, text, project_id').in('id', commentIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; text: string; project_id: string }> }),
+      ])
       const aPjMap = new Map<string, string>(
         ((aPjRows as Array<{ id: string; project_name: string }>) ?? []).map(p => [p.id, p.project_name]),
+      )
+      const aCmMap = new Map<string, { text: string; project_id: string }>(
+        ((aCmRows as Array<{ id: string; text: string; project_id: string }>) ?? [])
+          .map(c => [c.id, { text: c.text, project_id: c.project_id }]),
       )
       const applaudRows: ApplaudRow[] = aRows.map(a => {
         if (a.target_type === 'product') {
           return { ...a, target_label: aPjMap.get(a.target_id) ?? null, target_link: `/projects/${a.target_id}` }
+        }
+        if (a.target_type === 'comment') {
+          const c = aCmMap.get(a.target_id)
+          if (!c) return { ...a, target_label: null, target_link: null }
+          // Truncate so a long comment doesn't blow out the row.
+          // Single-line, no markdown processing — just text excerpt.
+          const excerpt = c.text.length > 90 ? c.text.slice(0, 89) + '…' : c.text
+          return { ...a, target_label: excerpt, target_link: `/projects/${c.project_id}#comments` }
         }
         return { ...a, target_label: null, target_link: null }
       })
@@ -551,11 +572,30 @@ function Section({ title, children, emptyHint }: { title: string; children?: Rea
 }
 
 function ApplaudInner({ row }: { row: ApplaudRow }) {
+  // Comment applauds get the actual text (truncated upstream) wrapped
+  // in quotes; product applauds get the project name; everything else
+  // falls back to "<type> <uuid-prefix>" — only happens for build_log /
+  // stack / brief / recommit which we'll resolve when those surfaces
+  // grow enough to matter.
+  const isComment = row.target_type === 'comment' && row.target_label
+  const headline = isComment
+    ? `"${row.target_label}"`
+    : (row.target_label ?? `${row.target_type} ${row.target_id.slice(0, 8)}`)
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div className="min-w-0">
-        <div className="font-display font-bold truncate" style={{ color: 'var(--cream)' }}>
-          {row.target_label ?? `${row.target_type} ${row.target_id.slice(0, 8)}`}
+        <div
+          className={isComment ? 'font-light text-sm' : 'font-display font-bold truncate'}
+          style={{
+            color:        isComment ? 'var(--text-secondary)' : 'var(--cream)',
+            fontStyle:    isComment ? 'italic' : 'normal',
+            display:     '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow:    'hidden',
+          }}
+        >
+          {headline}
         </div>
         <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
           {row.target_type} · {new Date(row.created_at).toLocaleDateString()}
