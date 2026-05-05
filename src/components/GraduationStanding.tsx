@@ -16,6 +16,7 @@ import {
   fetchProjectEncore, type EncoreRow,
 } from '../lib/encore'
 import { EncoreBadge } from './EncoreBadge'
+import { supabase } from '../lib/supabase'
 
 interface Props {
   projectId: string
@@ -25,6 +26,7 @@ interface Props {
 export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props) {
   const [s, setS] = useState<ProjectStanding | null>(null)
   const [encore, setEncore] = useState<EncoreRow | null>(null)
+  const [supporterCount, setSupporterCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(true)
 
@@ -33,10 +35,12 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
     Promise.all([
       fetchProjectStanding(projectId),
       fetchProjectEncore(projectId),
-    ]).then(([r, e]) => {
+      supabase.from('supporters').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
+    ]).then(([r, e, sup]) => {
       if (!alive) return
       setS(r)
       setEncore(e)
+      setSupporterCount(sup.count ?? 0)
       setLoading(false)
     })
     return () => { alive = false }
@@ -127,6 +131,27 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
             <PillarCell label="Scout"    max={30} />
             <PillarCell label="Community" max={20} />
           </div>
+
+          {/* Supporter strip · how many Scouts have placed a forecast on
+              this project. Persists across re-audits so it's a real "fan
+              count" — distinct from forecast votes (which can be ×N from
+              the same scout). Shown only once at least one supporter exists
+              so a fresh project doesn't read "0 supporters yet". */}
+          {supporterCount > 0 && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2" style={{
+              background: 'rgba(240,192,64,0.04)',
+              border: '1px solid rgba(240,192,64,0.18)',
+              borderRadius: '2px',
+            }}>
+              <span aria-hidden="true" style={{ color: 'var(--gold-500)', fontSize: 14 }}>★</span>
+              <span className="font-mono text-[11px]" style={{ color: 'var(--cream)' }}>
+                <strong style={{ color: 'var(--gold-500)' }}>{supporterCount.toLocaleString()}</strong>{' '}
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {supporterCount === 1 ? 'Scout supporting this product' : 'Scouts supporting this product'}
+                </span>
+              </span>
+            </div>
+          )}
 
           {/* Eligibility strip · still useful (Encore = score-only, but
               live URL + brief make the score meaningful in the first place) */}

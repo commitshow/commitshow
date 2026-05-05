@@ -167,11 +167,13 @@ export function NotificationBell({ recipientId }: Props) {
 
 function NotificationRowView({ n, onClick }: { n: NotificationRow; onClick: () => void }) {
   const unread = !n.read_at
-  const KindIcon = n.kind === 'applaud' ? IconApplaud
-                 : n.kind === 'comment' ? IconComment
+  const KindIcon = n.kind === 'applaud'  ? IconApplaud
+                 : n.kind === 'comment'  ? IconComment
+                 : n.kind === 'reaudit'  ? IconForecast   // re-uses target icon · close enough
                  : IconForecast
-  const tone     = n.kind === 'applaud' ? 'var(--gold-500)'
-                 : n.kind === 'comment' ? 'var(--cream)'
+  const tone     = n.kind === 'applaud'  ? 'var(--gold-500)'
+                 : n.kind === 'comment'  ? 'var(--cream)'
+                 : n.kind === 'reaudit'  ? 'var(--gold-500)'
                  : '#00D4AA'
   const initial = (n.actor_display_name ?? '?').slice(0, 1).toUpperCase()
 

@@ -7,7 +7,7 @@
 
 import { supabase } from './supabase'
 
-export type NotificationKind = 'applaud' | 'forecast' | 'comment'
+export type NotificationKind = 'applaud' | 'forecast' | 'comment' | 'reaudit'
 
 export interface NotificationRow {
   id:                    string
@@ -112,6 +112,20 @@ export function titleFor(n: NotificationRow): string {
     const preview = meta.preview ? `: "${truncate(meta.preview, 60)}"` : ''
     if (isReply) return `${actor} replied to your comment${preview}`
     return `${actor} commented on ${n.project_name ?? 'your project'}${preview}`
+  }
+  if (n.kind === 'reaudit') {
+    const meta = (n.metadata as { score_total?: number; score_delta?: number; trigger_type?: string } | null) ?? {}
+    const score = meta.score_total
+    const delta = meta.score_delta
+    const project = n.project_name ?? 'a project you support'
+    if (typeof score === 'number' && typeof delta === 'number' && delta !== 0) {
+      const sign = delta > 0 ? '+' : ''
+      return `${project} just re-audited · ${score}/100 (${sign}${delta})`
+    }
+    if (typeof score === 'number') {
+      return `${project} just re-audited · ${score}/100`
+    }
+    return `${project} just re-audited`
   }
   return `${actor} interacted with your content`
 }

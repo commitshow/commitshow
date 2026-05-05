@@ -51,6 +51,7 @@ interface MemberStatsExt extends Member {
   forecast_accuracy?:    number | null  // 0-100
   graduated_count?:      number
   spotter_hits?:         { first: number; early: number; spotter: number }
+  supporting_count?:     number
 }
 
 export function ScoutDetailPage() {
@@ -79,9 +80,10 @@ export function ScoutDetailPage() {
       const memberCore = m as unknown as MemberStatsExt
 
       // 2. Aggregates · counts only (cheap RPC-less path).
-      const [votesAgg, applaudsAgg] = await Promise.all([
+      const [votesAgg, applaudsAgg, supportingCount] = await Promise.all([
         supabase.from('votes').select('id, is_correct, spotter_tier', { count: 'exact', head: false }).eq('member_id', id),
         supabase.from('applauds').select('id', { count: 'exact', head: true }).eq('member_id', id),
+        supabase.from('supporters').select('id', { count: 'exact', head: true }).eq('supporter_id', id),
       ])
       const totalVotes = votesAgg.count ?? 0
       const voteAggRows = (votesAgg.data ?? []) as Array<{ is_correct: boolean | null; spotter_tier: 'first' | 'early' | 'spotter' | null }>
@@ -90,6 +92,7 @@ export function ScoutDetailPage() {
       memberCore.total_votes_cast     = totalVotes
       memberCore.total_applauds_given = applaudsAgg.count ?? 0
       memberCore.forecast_accuracy    = evaluatedVotes > 0 ? Math.round((correctVotes / evaluatedVotes) * 100) : null
+      memberCore.supporting_count     = supportingCount.count ?? 0
       memberCore.spotter_hits = {
         first:   voteAggRows.filter(v => v.spotter_tier === 'first').length,
         early:   voteAggRows.filter(v => v.spotter_tier === 'early').length,
@@ -201,11 +204,13 @@ export function ScoutDetailPage() {
               </div>
             </div>
 
-            {/* Stats grid */}
+            {/* Stats grid · Supporting before Accuracy because the rooting
+                relationship is the more useful long-running signal — accuracy
+                lights up only after season-end resolution. */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
               <Stat label="Activity points" value={member.activity_points ?? 0} />
               <Stat label="Votes cast"      value={member.total_votes_cast ?? 0} />
-              <Stat label="Applauds given"  value={member.total_applauds_given ?? 0} />
+              <Stat label="Supporting"      value={member.supporting_count ?? 0} hint="distinct projects" />
               <Stat label="Forecast accuracy" value={member.forecast_accuracy != null ? `${member.forecast_accuracy}%` : '—'} hint="evaluated votes only" />
             </div>
 
