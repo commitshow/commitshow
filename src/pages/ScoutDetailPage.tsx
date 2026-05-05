@@ -45,6 +45,17 @@ interface ApplaudRow {
   target_link:  string | null
 }
 
+interface SupportRow {
+  project_id:         string
+  first_voted_at:     string
+  last_voted_at:      string
+  vote_count_total:   number
+  first_spotter_tier: 'first' | 'early' | 'spotter' | null
+  project_name:       string | null
+  score_total:        number | null
+  score_at_first_vote: number | null   // pulled from analysis_snapshots closest to first_voted_at
+}
+
 interface MemberStatsExt extends Member {
   total_votes_cast?:     number
   total_applauds_given?: number
@@ -59,6 +70,7 @@ export function ScoutDetailPage() {
   const [member, setMember]     = useState<MemberStatsExt | null>(null)
   const [votes, setVotes]       = useState<VoteRow[]>([])
   const [applauds, setApplauds] = useState<ApplaudRow[]>([])
+  const [supports, setSupports] = useState<SupportRow[]>([])
   const [loaded, setLoaded]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
@@ -153,10 +165,56 @@ export function ScoutDetailPage() {
         return { ...a, target_label: null, target_link: null }
       })
 
+      // 5. Supporting · the scout's slate. Sorted by first_voted_at DESC
+      //    (most recent backings on top — feels like a feed). For each
+      //    supported project we fetch the LATEST snapshot at-or-before
+      //    first_voted_at so the page can show "called it at 67 · now 79".
+      const { data: supRaw } = await supabase
+        .from('supporters')
+        .select('project_id, first_voted_at, last_voted_at, vote_count_total, first_spotter_tier')
+        .eq('supporter_id', id)
+        .order('first_voted_at', { ascending: false })
+        .limit(50)
+      const supRows = ((supRaw ?? []) as Array<{
+        project_id: string; first_voted_at: string; last_voted_at: string;
+        vote_count_total: number; first_spotter_tier: 'first' | 'early' | 'spotter' | null
+      }>)
+      const supProjIds = Array.from(new Set(supRows.map(s => s.project_id)))
+      const { data: supProjRows } = supProjIds.length > 0
+        ? await supabase.from('projects').select('id, project_name, score_total').in('id', supProjIds)
+        : { data: [] as Array<{ id: string; project_name: string; score_total: number | null }> }
+      const supProjMap = new Map<string, { project_name: string; score_total: number | null }>(
+        ((supProjRows as Array<{ id: string; project_name: string; score_total: number | null }>) ?? [])
+          .map(p => [p.id, { project_name: p.project_name, score_total: p.score_total }]),
+      )
+      // Score-at-first-vote · pull the snapshot whose created_at is the
+      // greatest ≤ first_voted_at for each project. Cheaper to do it as
+      // one query per project (capped 50) than a giant JOIN — supports
+      // are read on profile only, not in hot paths.
+      const scoreAtFirst: Record<string, number | null> = {}
+      await Promise.all(supRows.map(async (s) => {
+        const { data: sn } = await supabase
+          .from('analysis_snapshots')
+          .select('score_total')
+          .eq('project_id', s.project_id)
+          .lte('created_at', s.first_voted_at)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        scoreAtFirst[s.project_id] = (sn as { score_total: number | null } | null)?.score_total ?? null
+      }))
+      const supportRows: SupportRow[] = supRows.map(s => ({
+        ...s,
+        project_name:        supProjMap.get(s.project_id)?.project_name ?? null,
+        score_total:         supProjMap.get(s.project_id)?.score_total ?? null,
+        score_at_first_vote: scoreAtFirst[s.project_id] ?? null,
+      }))
+
       if (!alive) return
       setMember(memberCore)
       setVotes(voteRows)
       setApplauds(applaudRows)
+      setSupports(supportRows)
       setLoaded(true)
     })()
     return () => { alive = false }
@@ -223,6 +281,74 @@ export function ScoutDetailPage() {
                 <Stat label="Spotter"        value={member.spotter_hits.spotter} hint="≤ 14 days" tone="gold" />
               </div>
             )}
+
+            {/* Supporting · the slate. One row per distinct project the
+                scout has voted on. Shows score-at-first-vote → current,
+                so a visitor can see "called it at 67 · now 79 · +12 since".
+                Sorted newest support first. */}
+            <Section title="Supporting" emptyHint="Not supporting any product yet.">
+              {supports.length > 0 && (
+                <ol className="grid gap-1.5">
+                  {supports.map(s => {
+                    const initialScore = s.score_at_first_vote
+                    const currentScore = s.score_total
+                    const delta = (initialScore != null && currentScore != null)
+                      ? currentScore - initialScore
+                      : null
+                    const deltaTone = delta == null ? 'var(--text-muted)'
+                                    : delta > 0 ? '#00D4AA'
+                                    : delta < 0 ? 'var(--scarlet)'
+                                    : 'var(--text-muted)'
+                    const deltaLabel = delta == null ? '—'
+                                     : delta > 0 ? `+${delta}`
+                                     : `${delta}`
+                    const tierLabel = s.first_spotter_tier === 'first'   ? 'First'
+                                    : s.first_spotter_tier === 'early'   ? 'Early'
+                                    : s.first_spotter_tier === 'spotter' ? 'Spotter'
+                                    : null
+                    return (
+                      <li key={s.project_id}>
+                        <Link
+                          to={`/projects/${s.project_id}`}
+                          className="block px-3 py-2"
+                          style={{ background: 'rgba(15,32,64,0.4)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px', textDecoration: 'none' }}
+                        >
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="font-display font-bold truncate min-w-0" style={{ color: 'var(--cream)' }}>
+                              {s.project_name ?? '—'}
+                            </div>
+                            <span
+                              className="font-mono text-[11px] tabular-nums whitespace-nowrap"
+                              title={initialScore != null && currentScore != null
+                                ? `Score at first vote ${initialScore} · current ${currentScore}`
+                                : 'Score history not available'}
+                            >
+                              <span style={{ color: 'var(--text-muted)' }}>{initialScore ?? '—'}</span>
+                              <span style={{ color: 'var(--text-faint)' }}> → </span>
+                              <span style={{ color: 'var(--cream)', fontWeight: 700 }}>{currentScore ?? '—'}</span>
+                              <span style={{ color: deltaTone, marginLeft: 6 }}>({deltaLabel})</span>
+                            </span>
+                          </div>
+                          <div className="font-mono text-[10px] mt-0.5 flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-muted)' }}>
+                            <span>since {new Date(s.first_voted_at).toLocaleDateString()}</span>
+                            <span>·</span>
+                            <span>×{s.vote_count_total}</span>
+                            {tierLabel && (
+                              <>
+                                <span>·</span>
+                                <span style={{ color: 'var(--gold-500)' }} title="Spotter tier of the first vote on this project">
+                                  ★ {tierLabel}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
+            </Section>
 
             {/* Recent forecasts */}
             <Section title="Recent forecasts" emptyHint="No forecasts yet.">
