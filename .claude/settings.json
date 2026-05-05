@@ -133,7 +133,9 @@
       "Bash(curl -s https://commit.show/assets/index-CZ1NhEa_.js)",
       "Bash(curl -s https://commit.show/admin/emails)",
       "Bash(sed -i '' 's|to=\"/ladder\"|to=\"/products\"|g' src/components/LadderTopStrip.tsx src/components/WeeklyHighlightsStrip.tsx)",
-      "Bash(sed -i '' \"s|navigate\\('/ladder'\\)|navigate\\('/products'\\)|g\" src/pages/RulebookPage.tsx)"
+      "Bash(sed -i '' \"s|navigate\\('/ladder'\\)|navigate\\('/products'\\)|g\" src/pages/RulebookPage.tsx)",
+      "Bash(chmod +x /tmp/install-x-tokens.sh)",
+      "Bash(bash /tmp/install-x-tokens.sh)"
     ],
     "additionalDirectories": [
       "/Users/hans1"
