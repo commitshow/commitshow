@@ -3,6 +3,19 @@ import { Link } from 'react-router-dom'
 import { supabase, type ScoutTier, type MemberStats } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 
+interface TopSpotterRow {
+  member_id:        string
+  display_name:     string | null
+  avatar_url:       string | null
+  tier:             ScoutTier
+  votes_n:          number
+  first_spotter_n:  number
+  early_spotter_n:  number
+  applauds_n:       number
+  comments_n:       number
+  week_score:       number
+}
+
 const TIER_COLOR: Record<ScoutTier, string> = {
   Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
 }
@@ -51,23 +64,32 @@ type SortMode = 'ap' | 'forecasts' | 'applauds' | 'newest'
 export function ScoutsPage() {
   const { user } = useAuth()
   const [rows, setRows] = useState<MemberStats[]>([])
+  const [topWeek, setTopWeek] = useState<TopSpotterRow[]>([])
   const [loading, setLoading] = useState(true)
   const [tierFilter, setTierFilter] = useState<'any' | ScoutTier>('any')
   const [sort, setSort] = useState<SortMode>('ap')
 
   useEffect(() => {
     ;(async () => {
-      // Require any scout-side activity — at least one vote, one
-      // applaud, or one (human) comment. Prevents the scout
-      // leaderboard from listing signed-up-but-silent members. The
-      // `or` here is PostgREST's syntax for OR'ing column predicates.
-      const { data } = await supabase
-        .from('member_stats')
-        .select('*')
-        .or('total_votes_cast.gt.0,total_applauds_given.gt.0,comments_authored.gt.0')
-        .order('activity_points', { ascending: false })
-        .limit(200)
-      setRows((data ?? []) as MemberStats[])
+      const [allTime, weekly] = await Promise.all([
+        // All-time leaderboard · activity-based gate so the page doesn't
+        // list signed-up-but-silent members.
+        supabase
+          .from('member_stats')
+          .select('*')
+          .or('total_votes_cast.gt.0,total_applauds_given.gt.0,comments_authored.gt.0')
+          .order('activity_points', { ascending: false })
+          .limit(200),
+        // Weekly window · resets every 7 days so a fresh signup's
+        // first decisive forecast can land them at the top the same
+        // day. View already orders by week_score DESC.
+        supabase
+          .from('top_spotters_week')
+          .select('*')
+          .limit(5),
+      ])
+      setRows((allTime.data ?? []) as MemberStats[])
+      setTopWeek((weekly.data ?? []) as TopSpotterRow[])
       setLoading(false)
     })()
   }, [])
@@ -112,6 +134,12 @@ export function ScoutsPage() {
             Forecast. Applaud. Climb tiers. Higher tier = more votes, earlier access.
           </p>
         </header>
+
+        {/* This week's top spotters · 7-day window resets every Monday.
+            Onboarding-friendly: a brand-new scout who lands a single First
+            Spotter can sit at the top of this list within hours, even
+            though they're nowhere on the all-time leaderboard yet. */}
+        {topWeek.length > 0 && <TopSpottersThisWeek rows={topWeek} />}
 
         {/* Tier distribution + benefit strip */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
@@ -320,5 +348,81 @@ function ScoutRow({ rank, member: m, isMine }: { rank: number; member: MemberSta
         {m.total_applauds_given ?? 0}
       </div>
     </Link>
+  )
+}
+
+// This-week leaderboard · 7-day window. Sits above the tier-distribution
+// row on /scouts so newcomers see a leaderboard they can plausibly enter
+// before the all-time leaderboard buries them under accumulated AP.
+function TopSpottersThisWeek({ rows }: { rows: TopSpotterRow[] }) {
+  return (
+    <section className="mb-6 card-navy" style={{ borderRadius: '2px' }}>
+      <header className="flex items-baseline justify-between gap-3 px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div>
+          <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--gold-500)' }}>
+            // THIS WEEK'S TOP SPOTTERS
+          </div>
+          <div className="font-display font-bold text-base mt-0.5" style={{ color: 'var(--cream)' }}>
+            Last 7 days · resets every Monday
+          </div>
+        </div>
+        <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          First Spotter ×10 · Early ×4 · Forecast ×2 · Applaud ×1
+        </div>
+      </header>
+      <ol className="grid divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+        {rows.map((r, i) => {
+          const initial = (r.display_name ?? 'M').slice(0, 1).toUpperCase()
+          const rankColor = i === 0 ? 'var(--gold-500)' : i === 1 ? '#D1D5DB' : i === 2 ? '#CD7F32' : 'var(--text-muted)'
+          return (
+            <li key={r.member_id} style={{ borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.04)' }}>
+              <Link
+                to={`/scouts/${r.member_id}`}
+                className="grid grid-cols-[28px_32px_1fr_auto] items-center gap-3 px-4 py-2.5"
+                style={{ textDecoration: 'none' }}
+              >
+                <span className="font-mono text-sm tabular-nums" style={{ color: rankColor, fontWeight: 700 }}>
+                  #{i + 1}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="flex items-center justify-center font-mono text-xs font-bold overflow-hidden"
+                  style={{
+                    width: 32, height: 32,
+                    background: r.avatar_url ? 'transparent' : 'var(--navy-800)',
+                    color: 'var(--cream)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '50%',
+                  }}
+                >
+                  {r.avatar_url
+                    ? <img src={r.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                    : initial}
+                </span>
+                <div className="min-w-0">
+                  <div className="font-display font-bold text-sm truncate" style={{ color: 'var(--cream)' }}>
+                    {r.display_name ?? 'Member'}
+                  </div>
+                  <div className="font-mono text-[10px] flex items-center gap-2 flex-wrap mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    {r.first_spotter_n > 0 && (
+                      <span style={{ color: 'var(--gold-500)' }}>★ {r.first_spotter_n} First</span>
+                    )}
+                    {r.early_spotter_n > 0 && (
+                      <span>· {r.early_spotter_n} Early</span>
+                    )}
+                    <span>· {r.votes_n} forecasts</span>
+                    {r.applauds_n > 0 && <span>· {r.applauds_n} applauds</span>}
+                    {r.comments_n > 0 && <span>· {r.comments_n} comments</span>}
+                  </div>
+                </div>
+                <span className="font-display font-bold text-lg tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                  {r.week_score}
+                </span>
+              </Link>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
   )
 }
