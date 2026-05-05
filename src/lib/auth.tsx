@@ -11,7 +11,13 @@ type AuthState = {
   member: Member | null
   loading: boolean
   signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>
-  signUpWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>
+  // signUpWithEmail returns whether email confirmation is pending.
+  // When Supabase Auth has "Confirm email" enabled, signUp returns
+  // { user, session: null } — the caller must inform the user to
+  // check their inbox before they can sign in. confirmationPending
+  // is `true` in that case, `false` when sign-up created a live
+  // session immediately.
+  signUpWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null; confirmationPending?: boolean }>
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
   signInWithOAuth: (provider: OAuthProvider) => Promise<{ error: AuthError | null }>
   signOut: () => Promise<void>
@@ -106,7 +112,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithEmail: (email, password) =>
       supabase.auth.signInWithPassword({ email, password }).then(r => ({ error: r.error })),
     signUpWithEmail: (email, password) =>
-      supabase.auth.signUp({ email, password }).then(r => ({ error: r.error })),
+      supabase.auth.signUp({ email, password }).then(r => ({
+        error: r.error,
+        // No session = email confirmation required. Supabase returns
+        // { user, session: null } in that case · the user row is
+        // created server-side but stays inactive until they click
+        // the confirmation link.
+        confirmationPending: !r.error && !r.data.session,
+      })),
     signInWithGoogle: () =>
       supabase.auth.signInWithOAuth({
         provider: 'google',

@@ -18,12 +18,18 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [oauthBusy, setOauthBusy] = useState<OAuthProvider | null>(null)
+  // Confirmation-pending screen · shown after a signup whose response
+  // had no session (Supabase "Confirm email" is enabled). User has
+  // to click the link in their inbox before they can sign in. Carries
+  // the email so the message can show which inbox to check.
+  const [confirmationSent, setConfirmationSent] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
       setError(null)
       setMode(initialMode)
       setPasswordConfirm('')
+      setConfirmationSent(null)
     }
   }, [open, initialMode])
 
@@ -43,11 +49,24 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
       return
     }
     setBusy(true)
-    const fn = mode === 'signin' ? signInWithEmail : signUpWithEmail
-    const { error: err } = await fn(email, password)
-    setBusy(false)
-    if (err) { setError(err.message); return }
-    onClose()
+    if (mode === 'signin') {
+      const { error: err } = await signInWithEmail(email, password)
+      setBusy(false)
+      if (err) { setError(err.message); return }
+      onClose()
+    } else {
+      const res = await signUpWithEmail(email, password)
+      setBusy(false)
+      if (res.error) { setError(res.error.message); return }
+      // When Supabase Auth has "Confirm email" enabled, signUp
+      // returns no session — render the check-your-inbox screen
+      // instead of closing the modal silently.
+      if (res.confirmationPending) {
+        setConfirmationSent(email)
+        return
+      }
+      onClose()
+    }
   }
 
   const handleOAuth = async (provider: OAuthProvider) => {
@@ -109,13 +128,56 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
         {/* Header */}
         <div className="mb-6">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-            // {mode === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
+            // {confirmationSent
+                ? 'CHECK YOUR INBOX'
+                : mode === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
           </div>
           <h2 className="font-display font-bold text-2xl" style={{ color: 'var(--cream)' }}>
-            {mode === 'signin' ? 'Welcome back' : 'Join the league'}
+            {confirmationSent
+              ? 'Confirm your email'
+              : mode === 'signin' ? 'Welcome back' : 'Join the league'}
           </h2>
         </div>
 
+        {/* Confirmation-pending screen · skips OAuth + form when an
+            email signup just finished but Supabase requires email
+            confirmation. Closing returns the user to the closed
+            state · they can come back any time and sign in once
+            they've clicked the link. */}
+        {confirmationSent && (
+          <div className="space-y-4">
+            <div className="px-4 py-4" style={{
+              background: 'rgba(240,192,64,0.05)',
+              border: '1px solid rgba(240,192,64,0.25)',
+              borderRadius: '2px',
+              lineHeight: 1.55,
+            }}>
+              <p style={{ color: 'var(--cream)' }}>
+                We sent a confirmation link to <strong style={{ color: 'var(--gold-500)' }}>{confirmationSent}</strong>.
+              </p>
+              <p className="mt-2 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Click the link in that email to activate your account, then come back here to sign in.
+                Check spam / junk if it doesn't arrive within a minute.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setConfirmationSent(null); setMode('signin'); setPassword(''); setPasswordConfirm('') }}
+              className="w-full font-mono text-xs tracking-wide py-3"
+              style={{
+                background: 'var(--gold-500)', color: 'var(--navy-900)',
+                border: 'none', borderRadius: '2px', cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              BACK TO SIGN IN
+            </button>
+          </div>
+        )}
+
+        {/* Hide OAuth + form while the confirmation-pending screen
+            is showing · the user already submitted, they're waiting
+            on the email link. */}
+        {!confirmationSent && <>
         {/* OAuth buttons — fast path */}
         <div className="grid grid-cols-2 gap-2 mb-5">
           <OAuthButton
@@ -258,6 +320,7 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
             {mode === 'signin' ? "Don't have an account? Sign up →" : 'Already a member? Sign in →'}
           </button>
         </div>
+        </>}
       </div>
     </div>
   )
