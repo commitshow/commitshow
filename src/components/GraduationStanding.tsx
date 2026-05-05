@@ -10,6 +10,7 @@
 // stable contract. New mounts should use the named export.
 
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchProjectStanding, type ProjectStanding } from '../lib/standing'
 import {
   ENCORE_THRESHOLD, isEncoreScore,
@@ -18,6 +19,13 @@ import {
 } from '../lib/encore'
 import { EncoreBadge } from './EncoreBadge'
 import { supabase } from '../lib/supabase'
+
+interface FirstSpotterRow {
+  supporter_id:   string
+  first_voted_at: string
+  display_name:   string | null
+  avatar_url:     string | null
+}
 
 interface Props {
   projectId: string
@@ -28,6 +36,7 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
   const [s, setS] = useState<ProjectStanding | null>(null)
   const [encores, setEncores] = useState<EncoreRow[]>([])
   const [supporterCount, setSupporterCount] = useState<number>(0)
+  const [firstSpotters, setFirstSpotters] = useState<FirstSpotterRow[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(true)
 
@@ -37,11 +46,38 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
       fetchProjectStanding(projectId),
       fetchAllProjectEncores(projectId),
       supabase.from('supporters').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
-    ]).then(([r, encs, sup]) => {
+      // First Spotters · earliest 3 distinct supporters whose FIRST vote
+      // landed inside the 24h window. supporters.first_spotter_tier is
+      // already locked at the time of the first vote, so even if they
+      // later cast more votes the tier doesn't shift.
+      supabase
+        .from('supporters')
+        .select('supporter_id, first_voted_at, members:supporter_id(display_name, avatar_url)')
+        .eq('project_id', projectId)
+        .eq('first_spotter_tier', 'first')
+        .order('first_voted_at', { ascending: true })
+        .limit(3),
+    ]).then(([r, encs, sup, firstSp]) => {
       if (!alive) return
       setS(r)
       setEncores(encs)
       setSupporterCount(sup.count ?? 0)
+      // Supabase resolves the foreign-key embed as an array even when
+      // the FK is to a single row; pluck [0] for the typed shape.
+      const fsRaw = (firstSp.data ?? []) as unknown as Array<{
+        supporter_id: string
+        first_voted_at: string
+        members: { display_name: string | null; avatar_url: string | null }[] | null
+      }>
+      setFirstSpotters(fsRaw.map(r => {
+        const m = Array.isArray(r.members) ? r.members[0] : r.members
+        return {
+          supporter_id:   r.supporter_id,
+          first_voted_at: r.first_voted_at,
+          display_name:   m?.display_name ?? null,
+          avatar_url:     m?.avatar_url ?? null,
+        }
+      }))
       setLoading(false)
     })
     return () => { alive = false }
@@ -158,6 +194,63 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
               </div>
               <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-faint)', lineHeight: 1.5 }}>
                 {otherEncores.map(e => `${ENCORE_KIND_META[e.kind as EncoreKind].label} #${e.serial}: ${ENCORE_KIND_META[e.kind as EncoreKind].oneLineWhy}.`).join(' ')}
+              </div>
+            </div>
+          )}
+
+          {/* First Spotters · the 3 earliest scouts who voted within 24h
+              of Round 1. Strategy doc §4.1 #3: this row is permanent —
+              once #1/#2/#3 are locked, day-late scouts can never displace
+              them. That's the heirloom moat for scouts (parallel to
+              Encore #N for projects). */}
+          {firstSpotters.length > 0 && (
+            <div className="mb-3">
+              <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+                FIRST SPOTTERS
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {firstSpotters.map((fs, idx) => {
+                  const initial = (fs.display_name ?? 'M').slice(0, 1).toUpperCase()
+                  return (
+                    <Link
+                      key={fs.supporter_id}
+                      to={`/scouts/${fs.supporter_id}`}
+                      className="flex items-center gap-2 px-2 py-1.5"
+                      style={{
+                        background: 'rgba(240,192,64,0.06)',
+                        border: '1px solid rgba(240,192,64,0.25)',
+                        borderRadius: '2px',
+                        textDecoration: 'none',
+                      }}
+                      title={`First Spotter #${idx + 1} · spotted within 24h of Round 1 on ${new Date(fs.first_voted_at).toLocaleDateString()}`}
+                    >
+                      <span className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                        ★ #{idx + 1}
+                      </span>
+                      <span
+                        className="flex items-center justify-center font-mono font-bold"
+                        style={{
+                          width: 18, height: 18,
+                          background: fs.avatar_url ? 'transparent' : 'var(--gold-500)',
+                          color: 'var(--navy-900)',
+                          borderRadius: '2px',
+                          fontSize: 9,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {fs.avatar_url
+                          ? <img src={fs.avatar_url} alt="" style={{ width: 18, height: 18, objectFit: 'cover' }} />
+                          : initial}
+                      </span>
+                      <span className="font-mono text-[11px]" style={{ color: 'var(--cream)' }}>
+                        {fs.display_name ?? 'Member'}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+              <div className="font-mono text-[10px] mt-1.5" style={{ color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                Permanent record · the first 3 scouts to forecast within 24h of the first audit.
               </div>
             </div>
           )}
