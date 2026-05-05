@@ -79,14 +79,20 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     return passthrough
   }
 
-  const ogImageUrl  = `https://commit.show/og/project/${project.id}.png`
+  // og:image points at the dynamic SVG endpoint · Discord, Slack,
+  // LinkedIn, Facebook all render SVG correctly so they get the
+  // per-project card. X / Twitter rejects SVG og:images, so for X
+  // we leave twitter:image on the static /og-image.png — at least
+  // the unfurl card has SOMETHING (generic) plus the dynamic title
+  // and description below, which X DOES render.
+  const ogImageUrl  = `https://commit.show/og/project/${project.id}`
   const title       = `${project.project_name} · ${project.score_total ?? '—'}/100 · commit.show`
   const description = `${project.project_name} on commit.show. Audited by the engine, auditioned for Scouts. Score ${project.score_total ?? '—'}/100.`
 
   const rewriter = new HTMLRewriter()
     .on('meta[property="og:image"]',        new MetaRewriter(ogImageUrl))
     .on('meta[property="og:image:alt"]',    new MetaRewriter(title))
-    .on('meta[name="twitter:image"]',       new MetaRewriter(ogImageUrl))
+    // twitter:image stays static (X doesn't render SVG og:images).
     .on('meta[property="og:title"]',        new MetaRewriter(title))
     .on('meta[name="twitter:title"]',       new MetaRewriter(title))
     .on('meta[property="og:description"]',  new MetaRewriter(description))
