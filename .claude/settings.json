@@ -135,7 +135,11 @@
       "Bash(sed -i '' 's|to=\"/ladder\"|to=\"/products\"|g' src/components/LadderTopStrip.tsx src/components/WeeklyHighlightsStrip.tsx)",
       "Bash(sed -i '' \"s|navigate\\('/ladder'\\)|navigate\\('/products'\\)|g\" src/pages/RulebookPage.tsx)",
       "Bash(chmod +x /tmp/install-x-tokens.sh)",
-      "Bash(bash /tmp/install-x-tokens.sh)"
+      "Bash(bash /tmp/install-x-tokens.sh)",
+      "Bash(pkill -f install-x-tokens.sh)",
+      "Bash(pkill -f osascript)",
+      "Bash(chmod +x /tmp/install-x-tokens-retry.sh)",
+      "Bash(bash /tmp/install-x-tokens-retry.sh)"
     ],
     "additionalDirectories": [
       "/Users/hans1"
