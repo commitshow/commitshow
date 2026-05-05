@@ -25,18 +25,6 @@ const TIER_COLOR: Record<ScoutTier, string> = {
   Platinum: '#E5E4E2',
 }
 
-interface VoteRow {
-  id:             string
-  created_at:     string
-  project_id:     string
-  vote_count:     number
-  predicted_score: number | null
-  is_correct:     boolean | null
-  spotter_tier:   'first' | 'early' | 'spotter' | null
-  project_name:   string | null
-  score_total:    number | null
-}
-
 interface ApplaudRow {
   id:           string
   created_at:   string
@@ -45,6 +33,13 @@ interface ApplaudRow {
   target_label: string | null    // resolved best-effort per type
   target_link:  string | null
 }
+
+// Aggregated forecast outcome for one (scout, project) pair · folded
+// into SupportRow so the page renders one card per project instead of
+// duplicating the relationship in two sections (was: Supporting +
+// Recent forecasts). 'mixed' covers ×N piles where some votes resolved
+// correct and others missed; rare today but the data model allows it.
+type ForecastOutcome = 'correct' | 'missed' | 'mixed' | 'pending' | null
 
 interface SupportRow {
   project_id:         string
@@ -55,6 +50,10 @@ interface SupportRow {
   project_name:       string | null
   score_total:        number | null
   score_at_first_vote: number | null   // pulled from analysis_snapshots closest to first_voted_at
+  // Forecast aggregate (across every vote this scout cast on this
+  // project): outcome label, average predicted score, count.
+  forecast_outcome:   ForecastOutcome
+  predicted_avg:      number | null
 }
 
 interface MemberStatsExt extends Member {
@@ -69,7 +68,6 @@ interface MemberStatsExt extends Member {
 export function ScoutDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [member, setMember]     = useState<MemberStatsExt | null>(null)
-  const [votes, setVotes]       = useState<VoteRow[]>([])
   const [applauds, setApplauds] = useState<ApplaudRow[]>([])
   const [supports, setSupports] = useState<SupportRow[]>([])
   const [loaded, setLoaded]     = useState(false)
@@ -112,36 +110,27 @@ export function ScoutDetailPage() {
         spotter: voteAggRows.filter(v => v.spotter_tier === 'spotter').length,
       }
 
-      // 3. Recent vote rows + project name lookup.
+      // 3. Forecast aggregates · group every vote this scout cast by
+      //    project_id so the Supporting card can show outcome label +
+      //    avg predicted score in a single row, regardless of ×N.
       const { data: vRaw } = await supabase
         .from('votes')
-        .select('id, created_at, project_id, vote_count, predicted_score, is_correct, spotter_tier')
+        .select('project_id, predicted_score, is_correct')
         .eq('member_id', id)
-        .order('created_at', { ascending: false })
-        .limit(15)
-      const projectIds = Array.from(new Set(((vRaw ?? []) as Array<{ project_id: string }>).map(v => v.project_id)))
-      const { data: pjRows } = projectIds.length > 0
-        ? await supabase.from('projects').select('id, project_name, score_total').in('id', projectIds)
-        : { data: [] as Array<{ id: string; project_name: string; score_total: number | null }> }
-      const pjMap = new Map<string, { project_name: string; score_total: number | null }>(
-        ((pjRows as Array<{ id: string; project_name: string; score_total: number | null }>) ?? [])
-          .map(p => [p.id, { project_name: p.project_name, score_total: p.score_total }]),
-      )
-      const voteRows: VoteRow[] = ((vRaw ?? []) as Array<{
-        id: string; created_at: string; project_id: string; vote_count: number;
-        predicted_score: number | null; is_correct: boolean | null;
-        spotter_tier: 'first' | 'early' | 'spotter' | null
-      }>).map(v => ({
-        id:              v.id,
-        created_at:      v.created_at,
-        project_id:      v.project_id,
-        vote_count:      v.vote_count,
-        predicted_score: v.predicted_score,
-        is_correct:      v.is_correct,
-        spotter_tier:    v.spotter_tier,
-        project_name:    pjMap.get(v.project_id)?.project_name ?? null,
-        score_total:     pjMap.get(v.project_id)?.score_total ?? null,
-      }))
+      type VoteAgg = { predictedSum: number; predictedN: number; correctN: number; missedN: number; pendingN: number }
+      const voteAggByProject = new Map<string, VoteAgg>()
+      ;((vRaw ?? []) as Array<{ project_id: string; predicted_score: number | null; is_correct: boolean | null }>)
+        .forEach(v => {
+          const cur = voteAggByProject.get(v.project_id) ?? { predictedSum: 0, predictedN: 0, correctN: 0, missedN: 0, pendingN: 0 }
+          if (typeof v.predicted_score === 'number') {
+            cur.predictedSum += v.predicted_score
+            cur.predictedN   += 1
+          }
+          if (v.is_correct === true)        cur.correctN += 1
+          else if (v.is_correct === false)  cur.missedN  += 1
+          else                              cur.pendingN += 1
+          voteAggByProject.set(v.project_id, cur)
+        })
 
       // 4. Recent applauds · resolve best-effort labels.
       const { data: aRaw } = await supabase
@@ -204,16 +193,34 @@ export function ScoutDetailPage() {
           .maybeSingle()
         scoreAtFirst[s.project_id] = (sn as { score_total: number | null } | null)?.score_total ?? null
       }))
-      const supportRows: SupportRow[] = supRows.map(s => ({
-        ...s,
-        project_name:        supProjMap.get(s.project_id)?.project_name ?? null,
-        score_total:         supProjMap.get(s.project_id)?.score_total ?? null,
-        score_at_first_vote: scoreAtFirst[s.project_id] ?? null,
-      }))
+      const supportRows: SupportRow[] = supRows.map(s => {
+        const agg = voteAggByProject.get(s.project_id)
+        // Outcome rules: any pending → 'pending' (the call hasn't
+        // resolved yet, even if siblings are correct/missed). All
+        // resolved correct → 'correct'. All resolved missed →
+        // 'missed'. Mixed correct + missed → 'mixed'.
+        let outcome: ForecastOutcome = null
+        if (agg) {
+          if (agg.pendingN > 0)                          outcome = 'pending'
+          else if (agg.correctN > 0 && agg.missedN > 0)  outcome = 'mixed'
+          else if (agg.correctN > 0)                     outcome = 'correct'
+          else if (agg.missedN > 0)                      outcome = 'missed'
+        }
+        const predicted_avg = agg && agg.predictedN > 0
+          ? Math.round(agg.predictedSum / agg.predictedN)
+          : null
+        return {
+          ...s,
+          project_name:        supProjMap.get(s.project_id)?.project_name ?? null,
+          score_total:         supProjMap.get(s.project_id)?.score_total ?? null,
+          score_at_first_vote: scoreAtFirst[s.project_id] ?? null,
+          forecast_outcome:    outcome,
+          predicted_avg,
+        }
+      })
 
       if (!alive) return
       setMember(memberCore)
-      setVotes(voteRows)
       setApplauds(applaudRows)
       setSupports(supportRows)
       setLoaded(true)
@@ -308,6 +315,21 @@ export function ScoutDetailPage() {
                                     : s.first_spotter_tier === 'early'   ? 'Early'
                                     : s.first_spotter_tier === 'spotter' ? 'Spotter'
                                     : null
+                    // Outcome chip · pending shows the live gap between
+                    // the avg call and the current score so the row
+                    // reads as a tracking bet, not a flat label.
+                    const outcomeTone = s.forecast_outcome === 'correct' ? '#00D4AA'
+                                      : s.forecast_outcome === 'missed'  ? 'var(--scarlet)'
+                                      : s.forecast_outcome === 'mixed'   ? 'var(--gold-500)'
+                                      : 'var(--text-muted)'
+                    const outcomeLabel = s.forecast_outcome === 'correct' ? 'correct'
+                                       : s.forecast_outcome === 'missed'  ? 'missed'
+                                       : s.forecast_outcome === 'mixed'   ? 'mixed'
+                                       : s.predicted_avg != null && currentScore != null
+                                         ? `called ${s.predicted_avg} → ${currentScore} (pending)`
+                                         : s.predicted_avg != null
+                                           ? `called ${s.predicted_avg} (pending)`
+                                           : 'pending'
                     return (
                       <li key={s.project_id}>
                         <Link
@@ -343,72 +365,8 @@ export function ScoutDetailPage() {
                                 </span>
                               </>
                             )}
-                          </div>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ol>
-              )}
-            </Section>
-
-            {/* Recent forecasts */}
-            <Section title="Recent forecasts" emptyHint="No forecasts yet.">
-              {votes.length > 0 && (
-                <ol className="grid gap-1.5">
-                  {votes.map(v => {
-                    const correct  = v.is_correct
-                    const tone     = correct === true  ? '#00D4AA'
-                                  : correct === false ? 'var(--scarlet)'
-                                  : 'var(--text-muted)'
-                    // Pending forecasts get "predicted/current (pending)"
-                    // so the user can see how their call is tracking
-                    // even before the season-end stamp lands. Resolved
-                    // forecasts keep the simple correct / missed label.
-                    const pred     = v.predicted_score
-                    const cur      = v.score_total
-                    const labelEl  = correct === true  ? 'correct'
-                                  : correct === false ? 'missed'
-                                  : pred != null
-                                    ? `${pred} / ${cur ?? '—'} (pending)`
-                                    : 'pending'
-                    return (
-                      <li key={v.id}>
-                        <Link
-                          to={`/projects/${v.project_id}`}
-                          className="block px-3 py-2"
-                          style={{ background: 'rgba(15,32,64,0.4)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px', textDecoration: 'none' }}
-                        >
-                          <div className="flex items-center justify-between gap-3 flex-wrap">
-                            <div className="font-display font-bold truncate min-w-0" style={{ color: 'var(--cream)' }}>
-                              {v.project_name ?? '—'}
-                            </div>
-                            <span
-                              className="font-mono text-[10px] tabular-nums whitespace-nowrap"
-                              style={{ color: tone }}
-                              title={correct === null && pred != null && cur != null
-                                ? `predicted ${pred} · current score ${cur} · ${cur >= pred ? 'tracking up' : 'below your call'}`
-                                : undefined}
-                            >
-                              {labelEl}
-                            </span>
-                          </div>
-                          <div className="font-mono text-[10px] mt-0.5 flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-muted)' }}>
-                            <span>{new Date(v.created_at).toLocaleDateString()}</span>
                             <span>·</span>
-                            <span>×{v.vote_count}</span>
-                            {v.spotter_tier && (
-                              <>
-                                <span>·</span>
-                                <span style={{ color: 'var(--gold-500)' }} title={
-                                  v.spotter_tier === 'first'   ? 'Caught within 24h of the first audit · +50 AP'
-                                : v.spotter_tier === 'early'   ? 'Caught within 3 days of the first audit · +20 AP'
-                                : 'Caught within 14 days of the first audit · +10 AP'
-                                }>
-                                  ★ {v.spotter_tier === 'first' ? 'First' : v.spotter_tier === 'early' ? 'Early' : 'Spotter'}
-                                </span>
-                              </>
-                            )}
+                            <span style={{ color: outcomeTone }}>{outcomeLabel}</span>
                           </div>
                         </Link>
                       </li>
