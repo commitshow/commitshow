@@ -11,7 +11,10 @@
 
 import { useEffect, useState } from 'react'
 import { fetchProjectStanding, type ProjectStanding } from '../lib/standing'
-import { ENCORE_THRESHOLD, isEncoreScore } from '../lib/encore'
+import {
+  ENCORE_THRESHOLD, isEncoreScore,
+  fetchProjectEncore, type EncoreRow,
+} from '../lib/encore'
 import { EncoreBadge } from './EncoreBadge'
 
 interface Props {
@@ -21,14 +24,19 @@ interface Props {
 
 export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props) {
   const [s, setS] = useState<ProjectStanding | null>(null)
+  const [encore, setEncore] = useState<EncoreRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(true)
 
   useEffect(() => {
     let alive = true
-    fetchProjectStanding(projectId).then(r => {
+    Promise.all([
+      fetchProjectStanding(projectId),
+      fetchProjectEncore(projectId),
+    ]).then(([r, e]) => {
       if (!alive) return
       setS(r)
+      setEncore(e)
       setLoading(false)
     })
     return () => { alive = false }
@@ -59,7 +67,7 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
           <div className="font-display font-bold text-lg mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
             <span className="tabular-nums" style={{ color: accent }}>{score}/100</span>
             {isEncore ? (
-              <EncoreBadge score={score} size="md" />
+              <EncoreBadge score={score} serial={encore?.serial} size="md" />
             ) : (
               <span className="font-mono text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
                 · {distance} to Encore
@@ -107,8 +115,10 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
         <div className="px-5 pb-5" style={{ borderTop: `1px solid ${accent}22` }}>
           <p className="font-light text-sm mt-4 mb-5" style={{ color: 'var(--text-primary)', lineHeight: 1.65 }}>
             {isEncore
-              ? `This product cleared the ${ENCORE_THRESHOLD} bar — Encore badge active. Re-audits keep score moving; if it dips below ${ENCORE_THRESHOLD} the badge drops off until you climb back.`
-              : `Encore is a quality threshold, not a season. Cross ${ENCORE_THRESHOLD} on total score (Audit 50 + Scout 30 + Community 20) and the badge appears on the product card. ${viewerMode === 'owner' ? 'The audit report below names the highest-leverage gap to close first.' : ''}`}
+              ? encore?.serial
+                ? `Issued as Encore #${encore.serial} on ${new Date(encore.earned_at).toLocaleDateString()} when total score first crossed ${ENCORE_THRESHOLD}. The serial is permanent — even if the score later dips, this number stays attached to the product. New climbs reuse the same #.`
+                : `This product cleared the ${ENCORE_THRESHOLD} bar — Encore badge active. Re-audits keep score moving; if it dips below ${ENCORE_THRESHOLD} the badge drops off until you climb back.`
+              : `Encore is a quality threshold, not a season. Cross ${ENCORE_THRESHOLD} on total score (Audit 50 + Scout 30 + Community 20) and the badge appears on the product card with a permanent serial number. ${viewerMode === 'owner' ? 'The audit report below names the highest-leverage gap to close first.' : ''}`}
           </p>
 
           {/* Pillar breakdown · most-actionable view of the score */}

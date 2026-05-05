@@ -21,3 +21,43 @@ export const ENCORE_THRESHOLD = 85
 export function isEncoreScore(score: number | null | undefined): boolean {
   return typeof score === 'number' && score >= ENCORE_THRESHOLD
 }
+
+import { supabase } from './supabase'
+
+export interface EncoreRow {
+  kind:         'production' | 'streak' | 'climb' | 'spotlight'
+  serial:       number
+  earned_at:    string
+  earned_score: number
+}
+
+// Fetch the production-kind Encore row for a single project. Other
+// kinds (streak / climb / spotlight) gate on different criteria and
+// will be added in subsequent sprints; for now only 'production'
+// (= score >= 85) emits rows.
+export async function fetchProjectEncore(projectId: string): Promise<EncoreRow | null> {
+  const { data } = await supabase
+    .from('encores')
+    .select('kind, serial, earned_at, earned_score')
+    .eq('project_id', projectId)
+    .eq('kind', 'production')
+    .maybeSingle()
+  return (data as EncoreRow | null) ?? null
+}
+
+// Bulk variant for list pages · returns a Map keyed by project_id
+// so the caller can render serials inline without N+1 queries.
+export async function fetchEncoresByProjectIds(
+  projectIds: string[],
+): Promise<Map<string, EncoreRow>> {
+  if (projectIds.length === 0) return new Map()
+  const { data } = await supabase
+    .from('encores')
+    .select('project_id, kind, serial, earned_at, earned_score')
+    .in('project_id', projectIds)
+    .eq('kind', 'production')
+  const map = new Map<string, EncoreRow>()
+  ;(data ?? []).forEach((r: { project_id: string } & EncoreRow) =>
+    map.set(r.project_id, { kind: r.kind, serial: r.serial, earned_at: r.earned_at, earned_score: r.earned_score }))
+  return map
+}
