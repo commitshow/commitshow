@@ -4,7 +4,7 @@
 // send an email itself (signup confirmation, magic link, password
 // recovery, invite, email change). We:
 //   1. Verify the Standard Webhooks HMAC signature against
-//      SUPABASE_AUTH_HOOK_SECRET (set via supabase secrets · matches
+//      AUTH_HOOK_SECRET (set via supabase secrets · matches
 //      the secret pasted into the Hook config in Supabase Dashboard).
 //   2. Pull the matching `auth_*` row from email_templates.
 //   3. Substitute {{confirmation_url}}, {{display_name}}, {{email}}
@@ -112,9 +112,9 @@ Deno.serve(async (req) => {
   // verification. Re-parse as JSON afterwards.
   const rawBody = await req.text()
 
-  const HOOK_SECRET = Deno.env.get('SUPABASE_AUTH_HOOK_SECRET') ?? ''
+  const HOOK_SECRET = Deno.env.get('AUTH_HOOK_SECRET') ?? ''
   if (!HOOK_SECRET) {
-    return json({ error: 'SUPABASE_AUTH_HOOK_SECRET not configured' }, 500)
+    return json({ error: 'AUTH_HOOK_SECRET not configured' }, 500)
   }
 
   const hookId  = req.headers.get('webhook-id')        ?? ''
