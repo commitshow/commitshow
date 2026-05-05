@@ -45,6 +45,10 @@ interface CommentFeedItem {
   // the site's mark so the feed doesn't read "Unnamed" for our own
   // automated activity.
   is_system:      boolean
+  // Sub-classifies system rows so the renderer can tint encore/forecast
+  // cards differently from registered/score_jump (gold accent for the
+  // honor events, default cream for the chatter ones).
+  event_kind:     string | null
   link:           string
 }
 
@@ -77,7 +81,7 @@ export function CommunityFeedPage() {
           .limit(40),
         supabase
           .from('comments')
-          .select('id, created_at, text, project_id, member_id, kind')
+          .select('id, created_at, text, project_id, member_id, kind, event_kind')
           .order('created_at', { ascending: false })
           .limit(60),
         supabase
@@ -87,7 +91,7 @@ export function CommunityFeedPage() {
       ])
       if (!alive) return
       const posts    = (postsRes.data    ?? []) as Array<{ id: string; created_at: string; type: string; subtype: string | null; title: string; tldr: string | null; author_id: string | null }>
-      const comments = (commentsRes.data ?? []) as Array<{ id: string; created_at: string; text: string; project_id: string; member_id: string | null; kind: string | null }>
+      const comments = (commentsRes.data ?? []) as Array<{ id: string; created_at: string; text: string; project_id: string; member_id: string | null; kind: string | null; event_kind: string | null }>
 
       // Resolve author display_names AND avatars for both sides. avatar
       // shows up in the feed puck so user-authored items get a face.
@@ -155,6 +159,7 @@ export function CommunityFeedPage() {
           // authored events (registered · score_jump · etc.). Either
           // signal flips into the CS branded puck below.
           is_system:     !c.member_id || c.kind === 'system',
+          event_kind:    c.event_kind,
           // #comments hash · ProjectComments auto-opens its modal when
           // present, so users land directly on the thread instead of
           // hunting for it on the project page.
@@ -312,7 +317,7 @@ function FeedRow({ item }: { item: FeedItem }) {
                 color: accent, border: `1px solid ${accent}55`, borderRadius: '2px',
               }}>
                 {isSystem
-                  ? 'event'
+                  ? eventKindLabel((item as CommentFeedItem).event_kind)
                   : item.kind === 'comment'
                     ? 'comment'
                     : (item.subtype ?? item.type ?? 'post').replace('_', ' ')}
@@ -337,6 +342,20 @@ function FeedRow({ item }: { item: FeedItem }) {
       </Link>
     </li>
   )
+}
+
+// Map a comments.event_kind to a short tag-line label. Falls back to
+// 'event' for legacy rows that pre-date the column or carry a kind we
+// haven't taxonomised yet.
+function eventKindLabel(ek: string | null): string {
+  switch (ek) {
+    case 'forecast':         return 'forecast'
+    case 'encore':           return 'encore'
+    case 'library_publish':  return 'library'
+    case 'score_jump':       return 'audit'
+    case 'registered':       return 'audition'
+    default:                 return 'event'
+  }
 }
 
 function relAgo(iso: string): string {

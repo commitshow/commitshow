@@ -154,13 +154,23 @@ export function TermsPage() {
 
         <Section title="7 · Fees and refunds" anchor="fees">
           <P>
-            Each member's first three project auditions are free. Subsequent
-            auditions carry an audition fee. The fee has two internally-tracked
-            components: a non-refundable audit and operations cost, and a
-            refundable graduation deposit. The deposit becomes refundable
-            only when the audited product earns a Diploma in a future
-            League cohort; it carries no claim to interest, dividends, or
-            payout from any pool.
+            We may, from time to time, offer a free-audition allowance that
+            lets each member submit a limited number of auditions at no
+            charge before the audition fee applies. The size of the
+            allowance, the conditions under which it applies, and the
+            duration for which it is offered are determined by us and may
+            be adjusted, paused, or withdrawn at any time. The allowance
+            in effect for any given audition is the one shown at the
+            point of submission.
+          </P>
+          <P>
+            Auditions outside any active free allowance carry an audition
+            fee. The fee has two internally-tracked components: a
+            non-refundable audit and operations cost, and a refundable
+            graduation deposit. The deposit becomes refundable only when
+            the audited product earns a Diploma in a future League
+            cohort; it carries no claim to interest, dividends, or payout
+            from any pool.
           </P>
           <P>
             From time to time we may run a Founder pricing window in which

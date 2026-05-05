@@ -1,11 +1,19 @@
-// Registration pricing gate (CLAUDE.md §14 · v1.7)
-// Permanent policy is paid-by-default ($99/audit). The number of free
-// audits each member gets before the paywall kicks in is an admin-tunable
-// runtime setting (`app_settings.free_audits_per_member` · default 3 to
-// honor the launch promo). Paid audits land as a +1 credit on
-// members.paid_audits_credit when the Stripe webhook flips the payment
-// to succeeded — eligibility returns ok=true while credits remain,
-// blocked once they're exhausted.
+// Registration pricing gate.
+// Default policy is paid-by-default ($99/audit). Free quota is a
+// time-bound launch allowance — admin-tunable via runtime setting
+// `app_settings.free_audits_per_member` (set to 0 to require payment
+// from the very first audition; raise N to grant the next N auditions
+// per member at no charge). Not a permanent free tier; the value can
+// be paused or withdrawn at any time and the gate copy in
+// SubmitForm reads "your next audition needs the audit fee" — never
+// "you have N free forever".
+//
+// Paid audits land as a +1 credit on members.paid_audits_credit when
+// the Stripe webhook flips the payment to succeeded — eligibility
+// returns ok=true while credits remain, blocked once they're
+// exhausted. The Founder pricing window (founder_pricing_status())
+// independently discounts the unit price for the first 1,000 paying
+// auditions globally.
 
 import { supabase } from './supabase'
 
