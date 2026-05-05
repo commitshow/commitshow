@@ -13,14 +13,19 @@
 
 import { supabase } from './supabase'
 
-// Fixed enum mirroring cmo_templates seed rows (20260504 migration).
-// audit_complete    · /projects/:id  (own audit · creator share)
-// graduation        · /projects/:id  (own project graduated)
-// milestone         · /projects/:id  (own project hit milestone)
+// Fixed enum mirroring cmo_templates seed rows.
+// audit_complete    · /project/:slug  (own audit · creator share)
+// encore            · /project/:slug  (own project earned an Encore — any track)
+// milestone         · /project/:slug  (own project hit milestone)
 // early_spotter     · /scouts/:id · /me  (Scout Forecast hit)
+//
+// 'graduation' was the v1 name; renamed to 'encore' in v2 (the
+// graduation tier system was replaced by the single Encore threshold
+// at score ≥ 85 + the 4-track Encore extensions). cmo_templates row
+// id was migrated · this enum mirrors it.
 export type UserShareTemplateId =
   | 'audit_complete'
-  | 'graduation'
+  | 'encore'
   | 'milestone'
   | 'early_spotter'
 
@@ -64,6 +69,42 @@ export function buildIntentUrl(text: string, url?: string): string {
   return `https://twitter.com/intent/tweet?${params.toString()}`
 }
 
+// Map a template id → ?og=<kind> query our project middleware reads
+// to pick the right OG card variant. Dropping the parameter (audit
+// = default) keeps the URL short for the templates that don't need
+// a special card.
+const OG_KIND_BY_TEMPLATE: Record<UserShareTemplateId, string | null> = {
+  audit_complete: null,         // default 'audit' card · no query needed
+  encore:         'encore',
+  milestone:      'milestone',
+  early_spotter:  'spotter',    // /scouts/<id> · spotter card variant
+}
+
+/** Append `?og=<kind>` to any commit.show/project/<slug> or
+ *  commit.show/scouts/<id> URLs found in the tweet text. We touch
+ *  the URL in the body (X auto-unfurls from there) instead of the
+ *  intent's separate &url= because most of our templates embed the
+ *  link directly and don't pass a separate url. */
+function injectOgQuery(text: string, templateId: UserShareTemplateId, slots: SlotMap): string {
+  const kind = OG_KIND_BY_TEMPLATE[templateId]
+  if (!kind) return text
+
+  // For milestone, also ride the milestone label so the OG card can
+  // render it in the headline.
+  const milestoneLabel = templateId === 'milestone'
+    ? (slots.milestone_label ?? slots.milestone ?? '')
+    : null
+
+  return text.replace(
+    /commit\.show\/(project|scouts)\/([^\s?#]+)/g,
+    (match, _section, _slug) => {
+      const params = new URLSearchParams({ og: kind })
+      if (milestoneLabel) params.set('milestone', String(milestoneLabel))
+      return `${match}?${params.toString()}`
+    },
+  )
+}
+
 /** End-to-end: load template by id, fill slots, open the intent URL.
  *  Returns false if the template couldn't be loaded (caller decides
  *  whether to surface a fallback / error toast). */
@@ -74,7 +115,8 @@ export async function shareWithTemplate(
 ): Promise<boolean> {
   const template = await fetchUserShareTemplate(id)
   if (!template) return false
-  const text = fillSlots(template, slots)
+  const filled = fillSlots(template, slots)
+  const text   = injectOgQuery(filled, id, slots)
   window.open(buildIntentUrl(text, url), '_blank', 'noopener,noreferrer')
   return true
 }

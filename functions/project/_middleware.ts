@@ -85,7 +85,19 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   // we leave twitter:image on the static /og-image.png — at least
   // the unfurl card has SOMETHING (generic) plus the dynamic title
   // and description below, which X DOES render.
-  const ogImageUrl  = `https://commit.show/og/project/${project.id}`
+  //
+  // Card variant routing: shareWithTemplate appends ?og=encore (or
+  // ?og=milestone) to the share URL · we forward that as ?kind= on
+  // the og/project/<id> URL so the unfurl card matches the share.
+  const ogParam   = url.searchParams.get('og')
+  const ogKind    = ogParam === 'encore' || ogParam === 'milestone' ? ogParam : 'audit'
+  const milestone = url.searchParams.get('milestone') ?? ''
+  const ogQuery   = ogKind === 'audit'
+    ? ''
+    : ogKind === 'milestone'
+      ? `?kind=milestone${milestone ? `&label=${encodeURIComponent(milestone)}` : ''}`
+      : `?kind=${ogKind}`
+  const ogImageUrl  = `https://commit.show/og/project/${project.id}${ogQuery}`
   const title       = `${project.project_name} · ${project.score_total ?? '—'}/100 · commit.show`
   const description = `${project.project_name} on commit.show. Audited by the engine, auditioned for Scouts. Score ${project.score_total ?? '—'}/100.`
 
@@ -100,7 +112,8 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
 
   const transformed = rewriter.transform(assetRes)
   const out = new Response(transformed.body, transformed)
-  out.headers.set('x-cs-og-rewrite',   'hit')
+  out.headers.set('x-cs-og-rewrite',    'hit')
   out.headers.set('x-cs-og-project-id', project.id)
+  out.headers.set('x-cs-og-kind',       ogKind)
   return out
 }

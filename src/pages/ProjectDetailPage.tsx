@@ -538,11 +538,11 @@ export function ProjectDetailPage() {
                   const options: ShareOption[] = []
                   if (project.graduation_grade) {
                     options.push({
-                      key:        'graduation',
-                      label:      `graduation · ${project.graduation_grade}`,
+                      key:        'encore',
+                      label:      `encore · ${project.graduation_grade}`,
                       sub:        `final score ${score}/100`,
                       emphasis:   'primary',
-                      templateId: 'graduation',
+                      templateId: 'encore',
                       slots: {
                         project_name:    project.project_name ?? repoName,
                         project_slug:    projectSlugStr,
