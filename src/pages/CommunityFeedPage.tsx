@@ -93,27 +93,33 @@ export function CommunityFeedPage() {
       const posts    = (postsRes.data    ?? []) as Array<{ id: string; created_at: string; type: string; subtype: string | null; title: string; tldr: string | null; author_id: string | null }>
       const comments = (commentsRes.data ?? []) as Array<{ id: string; created_at: string; text: string; project_id: string; member_id: string | null; kind: string | null; event_kind: string | null }>
 
-      // Resolve author display_names AND avatars for both sides. avatar
-      // shows up in the feed puck so user-authored items get a face.
+      // Stage 2 · resolve author display_names + avatars AND project
+      // names. Both lookups are independent (members vs projects), so
+      // run them in parallel — the previous serial chain doubled the
+      // round trip for this stage.
       const authorIds = Array.from(new Set([
         ...posts.map(p => p.author_id).filter(Boolean) as string[],
         ...comments.map(c => c.member_id).filter(Boolean) as string[],
       ]))
-      const { data: members } = authorIds.length > 0
-        ? await supabase.from('members').select('id, display_name, avatar_url').in('id', authorIds)
-        : { data: [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }> }
+      const projectIds = Array.from(new Set(comments.map(c => c.project_id).filter(Boolean) as string[]))
+
+      const [membersRes, pjRes] = await Promise.all([
+        authorIds.length > 0
+          ? supabase.from('members').select('id, display_name, avatar_url').in('id', authorIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }> }),
+        projectIds.length > 0
+          ? supabase.from('projects').select('id, project_name').in('id', projectIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; project_name: string }> }),
+      ])
+      if (!alive) return
+
       const memberMap = new Map<string, { display_name: string | null; avatar_url: string | null }>(
-        ((members as Array<{ id: string; display_name: string | null; avatar_url: string | null }>) ?? [])
+        ((membersRes.data as Array<{ id: string; display_name: string | null; avatar_url: string | null }>) ?? [])
           .map(m => [m.id, { display_name: m.display_name, avatar_url: m.avatar_url }]),
       )
-
-      // Resolve project names for the comments side.
-      const projectIds = Array.from(new Set(comments.map(c => c.project_id).filter(Boolean) as string[]))
-      const { data: pjRows } = projectIds.length > 0
-        ? await supabase.from('projects').select('id, project_name').in('id', projectIds)
-        : { data: [] as Array<{ id: string; project_name: string }> }
       const pjMap = new Map<string, string>(
-        ((pjRows as Array<{ id: string; project_name: string }>) ?? []).map(p => [p.id, p.project_name]),
+        ((pjRes.data as Array<{ id: string; project_name: string }>) ?? [])
+          .map(p => [p.id, p.project_name]),
       )
 
       // Map type → URL segment for community-post links.

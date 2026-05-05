@@ -57,6 +57,13 @@ export function CreatorsPage() {
         .from('creator_stats')
         .select('*')
         .gt('product_count', 0)
+        // Server-side ordering · payload arrives ranked, so the first
+        // paint of the table is stable even before the client-side
+        // sort kicks in. Caps at 200 in case the active-creator pool
+        // grows past the leaderboard's natural surface; 200 is far
+        // beyond what fits on screen.
+        .order('product_count', { ascending: false })
+        .limit(200)
       if (!alive) return
       setRows((data ?? []) as unknown as CreatorRow[])
       setLoading(false)

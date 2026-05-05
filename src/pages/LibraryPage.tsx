@@ -9,7 +9,7 @@
 //   ?match=stack            ?sort=reputation|verified|applied|downloads|newest|price_low
 //   ?q=<search>
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   supabase,
@@ -100,19 +100,40 @@ export function LibraryPage() {
   }
 
   // ── Data fetch ──────────────────────────────────────────────
+  // Mount-scoped alive flag · prevents setState after unmount when a
+  // re-mount or fast tab swap happens mid-fetch.
+  const aliveRef = useRef(true)
+
   const reloadFeed = async () => {
     setLoading(true)
     const { data } = await supabase
       .from('md_library_feed')
       .select('*')
+      // Server-side ordering by reputation_score so the first frame
+      // is already in the desired default sort. Cap at 200 — the
+      // page paginates client-side so anything past that is
+      // effectively invisible until filters narrow.
+      .order('reputation_score', { ascending: false })
+      .limit(200)
+    if (!aliveRef.current) return
     setRows((data ?? []) as MDLibraryFeedItem[])
     setLoading(false)
   }
-  useEffect(() => { void reloadFeed() }, [])
+  useEffect(() => {
+    aliveRef.current = true
+    void reloadFeed()
+    return () => { aliveRef.current = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
+    let alive = true
     if (!user?.id) { setMemberStack([]); return }
-    loadEffectiveStack(user.id).then(res => setMemberStack(res.stack ?? []))
+    loadEffectiveStack(user.id).then(res => {
+      if (!alive) return
+      setMemberStack(res.stack ?? [])
+    })
+    return () => { alive = false }
   }, [user?.id])
 
   // ── Filter + sort pipeline ──────────────────────────────────

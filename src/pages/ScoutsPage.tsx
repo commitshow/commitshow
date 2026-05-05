@@ -70,6 +70,7 @@ export function ScoutsPage() {
   const [sort, setSort] = useState<SortMode>('ap')
 
   useEffect(() => {
+    let alive = true
     ;(async () => {
       const [allTime, weekly] = await Promise.all([
         // All-time leaderboard · activity-based gate so the page doesn't
@@ -88,10 +89,12 @@ export function ScoutsPage() {
           .select('*')
           .limit(5),
       ])
+      if (!alive) return
       setRows((allTime.data ?? []) as MemberStats[])
       setTopWeek((weekly.data ?? []) as TopSpotterRow[])
       setLoading(false)
     })()
+    return () => { alive = false }
   }, [])
 
   const filtered = useMemo(() => {
