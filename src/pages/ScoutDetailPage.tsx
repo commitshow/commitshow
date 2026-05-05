@@ -31,6 +31,7 @@ interface VoteRow {
   vote_count:     number
   predicted_score: number | null
   is_correct:     boolean | null
+  spotter_tier:   'first' | 'early' | 'spotter' | null
   project_name:   string | null
   score_total:    number | null
 }
@@ -49,6 +50,7 @@ interface MemberStatsExt extends Member {
   total_applauds_given?: number
   forecast_accuracy?:    number | null  // 0-100
   graduated_count?:      number
+  spotter_hits?:         { first: number; early: number; spotter: number }
 }
 
 export function ScoutDetailPage() {
@@ -78,20 +80,26 @@ export function ScoutDetailPage() {
 
       // 2. Aggregates · counts only (cheap RPC-less path).
       const [votesAgg, applaudsAgg] = await Promise.all([
-        supabase.from('votes').select('id, is_correct', { count: 'exact', head: false }).eq('member_id', id),
+        supabase.from('votes').select('id, is_correct, spotter_tier', { count: 'exact', head: false }).eq('member_id', id),
         supabase.from('applauds').select('id', { count: 'exact', head: true }).eq('member_id', id),
       ])
       const totalVotes = votesAgg.count ?? 0
-      const correctVotes = (votesAgg.data ?? []).filter((v: { is_correct: boolean | null }) => v.is_correct === true).length
-      const evaluatedVotes = (votesAgg.data ?? []).filter((v: { is_correct: boolean | null }) => v.is_correct !== null).length
+      const voteAggRows = (votesAgg.data ?? []) as Array<{ is_correct: boolean | null; spotter_tier: 'first' | 'early' | 'spotter' | null }>
+      const correctVotes = voteAggRows.filter(v => v.is_correct === true).length
+      const evaluatedVotes = voteAggRows.filter(v => v.is_correct !== null).length
       memberCore.total_votes_cast     = totalVotes
       memberCore.total_applauds_given = applaudsAgg.count ?? 0
       memberCore.forecast_accuracy    = evaluatedVotes > 0 ? Math.round((correctVotes / evaluatedVotes) * 100) : null
+      memberCore.spotter_hits = {
+        first:   voteAggRows.filter(v => v.spotter_tier === 'first').length,
+        early:   voteAggRows.filter(v => v.spotter_tier === 'early').length,
+        spotter: voteAggRows.filter(v => v.spotter_tier === 'spotter').length,
+      }
 
       // 3. Recent vote rows + project name lookup.
       const { data: vRaw } = await supabase
         .from('votes')
-        .select('id, created_at, project_id, vote_count, predicted_score, is_correct')
+        .select('id, created_at, project_id, vote_count, predicted_score, is_correct, spotter_tier')
         .eq('member_id', id)
         .order('created_at', { ascending: false })
         .limit(15)
@@ -105,7 +113,8 @@ export function ScoutDetailPage() {
       )
       const voteRows: VoteRow[] = ((vRaw ?? []) as Array<{
         id: string; created_at: string; project_id: string; vote_count: number;
-        predicted_score: number | null; is_correct: boolean | null
+        predicted_score: number | null; is_correct: boolean | null;
+        spotter_tier: 'first' | 'early' | 'spotter' | null
       }>).map(v => ({
         id:              v.id,
         created_at:      v.created_at,
@@ -113,6 +122,7 @@ export function ScoutDetailPage() {
         vote_count:      v.vote_count,
         predicted_score: v.predicted_score,
         is_correct:      v.is_correct,
+        spotter_tier:    v.spotter_tier,
         project_name:    pjMap.get(v.project_id)?.project_name ?? null,
         score_total:     pjMap.get(v.project_id)?.score_total ?? null,
       }))
@@ -192,12 +202,22 @@ export function ScoutDetailPage() {
             </div>
 
             {/* Stats grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
               <Stat label="Activity points" value={member.activity_points ?? 0} />
               <Stat label="Votes cast"      value={member.total_votes_cast ?? 0} />
               <Stat label="Applauds given"  value={member.total_applauds_given ?? 0} />
               <Stat label="Forecast accuracy" value={member.forecast_accuracy != null ? `${member.forecast_accuracy}%` : '—'} hint="evaluated votes only" />
             </div>
+
+            {/* Spotter hits · only show if there's at least one (cold scout
+                shouldn't see four zeros). Tooltip explains the bonuses. */}
+            {member.spotter_hits && (member.spotter_hits.first + member.spotter_hits.early + member.spotter_hits.spotter) > 0 && (
+              <div className="grid grid-cols-3 gap-2 mb-6">
+                <Stat label="First Spotter"  value={member.spotter_hits.first}   hint="≤ 24h after audit" tone="gold" />
+                <Stat label="Early Spotter"  value={member.spotter_hits.early}   hint="≤ 3 days" tone="gold" />
+                <Stat label="Spotter"        value={member.spotter_hits.spotter} hint="≤ 14 days" tone="gold" />
+              </div>
+            )}
 
             {/* Recent forecasts */}
             <Section title="Recent forecasts" emptyHint="No forecasts yet.">
@@ -244,6 +264,18 @@ export function ScoutDetailPage() {
                             <span>{new Date(v.created_at).toLocaleDateString()}</span>
                             <span>·</span>
                             <span>×{v.vote_count}</span>
+                            {v.spotter_tier && (
+                              <>
+                                <span>·</span>
+                                <span style={{ color: 'var(--gold-500)' }} title={
+                                  v.spotter_tier === 'first'   ? 'Caught within 24h of the first audit · +50 AP'
+                                : v.spotter_tier === 'early'   ? 'Caught within 3 days of the first audit · +20 AP'
+                                : 'Caught within 14 days of the first audit · +10 AP'
+                                }>
+                                  ★ {v.spotter_tier === 'first' ? 'First' : v.spotter_tier === 'early' ? 'Early' : 'Spotter'}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </Link>
                       </li>
@@ -284,11 +316,17 @@ export function ScoutDetailPage() {
   )
 }
 
-function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
+function Stat({ label, value, hint, tone }: { label: string; value: number | string; hint?: string; tone?: 'gold' }) {
+  const valueColor = tone === 'gold' ? 'var(--gold-500)' : 'var(--cream)'
+  const labelColor = tone === 'gold' ? 'var(--gold-500)' : 'var(--text-muted)'
   return (
-    <div className="px-3 py-2.5" style={{ background: 'rgba(15,32,64,0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px' }}>
-      <div className="font-mono text-[9px] tracking-widest uppercase mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="font-display font-bold tabular-nums" style={{ color: 'var(--cream)', fontSize: 22, lineHeight: 1.1 }}>
+    <div className="px-3 py-2.5" style={{
+      background: tone === 'gold' ? 'rgba(240,192,64,0.05)' : 'rgba(15,32,64,0.45)',
+      border: tone === 'gold' ? '1px solid rgba(240,192,64,0.25)' : '1px solid rgba(255,255,255,0.06)',
+      borderRadius: '2px',
+    }}>
+      <div className="font-mono text-[9px] tracking-widest uppercase mb-1" style={{ color: labelColor, opacity: tone === 'gold' ? 0.85 : 1 }}>{label}</div>
+      <div className="font-display font-bold tabular-nums" style={{ color: valueColor, fontSize: 22, lineHeight: 1.1 }}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </div>
       {hint && <div className="font-mono text-[9px] mt-0.5" style={{ color: 'var(--text-faint)' }}>{hint}</div>}

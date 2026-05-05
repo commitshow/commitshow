@@ -16,7 +16,9 @@ export interface CastForecastResult {
   voteId: string
   weight: number
   scoutTier: ScoutTier
-  apEarned: number            // base vote AP; bonuses resolve at graduation
+  apEarned: number              // base 10 + spotter bonus (immediate); accuracy bonus resolves at graduation
+  spotterTier: SpotterTier | null
+  spotterBonus: number          // 0 if cast outside spotter windows (legacy)
 }
 
 export class ForecastQuotaError extends Error {
@@ -30,6 +32,51 @@ export class ForecastQuotaError extends Error {
     this.used = used
     this.cap = cap
   }
+}
+
+export class ForecastWindowClosedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ForecastWindowClosedError'
+  }
+}
+
+// Forecast window state · derived from the project's first 'initial'
+// audit snapshot. Window opens at Round 1 and closes 14 days later;
+// the earlier you bet inside that window, the higher the spotter tier
+// and the bigger the AP bonus on cast (First +50 / Early +20 / Spotter
+// +10 — granted by the on_vote_grant_spotter_bonus trigger).
+export type SpotterTier = 'first' | 'early' | 'spotter'
+
+export interface VoteWindowState {
+  openedAt: string | null
+  closesAt: string | null
+  isOpen: boolean
+  tierNow: SpotterTier | null
+}
+
+export async function fetchVoteWindowState(projectId: string): Promise<VoteWindowState> {
+  const { data, error } = await supabase
+    .rpc('vote_window_state', { p_project_id: projectId })
+  if (error || !data || !Array.isArray(data) || data.length === 0) {
+    return { openedAt: null, closesAt: null, isOpen: false, tierNow: null }
+  }
+  const row = data[0] as { opened_at: string | null; closes_at: string | null; is_open: boolean; tier_now: SpotterTier | null }
+  return {
+    openedAt: row.opened_at,
+    closesAt: row.closes_at,
+    isOpen: !!row.is_open,
+    tierNow: row.tier_now,
+  }
+}
+
+// AP bonus by spotter tier (mirrors on_vote_grant_spotter_bonus in
+// 20260505_vote_window_and_spotter.sql). Surfaced in ForecastModal so
+// the user sees the bonus before casting.
+export const SPOTTER_BONUS: Record<SpotterTier, number> = {
+  first:   50,
+  early:   20,
+  spotter: 10,
 }
 
 // AlreadyForecastedError removed 2026-05-03 · CEO confirmed PRD §1-A ① /
@@ -68,7 +115,7 @@ export async function castForecast(input: CastForecastInput): Promise<CastForeca
       vote_count: 1,
       // scout_tier and weight are overwritten by the BEFORE INSERT trigger.
     }])
-    .select('id, weight, scout_tier')
+    .select('id, weight, scout_tier, spotter_tier')
     .single()
 
   if (error) {
@@ -81,14 +128,25 @@ export async function castForecast(input: CastForecastInput): Promise<CastForeca
       }
       throw new ForecastQuotaError(msg, 'Bronze', 0, 0)
     }
+    if (/Forecast window closed|no audit yet/i.test(msg)) {
+      throw new ForecastWindowClosedError(msg)
+    }
     throw error
   }
+
+  // Spotter-tier bonus, if any, lands as a separate AP ledger row from
+  // the on_vote_grant_spotter_bonus trigger. Surface it on the success
+  // toast so the user sees "+10 base + 50 First Spotter" not just "+10".
+  const spotterTier = (data as { spotter_tier?: SpotterTier | null }).spotter_tier ?? null
+  const spotterBonus = spotterTier ? SPOTTER_BONUS[spotterTier] : 0
 
   return {
     voteId: data.id,
     weight: Number(data.weight),
     scoutTier: data.scout_tier as ScoutTier,
-    apEarned: 10,   // mirrors the grant_ap(kind='vote', 10) rule in the DB trigger
+    apEarned: 10 + spotterBonus,
+    spotterTier,
+    spotterBonus,
   }
 }
 

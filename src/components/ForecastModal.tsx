@@ -6,7 +6,12 @@ import {
   castForecast,
   priorForecastCount,
   loadMemberStats,
+  fetchVoteWindowState,
+  SPOTTER_BONUS,
   ForecastQuotaError,
+  ForecastWindowClosedError,
+  type SpotterTier,
+  type VoteWindowState,
 } from '../lib/forecast'
 import { EmotionTagRow } from './EmotionTagRow'
 
@@ -35,7 +40,8 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState<null | { tier: ScoutTier; weight: number; ap: number }>(null)
+  const [success, setSuccess] = useState<null | { tier: ScoutTier; weight: number; ap: number; spotterTier: SpotterTier | null; spotterBonus: number }>(null)
+  const [voteWindow, setVoteWindow] = useState<VoteWindowState | null>(null)
   // priorCount = how many forecasts this member already cast on this
   // project this season. PRD §1-A ① / §9 lets the same Scout cast ×N
   // (conviction expressed as multiple votes inside their monthly quota),
@@ -53,27 +59,38 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Load scout status + how many forecasts the member already cast on this
-  // project this season. The count surfaces in the UI as "You've cast N
-  // already" but does NOT gate the submit button — see priorCount comment.
+  // Load scout status + prior forecast count + window state (anyone can
+  // see the window status, even before sign-in, so the gate copy reads
+  // honestly: "Window closed 6 days ago" beats a generic "sign in").
   useEffect(() => {
-    if (!user?.id) return
+    let alive = true
     ;(async () => {
-      const [stats, prior] = await Promise.all([
-        loadMemberStats(user.id),
-        priorForecastCount(user.id, project.id),
-      ])
-      if (stats) {
-        setTier(stats.tier)
-        setQuotaRemaining(stats.monthly_votes_remaining)
-        setQuotaCap(stats.monthly_vote_cap)
-        setAP(stats.activity_points)
+      const winP = fetchVoteWindowState(project.id)
+      if (user?.id) {
+        const [stats, prior, win] = await Promise.all([
+          loadMemberStats(user.id),
+          priorForecastCount(user.id, project.id),
+          winP,
+        ])
+        if (!alive) return
+        if (stats) {
+          setTier(stats.tier)
+          setQuotaRemaining(stats.monthly_votes_remaining)
+          setQuotaCap(stats.monthly_vote_cap)
+          setAP(stats.activity_points)
+        }
+        setPriorCount(prior)
+        setVoteWindow(win)
+      } else {
+        const win = await winP
+        if (!alive) return
+        setVoteWindow(win)
       }
-      setPriorCount(prior)
     })()
+    return () => { alive = false }
   }, [user?.id, project.id])
 
-  const canSubmit = user && !busy && (quotaRemaining ?? 0) > 0
+  const canSubmit = !!user && !busy && (quotaRemaining ?? 0) > 0 && !!voteWindow?.isOpen
 
   const handleSubmit = async () => {
     if (!user?.id) return
@@ -81,11 +98,13 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
     setError('')
     try {
       const res = await castForecast({ projectId: project.id, predictedScore: score, comment: comment.trim() || undefined, memberId: user.id })
-      setSuccess({ tier: res.scoutTier, weight: res.weight, ap: res.apEarned })
+      setSuccess({ tier: res.scoutTier, weight: res.weight, ap: res.apEarned, spotterTier: res.spotterTier, spotterBonus: res.spotterBonus })
       onCast?.()
     } catch (e) {
       if (e instanceof ForecastQuotaError) {
         setError(`Monthly quota exhausted for ${e.tier} tier (${e.used} / ${e.cap}). Resets on the 1st.`)
+      } else if (e instanceof ForecastWindowClosedError) {
+        setError('Forecast window closed for this project · windows last 14 days from the first audit.')
       } else {
         setError((e as Error).message || 'Failed to cast forecast.')
       }
@@ -156,6 +175,8 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
           </div>
         )}
 
+        {voteWindow && <SpotterWindowStrip window={voteWindow} />}
+
         {success ? (
           <div className="space-y-4">
             <div className="px-4 py-4 text-center" style={{ background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.3)', borderRadius: '2px' }}>
@@ -166,8 +187,18 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
               <div className="font-mono text-xs mt-1" style={{ color: 'rgba(248,245,238,0.55)' }}>
                 {success.tier} Scout
               </div>
+              {success.spotterTier && success.spotterBonus > 0 && (
+                <div className="mt-2 inline-block px-2 py-1 font-mono text-[10px] tracking-widest" style={{
+                  background: 'rgba(240,192,64,0.12)',
+                  color: 'var(--gold-500)',
+                  border: '1px solid rgba(240,192,64,0.45)',
+                  borderRadius: '2px',
+                }}>
+                  ★ {SPOTTER_LABELS[success.spotterTier].label} · +{success.spotterBonus} AP
+                </div>
+              )}
               <div className="font-mono text-xs mt-2" style={{ color: 'rgba(248,245,238,0.4)' }}>
-                Bonus AP resolves at graduation if your forecast is accurate.
+                Accuracy bonus resolves at graduation if your forecast is on target.
               </div>
             </div>
 
@@ -320,5 +351,82 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
       </div>
     </div>,
     document.body,
+  )
+}
+
+// Spotter-tier window strip · 3 segments (First 24h · Early 3d · Spotter 14d).
+// Active segment glows, past segments dim, future segments are placeholders.
+// When window is closed, the whole strip mutes and the headline says so.
+const SPOTTER_LABELS: Record<SpotterTier, { label: string; window: string; bonus: number }> = {
+  first:   { label: 'First Spotter',   window: '≤ 24h',  bonus: SPOTTER_BONUS.first },
+  early:   { label: 'Early Spotter',   window: '≤ 3 days', bonus: SPOTTER_BONUS.early },
+  spotter: { label: 'Spotter',         window: '≤ 14 days', bonus: SPOTTER_BONUS.spotter },
+}
+
+function SpotterWindowStrip({ window }: { window: VoteWindowState }) {
+  const tiers: SpotterTier[] = ['first', 'early', 'spotter']
+  const activeIdx = window.tierNow ? tiers.indexOf(window.tierNow) : -1
+
+  if (!window.openedAt) {
+    return (
+      <div className="mb-5 px-3 py-2.5 font-mono text-[11px]" style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: '2px',
+        color: 'var(--text-muted)',
+      }}>
+        Forecast window opens after the first audit.
+      </div>
+    )
+  }
+
+  const closesAt = window.closesAt ? new Date(window.closesAt) : null
+  const now = new Date()
+  const msLeft = closesAt ? closesAt.getTime() - now.getTime() : 0
+  const daysLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60 * 24)))
+  const hoursLeft = Math.max(0, Math.floor(msLeft / (1000 * 60 * 60)))
+
+  return (
+    <div className="mb-5 px-3 py-2.5" style={{
+      background: window.isOpen ? 'rgba(240,192,64,0.04)' : 'rgba(248,120,113,0.05)',
+      border: `1px solid ${window.isOpen ? 'rgba(240,192,64,0.2)' : 'rgba(248,120,113,0.25)'}`,
+      borderRadius: '2px',
+    }}>
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="font-mono text-[10px] tracking-widest" style={{ color: window.isOpen ? 'var(--gold-500)' : '#F88771' }}>
+          {window.isOpen ? 'FORECAST WINDOW OPEN' : 'FORECAST WINDOW CLOSED'}
+        </span>
+        <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {window.isOpen
+            ? (daysLeft > 0 ? `${daysLeft}d left` : `${hoursLeft}h left`)
+            : 'closed > 14 days after Round 1'}
+        </span>
+      </div>
+      <div className="flex gap-1">
+        {tiers.map((t, i) => {
+          const meta = SPOTTER_LABELS[t]
+          const isActive = i === activeIdx && window.isOpen
+          const isPast   = activeIdx !== -1 && i < activeIdx
+          const isFuture = activeIdx === -1 || i > activeIdx
+          const fg = isActive ? 'var(--gold-500)'
+                  : isPast   ? 'var(--text-muted)'
+                  : isFuture && window.isOpen ? 'var(--text-secondary)'
+                  : 'var(--text-faint)'
+          const bg = isActive ? 'rgba(240,192,64,0.12)' : 'rgba(255,255,255,0.02)'
+          const border = isActive ? '1px solid rgba(240,192,64,0.4)' : '1px solid rgba(255,255,255,0.04)'
+          return (
+            <div key={t} className="flex-1 px-2 py-1.5 font-mono text-[10px]" style={{
+              background: bg, border, borderRadius: '2px', color: fg, textAlign: 'center',
+              opacity: isFuture && !window.isOpen ? 0.5 : 1,
+            }}>
+              <div style={{ fontWeight: isActive ? 700 : 400 }}>{meta.label}</div>
+              <div style={{ color: isActive ? fg : 'var(--text-muted)', marginTop: 1 }}>
+                {meta.window} · +{meta.bonus} AP
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
