@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase, PUBLIC_MEMBER_COLUMNS, type Member, type CreatorGrade } from '../lib/supabase'
-import { isEncoreScore } from '../lib/encore'
+import { isEncoreScore, fetchAllEncoresByProjectIds, type EncoreRow, type EncoreKind } from '../lib/encore'
 import { EncoreBadge } from '../components/EncoreBadge'
 
 const GRADE_COLOR: Record<CreatorGrade, string> = {
@@ -47,6 +47,7 @@ export function CreatorDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [member, setMember]     = useState<CreatorMember | null>(null)
   const [products, setProducts] = useState<ProductRow[]>([])
+  const [encoresByProject, setEncoresByProject] = useState<Map<string, EncoreRow[]>>(new Map())
   const [loaded, setLoaded]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
@@ -76,12 +77,22 @@ export function CreatorDetailPage() {
         .order('score_total', { ascending: false, nullsFirst: false })
       if (!alive) return
       const productRows = (pjs ?? []) as ProductRow[]
-      memberCore.encore_count = productRows.filter(p => isEncoreScore(p.score_total)).length
+
+      // Pull all 4-track Encores for this creator's portfolio so each
+      // tile can show every honor it earned (Production / Streak /
+      // Climb / Spotlight) instead of inferring "Encore" from score
+      // alone. Score-based inference misses Climb/Spotlight by design.
+      const encMap = await fetchAllEncoresByProjectIds(productRows.map(p => p.id))
+
+      memberCore.encore_count = productRows.filter(p =>
+        isEncoreScore(p.score_total) || (encMap.get(p.id)?.length ?? 0) > 0,
+      ).length
       memberCore.best_score   = productRows.length === 0 ? null : Math.max(0, ...productRows.map(p => p.score_total ?? 0))
       memberCore.total_audits = productRows.reduce((sum, p) => sum + (p.audit_count ?? 0), 0)
 
       setMember(memberCore)
       setProducts(productRows)
+      setEncoresByProject(encMap)
       setLoaded(true)
     })()
     return () => { alive = false }
@@ -132,7 +143,7 @@ export function CreatorDetailPage() {
             {/* Stats grid · creator-centric */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
               <Stat label="Products"      value={products.length} />
-              <Stat label="Encore (84+)"  value={member.encore_count ?? 0} accent="#A78BFA" />
+              <Stat label="Encore"        value={member.encore_count ?? 0} accent="#A78BFA" hint="any track" />
               <Stat label="Best score"    value={member.best_score != null ? `${member.best_score}/100` : '—'} />
               <Stat label="Total audits"  value={member.total_audits ?? 0} hint="across all products" />
             </div>
@@ -145,7 +156,7 @@ export function CreatorDetailPage() {
               ) : (
                 <div className="grid gap-2 md:grid-cols-2">
                   {products.map(p => (
-                    <ProductCard key={p.id} p={p} />
+                    <ProductCard key={p.id} p={p} encores={encoresByProject.get(p.id) ?? []} />
                   ))}
                 </div>
               )}
@@ -173,8 +184,8 @@ function Stat({ label, value, hint, accent }: { label: string; value: number | s
   )
 }
 
-function ProductCard({ p }: { p: ProductRow }) {
-  const isEncore = isEncoreScore(p.score_total)
+function ProductCard({ p, encores }: { p: ProductRow; encores: EncoreRow[] }) {
+  const isEncore = isEncoreScore(p.score_total) || encores.length > 0
   return (
     <Link
       to={`/projects/${p.id}`}
@@ -199,9 +210,16 @@ function ProductCard({ p }: { p: ProductRow }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5 flex-wrap">
             <div className="font-display font-bold truncate" style={{ color: 'var(--cream)' }}>{p.project_name}</div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {isEncore && <EncoreBadge score={p.score_total} />}
-              <span className="font-mono text-sm tabular-nums" style={{ color: isEncore ? 'var(--gold-500)' : 'var(--cream)' }}>
+            <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+              {/* Render every Encore kind earned. Score-based fallback
+                  renders production when score≥85 but no row exists yet
+                  (e.g. trigger lag) — shouldn't happen in steady state
+                  but keeps the badge visible if it does. */}
+              {encores.length > 0
+                ? encores.map(e => <EncoreBadge key={e.kind} kind={e.kind as EncoreKind} serial={e.serial} />)
+                : isEncoreScore(p.score_total) && <EncoreBadge score={p.score_total} />
+              }
+              <span className="font-mono text-sm tabular-nums ml-1" style={{ color: isEncore ? 'var(--gold-500)' : 'var(--cream)' }}>
                 {p.score_total ?? '—'}
               </span>
             </div>

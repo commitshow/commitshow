@@ -13,7 +13,8 @@ import { useEffect, useState } from 'react'
 import { fetchProjectStanding, type ProjectStanding } from '../lib/standing'
 import {
   ENCORE_THRESHOLD, isEncoreScore,
-  fetchProjectEncore, type EncoreRow,
+  fetchAllProjectEncores, type EncoreRow, type EncoreKind,
+  ENCORE_KIND_META,
 } from '../lib/encore'
 import { EncoreBadge } from './EncoreBadge'
 import { supabase } from '../lib/supabase'
@@ -25,7 +26,7 @@ interface Props {
 
 export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props) {
   const [s, setS] = useState<ProjectStanding | null>(null)
-  const [encore, setEncore] = useState<EncoreRow | null>(null)
+  const [encores, setEncores] = useState<EncoreRow[]>([])
   const [supporterCount, setSupporterCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(true)
@@ -34,17 +35,20 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
     let alive = true
     Promise.all([
       fetchProjectStanding(projectId),
-      fetchProjectEncore(projectId),
+      fetchAllProjectEncores(projectId),
       supabase.from('supporters').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
-    ]).then(([r, e, sup]) => {
+    ]).then(([r, encs, sup]) => {
       if (!alive) return
       setS(r)
-      setEncore(e)
+      setEncores(encs)
       setSupporterCount(sup.count ?? 0)
       setLoading(false)
     })
     return () => { alive = false }
   }, [projectId])
+
+  const productionEncore = encores.find(e => e.kind === 'production') ?? null
+  const otherEncores     = encores.filter(e => e.kind !== 'production')
 
   if (loading || !s) return null
 
@@ -71,7 +75,7 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
           <div className="font-display font-bold text-lg mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
             <span className="tabular-nums" style={{ color: accent }}>{score}/100</span>
             {isEncore ? (
-              <EncoreBadge score={score} serial={encore?.serial} size="md" />
+              <EncoreBadge score={score} serial={productionEncore?.serial} size="md" />
             ) : (
               <span className="font-mono text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
                 · {distance} to Encore
@@ -119,8 +123,8 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
         <div className="px-5 pb-5" style={{ borderTop: `1px solid ${accent}22` }}>
           <p className="font-light text-sm mt-4 mb-5" style={{ color: 'var(--text-primary)', lineHeight: 1.65 }}>
             {isEncore
-              ? encore?.serial
-                ? `Issued as Encore #${encore.serial} on ${new Date(encore.earned_at).toLocaleDateString()} when total score first crossed ${ENCORE_THRESHOLD}. The serial is permanent — even if the score later dips, this number stays attached to the product. New climbs reuse the same #.`
+              ? productionEncore?.serial
+                ? `Issued as Encore #${productionEncore.serial} on ${new Date(productionEncore.earned_at).toLocaleDateString()} when total score first crossed ${ENCORE_THRESHOLD}. The serial is permanent — even if the score later dips, this number stays attached to the product. New climbs reuse the same #.`
                 : `This product cleared the ${ENCORE_THRESHOLD} bar — Encore badge active. Re-audits keep score moving; if it dips below ${ENCORE_THRESHOLD} the badge drops off until you climb back.`
               : `Encore is a quality threshold, not a season. Cross ${ENCORE_THRESHOLD} on total score (Audit 50 + Scout 30 + Community 20) and the badge appears on the product card with a permanent serial number. ${viewerMode === 'owner' ? 'The audit report below names the highest-leverage gap to close first.' : ''}`}
           </p>
@@ -131,6 +135,32 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
             <PillarCell label="Scout"    max={30} />
             <PillarCell label="Community" max={20} />
           </div>
+
+          {/* Other Encore tracks · streak / climb / spotlight.
+              Production is already shown in the headline; these are
+              the sibling honors. Each one is a distinct heirloom (per-
+              kind serial sequences in the DB) so a project that earned
+              a Climb #3 has it forever, even if the score later dips. */}
+          {otherEncores.length > 0 && (
+            <div className="mb-4">
+              <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
+                ALSO EARNED
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {otherEncores.map(e => (
+                  <EncoreBadge
+                    key={e.kind}
+                    kind={e.kind as EncoreKind}
+                    serial={e.serial}
+                    size="md"
+                  />
+                ))}
+              </div>
+              <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                {otherEncores.map(e => `${ENCORE_KIND_META[e.kind as EncoreKind].label} #${e.serial}: ${ENCORE_KIND_META[e.kind as EncoreKind].oneLineWhy}.`).join(' ')}
+              </div>
+            </div>
+          )}
 
           {/* Supporter strip · how many Scouts have placed a forecast on
               this project. Persists across re-audits so it's a real "fan

@@ -1,34 +1,43 @@
-// Encore badge · single-tier "this score crossed the bar" mark.
-// Replaces the GraduationStanding-era tier chips (valedictorian /
-// honors / graduate / rookie_circle).
+// Encore badge · numbered trophy mark.
 //
-// Render once per surface where you'd previously have shown a
-// graduation_grade chip. The badge silently renders nothing when
-// the project's score is below the threshold — no "below bar" tag.
+// Two render modes:
+//   1. Score-driven (legacy): pass `score` only · renders production
+//      Encore once score crosses the threshold. Renders nothing below.
+//   2. Kind-driven (4-track): pass `kind` (+ optional serial) · renders
+//      the chip for that specific Encore track. Use this when the
+//      caller has already fetched the encores row(s) and knows which
+//      kinds were earned (production / streak / climb / spotlight).
 //
-// `serial` (optional) is the registry-issued #N. Surfacing it here
-// turns Encore from a flat label into a numbered trophy ("Encore
-// #43"). Plan v1.2 §2.3 — early adopters earn the low numbers,
-// numbers never recycle, copycat sites can never have an Encore #1
-// issued in 2026. The hierloom moat lives in this number.
+// `serial` is the registry-issued #N — heirloom moat per CLAUDE.md
+// §encore. Sequences are per-kind so each track has its own #1.
 
-import { isEncoreScore } from '../lib/encore'
+import { isEncoreScore, ENCORE_KIND_META, type EncoreKind } from '../lib/encore'
 
 interface Props {
-  score:   number | null | undefined
+  // Score-driven mode (production track only).
+  score?:  number | null | undefined
+  // Kind-driven mode (any track).
+  kind?:   EncoreKind
   serial?: number | null
   size?:   'sm' | 'md'
   className?: string
 }
 
-export function EncoreBadge({ score, serial, size = 'sm', className }: Props) {
-  if (!isEncoreScore(score)) return null
+export function EncoreBadge({ score, kind, serial, size = 'sm', className }: Props) {
+  // Resolve the effective kind: explicit prop wins, else fall back to
+  // production once the score is past the threshold. Below threshold
+  // with no kind prop → render nothing (legacy behavior preserved).
+  const effectiveKind: EncoreKind | null = kind
+    ?? (isEncoreScore(score) ? 'production' : null)
+  if (!effectiveKind) return null
+
+  const meta = ENCORE_KIND_META[effectiveKind]
   const padY = size === 'md' ? '4px' : '2px'
   const padX = size === 'md' ? '8px' : '6px'
   const fontSize = size === 'md' ? 11 : 10
   const tooltip = serial
-    ? `Encore #${serial} · score 85+ · permanent serial, never recycles`
-    : 'Encore · score 85+'
+    ? `${meta.label} #${serial} · ${meta.oneLineWhy} · permanent serial, never recycles`
+    : `${meta.label} · ${meta.oneLineWhy}`
   return (
     <span
       className={`font-mono tracking-widest uppercase ${className ?? ''}`}
@@ -46,7 +55,8 @@ export function EncoreBadge({ score, serial, size = 'sm', className }: Props) {
         lineHeight:   1,
       }}
     >
-      ★ Encore{serial != null && <span style={{ opacity: 0.85 }}> #{serial}</span>}
+      {meta.symbol} {meta.label}
+      {serial != null && <span style={{ opacity: 0.85 }}> #{serial}</span>}
     </span>
   )
 }

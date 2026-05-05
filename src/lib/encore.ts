@@ -22,6 +22,22 @@ export function isEncoreScore(score: number | null | undefined): boolean {
   return typeof score === 'number' && score >= ENCORE_THRESHOLD
 }
 
+// 4-track Encore display metadata · keep sorted by intended visual
+// weight (production = the gold mark; others are sibling honors).
+export type EncoreKind = 'production' | 'streak' | 'climb' | 'spotlight'
+
+export const ENCORE_KIND_META: Record<EncoreKind, {
+  label: string         // chip label shown after the symbol
+  symbol: string        // single-glyph mark (kept ASCII-friendly)
+  rank: number          // sort order when a project earned multiple kinds
+  oneLineWhy: string    // tooltip / detail line — what the gate measured
+}> = {
+  production: { label: 'Encore',    symbol: '★', rank: 0, oneLineWhy: 'Score crossed 85 — the production-quality bar' },
+  streak:     { label: 'Streak',    symbol: '⟳', rank: 1, oneLineWhy: '4 consecutive snapshots ≥ 75 — sustained quality' },
+  climb:      { label: 'Climb',     symbol: '↗', rank: 2, oneLineWhy: '+25 points improvement from the first audit' },
+  spotlight:  { label: 'Spotlight', symbol: '✦', rank: 3, oneLineWhy: '10+ supporters with avg forecast ≥ 75' },
+}
+
 import { supabase } from './supabase'
 
 export interface EncoreRow {
@@ -31,10 +47,9 @@ export interface EncoreRow {
   earned_score: number
 }
 
-// Fetch the production-kind Encore row for a single project. Other
-// kinds (streak / climb / spotlight) gate on different criteria and
-// will be added in subsequent sprints; for now only 'production'
-// (= score >= 85) emits rows.
+// Fetch the production-kind Encore row for a single project. Kept
+// for backwards compat — many callers want the headline serial only.
+// Use fetchAllProjectEncores for the full 4-track set.
 export async function fetchProjectEncore(projectId: string): Promise<EncoreRow | null> {
   const { data } = await supabase
     .from('encores')
@@ -45,19 +60,65 @@ export async function fetchProjectEncore(projectId: string): Promise<EncoreRow |
   return (data as EncoreRow | null) ?? null
 }
 
-// Bulk variant for list pages · returns a Map keyed by project_id
-// so the caller can render serials inline without N+1 queries.
+// All Encore rows for a project, sorted by ENCORE_KIND_META.rank so
+// production always shows first when multiple kinds were earned.
+export async function fetchAllProjectEncores(projectId: string): Promise<EncoreRow[]> {
+  const { data } = await supabase
+    .from('encores')
+    .select('kind, serial, earned_at, earned_score')
+    .eq('project_id', projectId)
+  const rows = (data as EncoreRow[] | null) ?? []
+  return rows.slice().sort((a, b) =>
+    ENCORE_KIND_META[a.kind as EncoreKind].rank - ENCORE_KIND_META[b.kind as EncoreKind].rank,
+  )
+}
+
+// Bulk variant for list pages · returns a Map keyed by project_id.
+// Defaults to production-only (the headline serial); pass allKinds=true
+// when the caller wants every track (e.g. project portfolio cards).
 export async function fetchEncoresByProjectIds(
   projectIds: string[],
+  allKinds = false,
 ): Promise<Map<string, EncoreRow>> {
+  if (projectIds.length === 0) return new Map()
+  let q = supabase
+    .from('encores')
+    .select('project_id, kind, serial, earned_at, earned_score')
+    .in('project_id', projectIds)
+  if (!allKinds) q = q.eq('kind', 'production')
+  const { data } = await q
+  const map = new Map<string, EncoreRow>()
+  // When allKinds, prefer the highest-rank (production) row per project.
+  const sorted = ((data ?? []) as Array<{ project_id: string } & EncoreRow>)
+    .slice()
+    .sort((a, b) => ENCORE_KIND_META[a.kind as EncoreKind].rank - ENCORE_KIND_META[b.kind as EncoreKind].rank)
+  sorted.forEach(r => {
+    if (!map.has(r.project_id)) {
+      map.set(r.project_id, { kind: r.kind, serial: r.serial, earned_at: r.earned_at, earned_score: r.earned_score })
+    }
+  })
+  return map
+}
+
+// Bulk variant returning all kinds grouped by project_id (for the
+// few surfaces that want to render the full set per project).
+export async function fetchAllEncoresByProjectIds(
+  projectIds: string[],
+): Promise<Map<string, EncoreRow[]>> {
   if (projectIds.length === 0) return new Map()
   const { data } = await supabase
     .from('encores')
     .select('project_id, kind, serial, earned_at, earned_score')
     .in('project_id', projectIds)
-    .eq('kind', 'production')
-  const map = new Map<string, EncoreRow>()
-  ;(data ?? []).forEach((r: { project_id: string } & EncoreRow) =>
-    map.set(r.project_id, { kind: r.kind, serial: r.serial, earned_at: r.earned_at, earned_score: r.earned_score }))
+  const map = new Map<string, EncoreRow[]>()
+  ;(data ?? []).forEach((r: { project_id: string } & EncoreRow) => {
+    const list = map.get(r.project_id) ?? []
+    list.push({ kind: r.kind, serial: r.serial, earned_at: r.earned_at, earned_score: r.earned_score })
+    map.set(r.project_id, list)
+  })
+  for (const [k, list] of map) {
+    list.sort((a, b) => ENCORE_KIND_META[a.kind as EncoreKind].rank - ENCORE_KIND_META[b.kind as EncoreKind].rank)
+    map.set(k, list)
+  }
   return map
 }
