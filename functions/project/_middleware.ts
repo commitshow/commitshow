@@ -1,7 +1,14 @@
-// /project/<slug> · SSR-light wrapper.
-// Resolves slug to a project, then patches the SPA HTML's og:image
-// + twitter:image meta tags so X / LinkedIn unfurl per-project
-// instead of using the generic /og-image.png.
+// /project/* middleware · SSR-light wrapper.
+// Resolves the path's slug to a project, then patches the SPA HTML's
+// og:image + twitter:image meta tags so X / LinkedIn unfurl per-
+// project instead of using the generic /og-image.png.
+//
+// Why a _middleware.ts instead of [slug].ts:
+//   The dynamic [slug] convention silently fell through to the
+//   Pages SPA fallback (`not_found_handling: single-page-application`)
+//   even though the function file was committed. Middleware is
+//   guaranteed to run before any SPA / static-asset fallback for
+//   paths under its directory.
 
 interface Env {
   SUPABASE_URL?:      string
@@ -17,7 +24,7 @@ interface ResolvedProject {
 async function resolveSlug(env: Env, slug: string): Promise<ResolvedProject | null> {
   const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
   const anonKey = env.SUPABASE_ANON_KEY ?? ''
-  if (!anonKey) return null   // can't query without key
+  if (!anonKey) return null
   const cols = 'id,project_name,score_total,created_at,status'
   const res  = await fetch(
     `${url}/rest/v1/projects?status=in.(active,graduated,valedictorian)&select=${cols}&order=created_at.desc&limit=200`,
@@ -42,29 +49,31 @@ class MetaRewriter {
   }
 }
 
-export const onRequestGet: PagesFunction<Env> = async (ctx) => {
-  const { slug } = ctx.params as { slug: string }
-  const cleanSlug = (Array.isArray(slug) ? slug[0] : slug).replace(/\.html$/, '')
+export const onRequest: PagesFunction<Env> = async (ctx) => {
+  // Extract slug from the path · /project/<slug>[/anything]
+  const url = new URL(ctx.request.url)
+  const parts = url.pathname.split('/').filter(Boolean)   // ['project', '<slug>']
+  if (parts[0] !== 'project' || !parts[1]) {
+    // Not a /project/<slug> request — let the rest of the chain handle it.
+    return ctx.next()
+  }
+  const slug = parts[1].replace(/\.html$/, '')
 
-  // 1. Pull the SPA HTML directly via fetch · ctx.next() ALSO works
-  //    on Pages but errors are silent · raw fetch gives us better
-  //    control + diagnostics if something goes wrong.
+  // Pull the SPA HTML directly · raw fetch so errors are observable
+  // (ctx.next() of a SPA-fallback path can be opaque on Pages).
   const indexUrl = new URL('/index.html', ctx.request.url).toString()
   const assetRes = await fetch(indexUrl)
   if (!assetRes.ok) {
     return new Response(`asset fetch failed: ${assetRes.status}`, { status: 500 })
   }
 
-  // 2. Resolve slug. On miss, return the asset unchanged · the SPA
-  //    will handle 'not found' client-side.
   let project: ResolvedProject | null = null
   try {
-    project = await resolveSlug(ctx.env, cleanSlug)
+    project = await resolveSlug(ctx.env, slug)
   } catch {
     project = null
   }
   if (!project) {
-    // Sentinel header so we can tell from curl that the function ran.
     const passthrough = new Response(assetRes.body, assetRes)
     passthrough.headers.set('x-cs-og-rewrite', 'miss')
     return passthrough
