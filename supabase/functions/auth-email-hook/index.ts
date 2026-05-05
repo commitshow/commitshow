@@ -23,6 +23,12 @@
 // @ts-nocheck
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+// Standard Webhooks · Supabase Auth Hook is a Standard-Webhooks compliant
+// sender. Using the canonical library means we don't reimplement the
+// HMAC + base64 + secret-prefix dance ourselves (which is exactly what
+// kept signing 401 in the previous direct-crypto path). Library is
+// loaded from the same esm.sh CDN the rest of our Edge Functions use.
+import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin':  '*',
@@ -65,38 +71,6 @@ const ACTION_TO_TEMPLATE: Record<string, string> = {
   email_change_new:     'auth_email_change',
 }
 
-// Standard Webhooks signature · base64(HMAC-SHA256(`${id}.${ts}.${body}`, secret))
-// `signature` header is space-separated list of `v1,<base64>` entries.
-async function verifySignature(
-  rawBody: string,
-  hookId:  string,
-  hookTs:  string,
-  hookSig: string,
-  secretRaw: string,
-): Promise<boolean> {
-  if (!secretRaw) return false
-  // Standard Webhooks: secret is prefixed `whsec_` and base64-encoded
-  // bytes. Strip the prefix and base64-decode for the HMAC key.
-  const trimmed = secretRaw.startsWith('whsec_') ? secretRaw.slice('whsec_'.length) : secretRaw
-  const keyBytes = Uint8Array.from(atob(trimmed), c => c.charCodeAt(0))
-
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey('raw', keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-
-  const signed = await crypto.subtle.sign('HMAC', key,
-    enc.encode(`${hookId}.${hookTs}.${rawBody}`))
-  const expected = btoa(String.fromCharCode(...new Uint8Array(signed)))
-
-  // The header carries one or more `v1,<sig>` pairs separated by space.
-  const parts = hookSig.split(' ')
-  for (const p of parts) {
-    const [version, sig] = p.split(',')
-    if (version === 'v1' && sig === expected) return true
-  }
-  return false
-}
-
 // Lightweight {{var}} substitution · same shape as the substitute_template_vars
 // SQL function used by the dispatch_email path so admins editing in
 // /admin/emails see the same syntax across all kinds.
@@ -117,29 +91,29 @@ Deno.serve(async (req) => {
     return json({ error: 'AUTH_HOOK_SECRET not configured' }, 500)
   }
 
-  const hookId  = req.headers.get('webhook-id')        ?? ''
-  const hookTs  = req.headers.get('webhook-timestamp') ?? ''
-  const hookSig = req.headers.get('webhook-signature') ?? ''
-  if (!hookId || !hookTs || !hookSig) {
-    return json({ error: 'missing webhook headers' }, 401)
-  }
-  const ok = await verifySignature(rawBody, hookId, hookTs, hookSig, HOOK_SECRET)
-  if (!ok) {
-    // Diagnostic logging · the secret_prefix lets us tell from the
-    // Function logs whether the keychain stored the raw whsec_ form,
-    // a v1, prefix, or something else, without exposing the value.
-    console.warn('[auth-email-hook] signature verify failed', {
-      hook_id_prefix:        hookId.slice(0, 8),
-      hook_ts:               hookTs,
-      sig_prefix:            hookSig.slice(0, 16),
-      secret_starts:         HOOK_SECRET.slice(0, 8),
-      secret_len:            HOOK_SECRET.length,
-    })
-    return json({ error: 'invalid signature' }, 401)
-  }
-
+  // Standard Webhooks library · accepts the secret in its full
+  // `v1,whsec_<base64>` form (exactly what Supabase Dashboard
+  // displays). The library strips the version + decodes internally.
+  // Throws on bad signature / stale timestamp / etc., which we map
+  // to a 401 with a short diagnostic log so we can spot a mismatch
+  // from the Function logs.
   let payload: AuthHookPayload
-  try { payload = JSON.parse(rawBody) } catch { return json({ error: 'invalid JSON body' }, 400) }
+  try {
+    const wh = new Webhook(HOOK_SECRET)
+    const headers = {
+      'webhook-id':        req.headers.get('webhook-id')        ?? '',
+      'webhook-timestamp': req.headers.get('webhook-timestamp') ?? '',
+      'webhook-signature': req.headers.get('webhook-signature') ?? '',
+    }
+    payload = wh.verify(rawBody, headers) as AuthHookPayload
+  } catch (e) {
+    console.warn('[auth-email-hook] signature verify failed', {
+      error:         (e as Error)?.message ?? String(e),
+      secret_starts: HOOK_SECRET.slice(0, 12),
+      secret_len:    HOOK_SECRET.length,
+    })
+    return json({ error: 'invalid signature', detail: (e as Error)?.message }, 401)
+  }
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
   const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
