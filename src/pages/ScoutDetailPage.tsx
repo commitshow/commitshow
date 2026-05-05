@@ -14,6 +14,7 @@ import {
   type Member,
   type ScoutTier,
 } from '../lib/supabase'
+import { TrustLevelChip } from '../components/TrustLevelChip'
 
 // Tier palette · mirrors ScoutsPage (kept inline so the detail page
 // doesn't depend on supabase.ts re-exporting display constants).
@@ -249,8 +250,9 @@ export function ScoutDetailPage() {
                   : initial}
               </div>
               <div className="min-w-0">
-                <h1 className="font-display font-black text-3xl md:text-4xl mb-1" style={{ color: 'var(--cream)' }}>
+                <h1 className="font-display font-black text-3xl md:text-4xl mb-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
                   {member.display_name ?? 'Member'}
+                  <TrustLevelChip level={member.trust_level} earnedAt={member.trust_level_at} />
                 </h1>
                 <div className="font-mono text-[11px] flex flex-wrap items-center gap-2" style={{ color: 'var(--text-muted)' }}>
                   <span style={{ color: tierColor }}>{tier ?? 'Bronze'} Scout</span>

@@ -15,6 +15,7 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase, PUBLIC_MEMBER_COLUMNS, type Member, type CreatorGrade } from '../lib/supabase'
 import { isEncoreScore, fetchAllEncoresByProjectIds, type EncoreRow, type EncoreKind } from '../lib/encore'
 import { EncoreBadge } from '../components/EncoreBadge'
+import { TrustLevelChip } from '../components/TrustLevelChip'
 
 const GRADE_COLOR: Record<CreatorGrade, string> = {
   Rookie:          '#6B7280',
@@ -127,8 +128,9 @@ export function CreatorDetailPage() {
                   : initial}
               </div>
               <div className="min-w-0">
-                <h1 className="font-display font-black text-3xl md:text-4xl mb-1" style={{ color: 'var(--cream)' }}>
+                <h1 className="font-display font-black text-3xl md:text-4xl mb-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
                   {member.display_name ?? 'Member'}
+                  <TrustLevelChip level={member.trust_level} earnedAt={member.trust_level_at} />
                 </h1>
                 <div className="font-mono text-[11px] flex flex-wrap items-center gap-2" style={{ color: 'var(--text-muted)' }}>
                   <span style={{ color: gradeColor }}>{grade} Creator</span>

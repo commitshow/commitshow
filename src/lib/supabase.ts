@@ -216,6 +216,7 @@ export const PUBLIC_MEMBER_COLUMNS =
   'id, display_name, avatar_url, tier, activity_points, monthly_votes_used, ' +
   'votes_reset_at, creator_grade, total_graduated, avg_auto_score, ' +
   'preferred_stack, created_at, updated_at, grade_recalc_at, is_admin, ' +
+  'trust_level, trust_level_at, ' +
   'x_handle, x_provider_id, x_connected_at, ' +
   'github_handle, github_provider_id, github_connected_at, ' +
   'linkedin_handle, linkedin_provider_id, linkedin_connected_at'
@@ -245,6 +246,11 @@ export type Member = {
   created_at: string
   updated_at: string
   is_admin?: boolean                      // 20260427150000 · /admin gate
+  // Discourse-style auto-progression · 20260505_trust_levels migration.
+  // 0 New / 1 Basic / 2 Member / 3 Regular / 4 Leader (manual). Bumps
+  // ratchet up on comment + AP triggers; never auto-demote.
+  trust_level: number
+  trust_level_at: string
   // X (Twitter) OAuth identity · 20260502_x_oauth_identity migration.
   // x_handle is the screen name (e.g. "k_ceo"); x_provider_id is the
   // stable X user id; x_connected_at flips on first link.

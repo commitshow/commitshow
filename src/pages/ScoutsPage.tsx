@@ -8,40 +8,40 @@ const TIER_COLOR: Record<ScoutTier, string> = {
 }
 const TIER_ORDER: ScoutTier[] = ['Platinum', 'Gold', 'Silver', 'Bronze']
 
-// PRD v1.7 §9 · tier benefits (per-tier · vote value itself is uniform across tiers)
+// PRD v2 §9 · tier benefits. Vote value is uniform (×1) across tiers
+// — what differs is monthly vote allowance + analysis early-access
+// + extra honors. The legacy "Applaud weight ×1.5/×2/×3" column was
+// dropped in 20260424_v2_prd_realignment.sql when Applaud became a
+// polymorphic toggle (CLAUDE.md §1-A ① · 1 item = 1 applaud · no
+// graduation impact). This UI now reflects that.
 const TIER_BENEFITS: Record<ScoutTier, {
   threshold:   string
   monthlyVotes: number
   preview:      string   // analysis early-access window
-  applaud:      string   // Craft Award Week weight
   extras:       string[]
 }> = {
   Bronze: {
     threshold:    'AP 0 – 499',
     monthlyVotes: 20,
     preview:      'Standard release',
-    applaud:      '×1.0',
     extras:       [],
   },
   Silver: {
     threshold:    'AP 500 – 1,999',
     monthlyVotes: 40,
     preview:      'Security layer · 12 h early',
-    applaud:      '×1.5',
     extras:       [],
   },
   Gold: {
     threshold:    'AP 2,000 – 4,999',
     monthlyVotes: 60,
     preview:      'Security layer · 24 h early',
-    applaud:      '×2.0',
     extras:       ['Community Award eligible'],
   },
   Platinum: {
     threshold:    'Top 3 % AP',
     monthlyVotes: 80,
     preview:      'Full analysis early + rulebook preview',
-    applaud:      '×3.0',
     extras:       ['First Spotter title', 'Public LinkedIn / X badge'],
   },
 }
@@ -233,7 +233,6 @@ function TierCell({ tier, count, active, onClick }: { tier: ScoutTier; count: nu
       <dl className="mt-2.5 space-y-1 font-mono text-[10px]" style={{ lineHeight: 1.4 }}>
         <BenefitRow k="Votes / mo" v={`${b.monthlyVotes}`} vColor="var(--cream)" />
         <BenefitRow k="Analysis"   v={b.preview} vColor="var(--text-secondary)" />
-        <BenefitRow k="Applaud"    v={b.applaud} vColor={color} />
         {b.extras.map((x, i) => (
           <BenefitRow key={i} k="·" v={x} vColor="var(--text-secondary)" />
         ))}
