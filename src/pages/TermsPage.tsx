@@ -155,15 +155,26 @@ export function TermsPage() {
         <Section title="7 · Fees and refunds" anchor="fees">
           <P>
             Each member's first three project auditions are free. Subsequent
-            auditions may carry an "audition fee", described at the point of
-            submission. Refund eligibility (e.g. graduation-conditional
-            refunds) is described on the relevant submission page and is
-            governed by those specific terms.
+            auditions carry an audition fee. The fee has two internally-tracked
+            components: a non-refundable audit and operations cost, and a
+            refundable graduation deposit. The deposit becomes refundable
+            only when the audited product earns a Diploma in a future
+            League cohort; it carries no claim to interest, dividends, or
+            payout from any pool.
+          </P>
+          <P>
+            From time to time we may run a Founder pricing window in which
+            the audition fee is reduced for a fixed number of paying
+            auditions across the platform. Once that count is reached the
+            fee returns to its standard amount. The exact fee charged at
+            checkout is the authoritative price for that purchase.
           </P>
           <P>
             All fees are stated in US dollars unless noted otherwise. Payment
             is processed by third-party providers (currently Stripe). Their
-            terms also apply.
+            terms also apply. We do not guarantee future Diploma eligibility,
+            League cohort timing, or that any deposit will become refundable
+            within a specific timeframe.
           </P>
         </Section>
 

@@ -15,6 +15,7 @@ import type { ExtractedBrief } from '../lib/extractionPrompt'
 import { integrityScore } from '../lib/extractionPrompt'
 import {
   checkRegistrationEligibility,
+  priceBreakdown,
   type RegistrationEligibility,
 } from '../lib/pricing'
 import { resolvePreviewClaim } from '../lib/projectQueries'
@@ -748,6 +749,14 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const priceDollars = (eligibility.priceCents / 100).toFixed(0)
+  const breakdown = priceBreakdown(eligibility.priceCents)
+  const costDollars    = (breakdown.cost    / 100).toFixed(0)
+  const depositDollars = (breakdown.deposit / 100).toFixed(0)
+  // Founder pricing surfaces both the discount AND the scarcity ("947
+  // founder spots left"). When the window is closed, all three values
+  // collapse and we fall back to the standard narrative.
+  const founder = eligibility.founder
+  const founderActive = !!(founder && founder.windowOpen && founder.remaining > 0)
 
   const handleCheckout = async () => {
     setBusy(true)
@@ -782,21 +791,67 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
   return (
     <div className="max-w-xl mx-auto text-center card-navy p-10" style={{ borderRadius: '2px' }}>
       <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
-        // PAYMENT REQUIRED — ${priceDollars}
+        // {founderActive ? `FOUNDER PRICING — $${priceDollars}` : `PAYMENT REQUIRED — $${priceDollars}`}
       </div>
       <h3 className="font-display font-bold text-2xl mb-3" style={{ color: 'var(--cream)' }}>
         {eligibility.freeQuota > 0 ? 'Free quota used' : 'Audition fee'}
       </h3>
-      <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.6)' }}>
+      <p className="font-light mb-4" style={{ color: 'rgba(248,245,238,0.6)' }}>
         {eligibility.freeQuota > 0 ? (
-          <>You've already audited {eligibility.priorCount} products. The first {eligibility.freeQuota} per
-          member are free — your next audit needs the ${priceDollars} discovery · exposure · fandom fee
-          (conditional refund on graduation).</>
+          <>You've already auditioned {eligibility.priorCount} products. The first {eligibility.freeQuota} per
+          member are free — your next audition needs the audit fee.</>
         ) : (
-          <>Auditioning a project costs ${priceDollars} (discovery · exposure · fandom · conditional
-          refund on graduation). Pay once per audit · no subscription.</>
+          <>Each audition has a one-time fee. Pay once per product · no subscription.</>
         )}
       </p>
+
+      {/* Narrative breakdown · strategy doc §7.6: never lead with "$99
+          audition fee" naked — decompose into cost + refundable deposit
+          on every price surface so the gut "too high" reaction lands on
+          the actual non-refundable amount ($20 at full / $10 at founder). */}
+      <div className="mb-5 px-4 py-3" style={{
+        background: 'rgba(240,192,64,0.04)',
+        border: '1px solid rgba(240,192,64,0.18)',
+        borderRadius: '2px',
+        textAlign: 'left',
+      }}>
+        <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+          WHAT YOU'RE ACTUALLY PAYING
+        </div>
+        <div className="grid grid-cols-[1fr_auto] gap-y-1 font-mono text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+          <span>Audit & operations cost <span style={{ color: 'var(--text-muted)' }}>· non-refundable</span></span>
+          <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${costDollars}</span>
+          <span>Graduation deposit <span style={{ color: 'var(--text-muted)' }}>· refunded on Diploma</span></span>
+          <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${depositDollars}</span>
+          <span style={{ borderTop: '1px solid rgba(240,192,64,0.2)', paddingTop: 4, color: 'var(--gold-500)' }}>Total</span>
+          <span className="tabular-nums" style={{ borderTop: '1px solid rgba(240,192,64,0.2)', paddingTop: 4, color: 'var(--gold-500)', fontWeight: 700 }}>${priceDollars}</span>
+        </div>
+        <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Net cost if your product graduates: <span style={{ color: 'var(--cream)' }}>${costDollars}</span>.{' '}
+          If it doesn't: ${priceDollars} (full audit · Encore eligibility · community access · permanent record).
+        </div>
+      </div>
+
+      {/* Founder pricing scarcity strip · only shown while window is
+          open. Surfaces the live remaining count so the urgency is real,
+          not theatrical. */}
+      {founderActive && founder && (
+        <div className="mb-5 px-4 py-2.5" style={{
+          background: 'rgba(167,139,250,0.06)',
+          border: '1px solid rgba(167,139,250,0.3)',
+          borderRadius: '2px',
+        }}>
+          <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: '#A78BFA' }}>
+            FOUNDER PRICING ACTIVE
+          </div>
+          <div className="font-mono text-[11px]" style={{ color: 'var(--cream)', lineHeight: 1.5 }}>
+            <strong style={{ color: '#A78BFA' }}>{founder.remaining.toLocaleString()}</strong> of {founder.cap.toLocaleString()} founder spots remaining.{' '}
+            <span style={{ color: 'var(--text-muted)' }}>
+              Locks in at $99 once filled — the first {founder.cap.toLocaleString()} paying creators carry the discount forever.
+            </span>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={handleCheckout}

@@ -41,6 +41,7 @@ function json(body: unknown, status = 200) {
 // — pick something safe enough that the gate still works.
 const FREE_AUDITS_FALLBACK_DEFAULT = 3
 const AUDIT_FEE_CENTS = 9900   // $99.00 · matches src/lib/pricing.ts
+const FOUNDER_PRICE_FALLBACK_CENTS = 4900   // $49.00 · matches founder_price_cents seed
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
   // priorCount; the only trust line is auth.users + projects.creator_id.
   // Free quota is read live from app_settings so admin can flip the promo
   // without redeploying this function.
-  const [{ count: priorCount }, { data: memberRow }, { data: freeQuotaJson }] = await Promise.all([
+  const [{ count: priorCount }, { data: memberRow }, { data: freeQuotaJson }, { data: founderRows }] = await Promise.all([
     admin
       .from('projects')
       .select('id', { count: 'exact', head: true })
@@ -86,6 +87,7 @@ Deno.serve(async (req) => {
       .eq('id', userId)
       .maybeSingle(),
     admin.rpc('get_app_setting', { p_key: 'free_audits_per_member' }),
+    admin.rpc('founder_pricing_status'),
   ])
 
   const used   = priorCount ?? 0
@@ -109,6 +111,21 @@ Deno.serve(async (req) => {
   if (credit > 0) {
     return json({ error: 'Existing paid credit unused · use it before buying another' }, 400)
   }
+
+  // Founder pricing window · re-checked server-side off the live counter
+  // (race-resistant: another buyer landing the 1000th sale between this
+  // check and our Stripe call would still see them get $49 — we accept
+  // that ±1 fuzziness in exchange for a single round trip).
+  const founder = Array.isArray(founderRows) && founderRows.length > 0
+    ? founderRows[0] as { window_open: boolean; cap: number; paid_count: number; remaining: number; price_cents: number }
+    : null
+  const founderActive = !!(founder && founder.window_open && founder.remaining > 0)
+  const unitAmount = founderActive
+    ? (founder?.price_cents ?? FOUNDER_PRICE_FALLBACK_CENTS)
+    : AUDIT_FEE_CENTS
+  const productDescription = founderActive
+    ? `Founder pricing · audition ${founder!.paid_count + 1} of ${founder!.cap} · conditional refund on Diploma`
+    : 'One additional audit · conditional refund on Diploma'
 
   // Build Stripe session.
   const stripe = new Stripe(STRIPE_SECRET, { apiVersion: '2024-09-30.acacia' })
@@ -135,16 +152,18 @@ Deno.serve(async (req) => {
         quantity: 1,
         price_data: {
           currency: 'usd',
-          unit_amount: AUDIT_FEE_CENTS,
+          unit_amount: unitAmount,
           product_data: {
-            name: 'commit.show audit fee',
-            description: 'One additional audit · conditional refund on graduation',
+            name: founderActive ? 'commit.show audit fee · Founder pricing' : 'commit.show audit fee',
+            description: productDescription,
           },
         },
       }],
       metadata: {
-        member_id: userId,
-        kind:      'audit_fee',
+        member_id:       userId,
+        kind:            'audit_fee',
+        is_founder_price: founderActive ? 'true' : 'false',
+        founder_paid_count: founder ? String(founder.paid_count) : '',
       },
       success_url: successUrl,
       cancel_url:  cancelUrl,
@@ -160,12 +179,17 @@ Deno.serve(async (req) => {
     .insert([{
       member_id:                userId,
       kind:                     'audit_fee',
-      amount_cents:             AUDIT_FEE_CENTS,
+      amount_cents:             unitAmount,
       currency:                 'USD',
       stripe_session_id:        session.id,
       stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : null,
       status:                   'pending',
-      metadata:                 { origin, prior_count: used },
+      metadata:                 {
+        origin,
+        prior_count:        used,
+        is_founder_price:   founderActive,
+        founder_paid_count: founder?.paid_count ?? null,
+      },
     }])
   if (insertErr) {
     console.error('[create-checkout] payments insert failed', insertErr.message)
