@@ -44,6 +44,12 @@ interface ApplaudRow {
   target_id:    string
   target_label: string | null    // resolved best-effort per type
   target_link:  string | null
+  // Project the target lives on. For target_type='product' it's the
+  // project itself; for 'comment' it's the project the comment was
+  // posted under. Surfaced in the meta line so an applaud carries
+  // both *what* (the excerpt) and *where* (the project).
+  project_name: string | null
+  project_id:   string | null
 }
 
 // Two sections, two scopes:
@@ -177,34 +183,52 @@ export function ScoutDetailPage() {
       // recommit fall back to the type label until those surfaces grow.
       const productIds = aRows.filter(a => a.target_type === 'product').map(a => a.target_id)
       const commentIds = aRows.filter(a => a.target_type === 'comment').map(a => a.target_id)
-      const [{ data: aPjRows }, { data: aCmRows }] = await Promise.all([
-        productIds.length > 0
-          ? supabase.from('projects').select('id, project_name').in('id', productIds)
-          : Promise.resolve({ data: [] as Array<{ id: string; project_name: string }> }),
-        commentIds.length > 0
-          ? supabase.from('comments').select('id, text, project_id').in('id', commentIds)
-          : Promise.resolve({ data: [] as Array<{ id: string; text: string; project_id: string }> }),
-      ])
-      const aPjMap = new Map<string, string>(
-        ((aPjRows as Array<{ id: string; project_name: string }>) ?? []).map(p => [p.id, p.project_name]),
-      )
+      // Fetch comments first to learn their project_ids, then fetch
+      // projects covering BOTH the direct product applauds and the
+      // hosting projects for the comment applauds. One round trip
+      // each side, vs N+1 lookups.
+      const { data: aCmRows } = commentIds.length > 0
+        ? await supabase.from('comments').select('id, text, project_id').in('id', commentIds)
+        : { data: [] as Array<{ id: string; text: string; project_id: string }> }
       const aCmMap = new Map<string, { text: string; project_id: string }>(
         ((aCmRows as Array<{ id: string; text: string; project_id: string }>) ?? [])
           .map(c => [c.id, { text: c.text, project_id: c.project_id }]),
       )
+      const allProjectIds = Array.from(new Set([
+        ...productIds,
+        ...((aCmRows as Array<{ project_id: string }> | null) ?? []).map(c => c.project_id),
+      ]))
+      const { data: aPjRows } = allProjectIds.length > 0
+        ? await supabase.from('projects').select('id, project_name').in('id', allProjectIds)
+        : { data: [] as Array<{ id: string; project_name: string }> }
+      const aPjMap = new Map<string, string>(
+        ((aPjRows as Array<{ id: string; project_name: string }>) ?? []).map(p => [p.id, p.project_name]),
+      )
       const applaudRows: ApplaudRow[] = aRows.map(a => {
         if (a.target_type === 'product') {
-          return { ...a, target_label: aPjMap.get(a.target_id) ?? null, target_link: `/projects/${a.target_id}` }
+          return {
+            ...a,
+            target_label: aPjMap.get(a.target_id) ?? null,
+            target_link:  `/projects/${a.target_id}`,
+            project_name: aPjMap.get(a.target_id) ?? null,
+            project_id:   a.target_id,
+          }
         }
         if (a.target_type === 'comment') {
           const c = aCmMap.get(a.target_id)
-          if (!c) return { ...a, target_label: null, target_link: null }
+          if (!c) return { ...a, target_label: null, target_link: null, project_name: null, project_id: null }
           // Truncate so a long comment doesn't blow out the row.
           // Single-line, no markdown processing — just text excerpt.
           const excerpt = c.text.length > 90 ? c.text.slice(0, 89) + '…' : c.text
-          return { ...a, target_label: excerpt, target_link: `/projects/${c.project_id}#comments` }
+          return {
+            ...a,
+            target_label: excerpt,
+            target_link:  `/projects/${c.project_id}#comments`,
+            project_name: aPjMap.get(c.project_id) ?? null,
+            project_id:   c.project_id,
+          }
         }
-        return { ...a, target_label: null, target_link: null }
+        return { ...a, target_label: null, target_link: null, project_name: null, project_id: null }
       })
 
       // 5. Supporting · the scout's slate. Sorted by first_voted_at DESC
@@ -597,8 +621,16 @@ function ApplaudInner({ row }: { row: ApplaudRow }) {
         >
           {headline}
         </div>
-        <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-          {row.target_type} · {new Date(row.created_at).toLocaleDateString()}
+        <div className="font-mono text-[10px] mt-0.5 flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--text-muted)' }}>
+          <span>{row.target_type}</span>
+          {row.target_type === 'comment' && row.project_name && (
+            <>
+              <span>on</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{row.project_name}</span>
+            </>
+          )}
+          <span>·</span>
+          <span>{new Date(row.created_at).toLocaleDateString()}</span>
         </div>
       </div>
       <span className="font-mono text-[10px]" style={{ color: 'var(--gold-500)' }}>👏</span>
