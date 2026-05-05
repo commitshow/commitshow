@@ -534,11 +534,15 @@ export function ScoutDetailPage() {
               )}
             </Section>
 
-            {/* Recent applauds */}
+            {/* Recent applauds · orphans (target deleted) get filtered
+                out so we never render 'product f6e31e9d' as a row.
+                The DB cascade trigger keeps them from showing up in
+                the first place; this filter is a belt-and-suspenders
+                guard against pre-trigger leftovers + race conditions. */}
             <Section title="Recent applauds" emptyHint="Hasn't applauded anything yet.">
-              {applauds.length > 0 && (
+              {applauds.filter(a => a.target_label).length > 0 && (
                 <ol className="grid gap-1.5">
-                  {applauds.map(a => (
+                  {applauds.filter(a => a.target_label).map(a => (
                     <li key={a.id}>
                       {a.target_link ? (
                         <Link
@@ -611,7 +615,10 @@ function ApplaudInner({ row }: { row: ApplaudRow }) {
         <div
           className={isComment ? 'font-light text-sm' : 'font-display font-bold truncate'}
           style={{
-            color:        isComment ? 'var(--text-secondary)' : 'var(--cream)',
+            // Comment excerpts read full-strength (cream) so the
+            // quoted line is genuinely readable. Italic + leading
+            // quotes keep it visually distinct from a heading.
+            color:        'var(--cream)',
             fontStyle:    isComment ? 'italic' : 'normal',
             display:     '-webkit-box',
             WebkitLineClamp: 2,
