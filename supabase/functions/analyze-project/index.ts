@@ -4150,6 +4150,24 @@ Deno.serve(async (req) => {
   }]).select('id').single()
   if (snapErr) console.error('snapshot insert failed', snapErr)
 
+  // ── @commitshow auto-tweet · fire-and-forget background call ──
+  // Triggers when a fresh snapshot lands. The auto-tweet Edge Function
+  // owns its own gates (score >= 85 · status='preview' · 14d cooldown ·
+  // social_share_disabled=false) and is dry-run safe when
+  // COMMITSHOW_X_ACCESS_TOKEN is unset (records 'skipped'). We only
+  // skip the call entirely for 'weekly' / 'season_end' triggers — those
+  // are scheduled re-runs that shouldn't generate tweet noise.
+  if (triggerType === 'initial' || triggerType === 'resubmit') {
+    const tweetUrl = `${SUPABASE_URL}/functions/v1/auto-tweet`
+    const tweetPromise = fetch(tweetUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
+      body:    JSON.stringify({ project_id: projectId }),
+    }).catch(e => console.error('auto-tweet trigger failed', e?.message ?? e))
+    // @ts-ignore — EdgeRuntime injected by Supabase
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(tweetPromise)
+  }
+
   // §11-NEW.1.1 · auto-detect ladder business_category. Hybrid policy:
   // we always write detected_category; business_category is only stamped
   // if the project has none yet (Creator override wins · respected on
