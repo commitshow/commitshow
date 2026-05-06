@@ -21,7 +21,7 @@ interface Env {
   SUPABASE_ANON_KEY?: string
 }
 
-type CardKind = 'audit' | 'encore' | 'milestone' | 'tweet'
+type CardKind = 'audit' | 'encore' | 'milestone' | 'tweet' | 'trajectory'
 
 interface ProjectCard {
   id:             string
@@ -37,6 +37,14 @@ interface ProjectCard {
   scanned_scope:  string | null
   top_concern:    string | null
   top_strength:   string | null
+  // Filled only for kind=trajectory · ascending by created_at.
+  trajectory:     TrajectoryPoint[] | null
+}
+
+interface TrajectoryPoint {
+  created_at:    string  // ISO
+  score_total:   number  // 0–100
+  trigger_type:  string  // 'initial' | 'resubmit' | 'weekly' | 'season_end'
 }
 
 const ENCORE_LABEL: Record<string, { label: string; symbol: string }> = {
@@ -120,6 +128,27 @@ async function loadProject(env: Env, id: string): Promise<ProjectCard | null> {
     scanned_scope,
     top_concern,
     top_strength,
+    trajectory:       null,
+  }
+}
+
+// Loaded on-demand only when ?kind=trajectory · pulls every snapshot
+// score_total in chronological order. Cap at 30 to keep the request
+// bounded — a 3-week season tops out around 4-6 snapshots in practice
+// (initial + weekly cron + a couple of resubmits).
+async function loadTrajectory(env: Env, id: string): Promise<TrajectoryPoint[]> {
+  const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
+  const anonKey = env.SUPABASE_ANON_KEY ?? ''
+  if (!anonKey) return []
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/analysis_snapshots?project_id=eq.${id}&select=created_at,score_total,trigger_type&order=created_at.asc&limit=30`,
+      { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } },
+    )
+    if (!res.ok) return []
+    return await res.json() as TrajectoryPoint[]
+  } catch {
+    return []
   }
 }
 
@@ -341,6 +370,121 @@ function cardTweet(p: ProjectCard): string {
     <text x="1128" y="618" text-anchor="end" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(248,245,238,0.45)" letter-spacing="2">commit.show / projects / ${escapeXml(p.id.slice(0, 8))}</text>`
 }
 
+// ── Trajectory card · 3-week audition arc rendered as a connected
+// line chart. Designed to be the bragging artifact: "started at 47,
+// graduated at 89." Built around the existing analysis_snapshots
+// time-series so a creator just clicks Share once and gets a story
+// card instead of a static score.
+function cardTrajectory(p: ProjectCard): string {
+  const pts = p.trajectory ?? []
+  // Fall back gracefully · if we have <2 snapshots there's nothing to
+  // trace; render the regular audit card so the URL never 4xx's.
+  if (pts.length < 2) return cardAudit(p)
+
+  const projName = escapeXml(fitName(p.project_name, 28))
+  const accent   = '#F0C040'
+
+  // Chart frame · leaves room for y-axis labels (left), x-axis labels
+  // (bottom), wordmark up top, and summary strip below.
+  const chartLeft   = 130
+  const chartRight  = 1110
+  const chartTop    = 250
+  const chartBottom = 510
+  const chartW      = chartRight - chartLeft
+  const chartH      = chartBottom - chartTop
+
+  // X-domain · first audit → last audit. If they all happened on the
+  // same instant (synthetic / bad clock), spread evenly so the line
+  // still draws.
+  const t0 = new Date(pts[0].created_at).getTime()
+  const tN = new Date(pts[pts.length - 1].created_at).getTime()
+  const tSpan = Math.max(tN - t0, 1)
+  const xFor  = (iso: string, idx: number): number => {
+    const t = new Date(iso).getTime()
+    if (tN === t0) return chartLeft + (idx / (pts.length - 1)) * chartW
+    return chartLeft + ((t - t0) / tSpan) * chartW
+  }
+  const yFor  = (score: number): number => {
+    const clamped = Math.max(0, Math.min(100, score))
+    return chartBottom - (clamped / 100) * chartH
+  }
+
+  // Y-axis gridlines · 0/25/50/75/100 with the 85+ encore line marked
+  // in gold so the reader sees the threshold the trajectory crosses.
+  const gridLines = [0, 25, 50, 75, 100].map(v => {
+    const y = yFor(v)
+    return `<line x1="${chartLeft}" y1="${y}" x2="${chartRight}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="3,4"/><text x="${chartLeft - 12}" y="${y + 5}" text-anchor="end" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.4)">${v}</text>`
+  }).join('')
+  const encoreLineY = yFor(85)
+  // Label sits INSIDE the chart at the left edge — placing it at the
+  // right edge overflows past the 1200 canvas (encore line + label
+  // width + letter-spacing busts the margin). Inside-left keeps the
+  // dashed encore threshold clearly captioned without breaking layout.
+  const encoreLine  = `<line x1="${chartLeft}" y1="${encoreLineY}" x2="${chartRight}" y2="${encoreLineY}" stroke="rgba(240,192,64,0.32)" stroke-width="1" stroke-dasharray="6,4"/><text x="${chartLeft + 8}" y="${encoreLineY - 6}" font-family="DM Mono, Menlo, Consolas, monospace" font-size="11" fill="rgba(240,192,64,0.75)" letter-spacing="2">85 · ENCORE</text>`
+
+  // Connected line · single polyline through every snapshot. Could
+  // cubic-bezier later but a polyline reads clearer for a 4-point
+  // arc and avoids over-curving phantoms between sparse snapshots.
+  const linePts = pts.map((pt, i) => `${xFor(pt.created_at, i).toFixed(1)},${yFor(pt.score_total).toFixed(1)}`).join(' ')
+  const linePath = `<polyline points="${linePts}" fill="none" stroke="${accent}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`
+
+  // Dots · last point is bigger + has a soft halo so the eye lands
+  // on the final score (the bragging value).
+  const dots = pts.map((pt, i) => {
+    const cx = xFor(pt.created_at, i)
+    const cy = yFor(pt.score_total)
+    const isLast = i === pts.length - 1
+    const r      = isLast ? 9 : 6
+    const halo   = isLast
+      ? `<circle cx="${cx}" cy="${cy}" r="20" fill="${accent}" opacity="0.18"/><circle cx="${cx}" cy="${cy}" r="13" fill="${accent}" opacity="0.28"/>`
+      : ''
+    // Score label · placed above the dot. Last point gets a bigger,
+    // gold-on-navy chip so the final number reads as the headline.
+    const labelY = cy - (isLast ? 22 : 14)
+    const labelSize = isLast ? 30 : 16
+    const labelWeight = isLast ? '700' : '500'
+    const labelFill = isLast ? '#F0C040' : 'rgba(248,245,238,0.85)'
+    return `${halo}<circle cx="${cx}" cy="${cy}" r="${r}" fill="${accent}" stroke="#060C1A" stroke-width="2"/><text x="${cx}" y="${labelY}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-weight="${labelWeight}" font-size="${labelSize}" fill="${labelFill}">${pt.score_total}</text>`
+  }).join('')
+
+  // X-axis labels · first/last anchor "Day 0" / "Day N" + every
+  // intermediate snapshot gets a small day label. Day = floor diff
+  // from t0 so the units stay human-readable (no dates printed —
+  // dates would tie the card to a specific calendar window which
+  // makes shares feel stale).
+  const dayLabels = pts.map((pt, i) => {
+    const cx = xFor(pt.created_at, i)
+    const dayDiff = Math.round((new Date(pt.created_at).getTime() - t0) / 86400000)
+    const label = i === 0 ? 'Day 0' : `Day ${dayDiff}`
+    return `<text x="${cx}" y="${chartBottom + 28}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.55)" letter-spacing="1">${escapeXml(label)}</text>`
+  }).join('')
+
+  // Summary strip · "+42 in 22 days · BAND".
+  const startScore  = pts[0].score_total
+  const endScore    = pts[pts.length - 1].score_total
+  const delta       = endScore - startScore
+  const totalDays   = Math.max(0, Math.round((tN - t0) / 86400000))
+  const deltaSign   = delta > 0 ? '+' : delta < 0 ? '' : '±'
+  const deltaColor  = delta > 0 ? '#3FA874' : delta < 0 ? 'rgba(248,120,113,0.95)' : 'rgba(248,245,238,0.6)'
+  const summary     = `${deltaSign}${delta} pts in ${totalDays} day${totalDays === 1 ? '' : 's'}  ·  BAND ${p.band.toUpperCase()}`
+
+  return `${BG}${BRAND_TOP}
+    <!-- Project name + small subtitle -->
+    <text x="72" y="200" font-family="Playfair Display, Georgia, serif" font-size="48" fill="#F8F5EE" letter-spacing="-0.5">${projName}</text>
+    <text x="72" y="228" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.5)" letter-spacing="3">AUDITION TRAJECTORY · ${pts.length} SNAPSHOT${pts.length === 1 ? '' : 'S'}</text>
+
+    <!-- Chart -->
+    ${gridLines}
+    ${encoreLine}
+    ${linePath}
+    ${dots}
+    ${dayLabels}
+
+    ${FOOTER_RULE}
+    <text x="72" y="590" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="22" fill="${deltaColor}" letter-spacing="2">${escapeXml(summary)}</text>
+    ${FOOTER_TAGLINE}`
+}
+
 function svgWrap(inner: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
@@ -380,13 +524,19 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     })
   }
 
-  // Pick the variant. ?kind=encore|milestone|tweet, default audit.
+  // Pick the variant. ?kind=encore|milestone|tweet|trajectory, default audit.
   const kindParam = url.searchParams.get('kind') as CardKind | null
   const kind: CardKind =
-    kindParam === 'encore' || kindParam === 'milestone' || kindParam === 'tweet'
+    kindParam === 'encore' || kindParam === 'milestone' || kindParam === 'tweet' || kindParam === 'trajectory'
       ? kindParam
       : 'audit'
   const milestoneLabel = url.searchParams.get('label') ?? ''
+
+  // trajectory needs the full snapshot timeline — pull it lazily so
+  // the other variants don't pay for it.
+  if (kind === 'trajectory') {
+    proj.trajectory = await loadTrajectory(ctx.env, proj.id)
+  }
 
   let body: string
   switch (kind) {
@@ -398,6 +548,9 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       break
     case 'tweet':
       body = cardTweet(proj)
+      break
+    case 'trajectory':
+      body = cardTrajectory(proj)
       break
     case 'audit':
     default:
