@@ -316,11 +316,26 @@ Deno.serve(async (req) => {
   const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  let body: { github_url?: string; live_url?: string; force?: boolean; source?: string | null }
+  let body: {
+    github_url?: string
+    live_url?:   string
+    force?:      boolean
+    source?:     string | null
+    workspace?:  string | null
+  }
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
   if (!body.github_url) return json({ error: 'github_url required' }, 400)
   const force  = body.force === true
   const source = (body.source ?? '').toString().trim().slice(0, 64) || null
+  // Workspace override · tells analyze-project to skip its monorepo
+  // auto-pick and use this exact path as app_root. Validated below
+  // against the actual repo tree so a typo gets a clean error.
+  const workspace = (body.workspace ?? '')
+    .toString()
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .slice(0, 256) || null
 
   // Resolve authenticated caller (CLI device-flow JWT or browser session
   // JWT). When present + not a project bot, we'll stamp creator_id on
@@ -499,7 +514,11 @@ Deno.serve(async (req) => {
   const analyzePromise = fetch(analyzeUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
-    body: JSON.stringify({ project_id: projectId, trigger_type: existing ? 'resubmit' : 'initial' }),
+    body: JSON.stringify({
+      project_id:    projectId,
+      trigger_type:  existing ? 'resubmit' : 'initial',
+      workspace,    // null = let analyze-project auto-pick · string = explicit override
+    }),
   }).catch(e => console.error('bg analyze failed', e?.message ?? e))
 
   // @ts-ignore — EdgeRuntime is injected by Supabase

@@ -392,7 +392,7 @@ async function fetchNpmWeeklyDownloads(pkg: string | null): Promise<number | nul
   }
 }
 
-async function inspectGitHub(url: string): Promise<GitHubInfo> {
+async function inspectGitHub(url: string, explicitWorkspace: string | null = null): Promise<GitHubInfo> {
   const empty: GitHubInfo = {
     accessible: false, languages: {}, language_pct: {},
     stars: 0, forks: 0, open_issues: 0, commit_count_recent: 0,
@@ -573,9 +573,26 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
 
   // Workspace pick reason · surfaced in scanned_scope so the reader knows
   // why we landed on this sub-app (priority-name match · repo-name match ·
-  // file-count fallback). null when not a monorepo · "explicit" if the
-  // caller passed a workspace override.
+  // file-count fallback · explicit override). null when not a monorepo.
   let workspace_pick_reason: string | null = null
+
+  // ── Phase 0 · explicit caller override ──
+  // CLI `--workspace apps/web` (or inline `github.com/o/r/apps/web`)
+  // ships through audit-preview as the `workspace` param. Validate
+  // against the actual repo tree so a typo/non-existent path falls
+  // through to auto-pick rather than producing an empty audit.
+  if (explicitWorkspace) {
+    const wsClean = explicitWorkspace.replace(/^\/+/, '').replace(/\/+$/, '')
+    // Accept if at least one file lives under that prefix.
+    const exists = rootPaths.some(p => p === wsClean || p.startsWith(`${wsClean}/`))
+    if (exists) {
+      app_root = wsClean
+      workspace_pick_reason = 'explicit override'
+    }
+    // If !exists, we silently fall through to auto-pick. The CLI side
+    // does its own existence check before sending; this is the
+    // server-side safety net that prevents an empty audit.
+  }
 
   if (looksMonorepoEarly && !app_root) {
     // ── Phase 1 · canonical name priority ──
@@ -3443,12 +3460,21 @@ Deno.serve(async (req) => {
   const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  let payload: { project_id?: string; trigger_type?: TriggerType; triggered_by?: string }
+  let payload: {
+    project_id?:   string
+    trigger_type?: TriggerType
+    triggered_by?: string
+    workspace?:    string | null
+  }
   try { payload = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400) }
   const projectId = payload.project_id
   if (!projectId) return json({ error: 'project_id required' }, 400)
   const triggerType: TriggerType = payload.trigger_type ?? 'initial'
   const triggeredBy = payload.triggered_by ?? null
+  // Explicit workspace override · normalized + length-capped at the
+  // audit-preview boundary, so by the time it reaches us it's a clean
+  // path string or null. null = let analyze() use its 3-tier auto-pick.
+  const explicitWorkspace = (payload.workspace ?? null) || null
 
   // Cooldown gate for creator-initiated re-runs · sha-aware bypass.
   if (triggerType === 'resubmit') {
@@ -3551,7 +3577,7 @@ Deno.serve(async (req) => {
   const lhDesktop: LighthouseScores = { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
   const [lh, gh, health, completeness, securityHeaders, legalPages] = await Promise.all([
     project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
-    project.github_url ? inspectGitHub(project.github_url) : Promise.resolve({ accessible: false, languages: {}, language_pct: {}, stars: 0, forks: 0, file_count_estimate: 0, last_commit_at: null }),
+    project.github_url ? inspectGitHub(project.github_url, explicitWorkspace) : Promise.resolve({ accessible: false, languages: {}, language_pct: {}, stars: 0, forks: 0, file_count_estimate: 0, last_commit_at: null }),
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
     project.live_url ? inspectCompleteness(project.live_url) : Promise.resolve({
       fetched: false,
