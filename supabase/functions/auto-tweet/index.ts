@@ -14,7 +14,9 @@
 //
 // Eligibility gates:
 //   1. score_total >= 85         · "wow" rare-event threshold
-//   2. status = 'preview'         · CLI-driven walk-on (anonymous audit)
+//   2. status != 'preview'        · platform-auditioned only · CLI walk-ons
+//                                   are anonymous third-party audits with
+//                                   no consent to be on the brand stage
 //   3. cooldown                   · no posted row in last 14 days
 //   4. social_share_disabled = false
 //
@@ -138,23 +140,44 @@ function truncate(s: string, max: number): string {
   return t.slice(0, max - 1).replace(/[\s,;:.\-—]+$/, '') + '…'
 }
 
-// ── X API v2 post ───────────────────────────────────────────
-async function postTweet(accessToken: string, text: string): Promise<{ ok: true; id: string } | { ok: false; status: number; body: string }> {
-  const r = await fetch('https://api.twitter.com/2/tweets', {
+// ── send-tweet delegation ───────────────────────────────────
+// auto-tweet doesn't talk to X directly — it posts a kind='official'
+// request to the existing send-tweet Edge Function, which handles
+// token lookup from x_official_account, OAuth 2.0 refresh, and the
+// X API v2 call. Single source of truth for outbound X mechanics.
+async function postViaSendTweet(
+  supabaseUrl: string,
+  serviceKey:  string,
+  text: string,
+  dedupeKey:   string,
+): Promise<{ ok: true; id: string; tweet_url: string } | { ok: false; status: number; body: string }> {
+  const r = await fetch(`${supabaseUrl}/functions/v1/send-tweet`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      // apikey + Authorization both required when calling a verify_jwt
+      // function from another Edge Function (gateway needs the apikey
+      // for routing AND a JWT for caller identification).
+      apikey:          serviceKey,
+      'Authorization': `Bearer ${serviceKey}`,
       'Content-Type':  'application/json',
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      kind:         'official',
+      text,
+      dedupe_key:   dedupeKey,
+      trigger_kind: 'auto_tweet',
+    }),
   })
   const body = await r.text()
   if (!r.ok) return { ok: false, status: r.status, body }
   try {
-    const parsed = JSON.parse(body) as { data?: { id?: string } }
-    const id = parsed.data?.id
-    if (!id) return { ok: false, status: r.status, body }
-    return { ok: true, id }
+    const parsed = JSON.parse(body) as { tweet_id?: string; tweet_url?: string; deduped?: boolean }
+    if (!parsed.tweet_id) return { ok: false, status: r.status, body }
+    return {
+      ok: true,
+      id:        parsed.tweet_id,
+      tweet_url: parsed.tweet_url ?? `https://x.com/commitshow/status/${parsed.tweet_id}`,
+    }
   } catch {
     return { ok: false, status: r.status, body }
   }
@@ -167,8 +190,18 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
   const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const X_TOKEN      = Deno.env.get('COMMITSHOW_X_ACCESS_TOKEN') ?? ''
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+
+  // Token presence check · the table is the source of truth (set by
+  // the X OAuth admin link flow in /admin). We don't read the token
+  // here — send-tweet does — but we want to know whether to skip
+  // the call vs land in dry-run mode.
+  const { data: tokRow } = await admin
+    .from('x_official_account')
+    .select('access_token')
+    .eq('singleton', true)
+    .maybeSingle()
+  const hasToken = !!(tokRow && (tokRow as { access_token?: string }).access_token)
 
   let payload: { project_id?: string }
   try { payload = await req.json() } catch { return json({ error: 'invalid json' }, 400) }
@@ -189,10 +222,12 @@ Deno.serve(async (req) => {
     return json({ skipped: true, reason: 'score_below_threshold', score, threshold: SCORE_THRESHOLD })
   }
 
-  // Gate 2 · CLI walk-on (preview status). Auditioning Creators are
-  // NOT auto-tweeted — that's their content to share, not ours.
-  if (project.status !== 'preview') {
-    return json({ skipped: true, reason: 'not_preview', status: project.status })
+  // Gate 2 · only platform-auditioned projects (consent implicit · the
+  // creator submitted via web). CLI walk-ons (status='preview') are
+  // anonymous third-party audits — no consent to be on the brand stage,
+  // so they get a score reveal in the terminal but stay off X.
+  if (project.status === 'preview') {
+    return json({ skipped: true, reason: 'walk_on_no_consent', status: project.status })
   }
 
   // Gate 3 · cooldown · 14 days
@@ -242,8 +277,8 @@ Deno.serve(async (req) => {
   // headroom but a long project name + concern can push over.
   const finalText = tweetText.length <= 280 ? tweetText : tweetText.slice(0, 277) + '...'
 
-  // Post · or skip if no X token.
-  if (!X_TOKEN) {
+  // Post · or skip if no token in x_official_account.
+  if (!hasToken) {
     await admin.from('auto_tweets').insert({
       project_id:    projectId,
       score_at_post: score,
@@ -261,34 +296,37 @@ Deno.serve(async (req) => {
     })
   }
 
-  const post = await postTweet(X_TOKEN, finalText)
+  // Idempotent dedupe key · same project + same score → same key, so a
+  // retry of analyze-project doesn't double-post. send-tweet's
+  // x_share_log unique check converts duplicates to a no-op return.
+  const dedupeKey = `auto:${projectId}:${score}`
+  const post = await postViaSendTweet(SUPABASE_URL, SERVICE_KEY, finalText, dedupeKey)
   if (!post.ok) {
     await admin.from('auto_tweets').insert({
       project_id:    projectId,
       score_at_post: score,
       template_used: template.id,
       status:        'failed',
-      error_message: `X ${post.status}: ${post.body.slice(0, 500)}`,
+      error_message: `send-tweet ${post.status}: ${post.body.slice(0, 500)}`,
       payload:       { tweet_text: finalText, scope, topStrength, topConcern },
     })
-    return json({ error: 'x_post_failed', status: post.status, body: post.body }, 502)
+    return json({ error: 'send_tweet_failed', status: post.status, body: post.body }, 502)
   }
 
-  const tweetUrl = `https://x.com/commitshow/status/${post.id}`
   await admin.from('auto_tweets').insert({
     project_id:    projectId,
     score_at_post: score,
     template_used: template.id,
     status:        'posted',
     tweet_id:      post.id,
-    tweet_url:     tweetUrl,
+    tweet_url:     post.tweet_url,
     payload:       { tweet_text: finalText, scope, topStrength, topConcern },
   })
 
   return json({
     ok:        true,
     tweet_id:  post.id,
-    tweet_url: tweetUrl,
+    tweet_url: post.tweet_url,
     template:  template.id,
   })
 })

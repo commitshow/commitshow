@@ -2010,11 +2010,11 @@ X → commit.show:
 
 **목적**: 어떤 프로젝트가 audit 후 score≥85 를 찍으면 공식 @commitshow 계정에서 자동 트윗 발송. CLI 든 웹이든 외부 누군가 우리 audit 을 돌렸다는 사실 자체가 marketing 자산이고, 무대(공식 X 타임라인)에 자동으로 올라간다.
 
-**4-gate eligibility** (auto-tweet Edge Function 안에서 enforce):
+**4-gate eligibility** (auto-tweet Edge Function 안에서 enforce · 2026-05-07 consent pivot):
 1. `score_total >= 85`
-2. `projects.status = 'preview'` (CLI/익명 walk-on track 만 — 회원 본인이 올린 건 본인이 직접 공유)
+2. `projects.status != 'preview'` — **플랫폼에서 정식 audition 한 회원 프로젝트만**. CLI walk-on (status='preview') 은 익명 제3자 audit 이라 brand 무대 게시 동의가 없음 → 점수 reveal 만 하고 트윗 X. 공식 @commitshow 피드 = 자발적으로 무대에 오른 회원의 진짜 audition. (이전 설계는 거꾸로 walk-on 만 트윗했음 — consent 빈 곳이라 5-07 에 뒤집음)
 3. **14-day cooldown**: `auto_tweets` 테이블에 같은 project 의 `posted_at > now() - 14d` 행이 있으면 skip
-4. `projects.social_share_disabled = false` (per-project opt-out · 누구나 URL 알면 토글 가능)
+4. `projects.social_share_disabled = false` (Creator 본인이 자기 audition 의 자동 트윗을 끄고 싶을 때 토글)
 
 **4 templates · 안정 hash 로테이션**:
 - 4 템플릿 (a/b/c/d) · `djb2(${projectId}:${score}) % 4` 로 결정 → 같은 project 가 같은 점수로 두 번 검사돼도 같은 카피 (재현성)

@@ -10,11 +10,12 @@
 -- index keyed on the floor-week so a re-audit 13 days later doesn't
 -- repeat-blast.
 --
--- The opt-out column lands on projects (per-project), not members
--- (per-creator), because the audit subjects of preview-status walk-ons
--- often have no creator on commit.show — anyone with that project's
--- URL can hit "hide from social" via a future ProjectDetailPage
--- footer button (separate UI work).
+-- The opt-out column lands on projects (per-project) so creators of
+-- platform-auditioned projects can hide their own audition from
+-- @commitshow auto-posts. CLI walk-ons (status='preview') never get
+-- auto-tweeted in the first place — consent is the gate, not opt-out
+-- (decision 2026-05-07: brand stage is for platform-submitted audits,
+-- not anonymous third-party CLI runs).
 
 CREATE TABLE IF NOT EXISTS public.auto_tweets (
   id              uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
