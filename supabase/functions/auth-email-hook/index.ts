@@ -197,13 +197,19 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: `template disabled: ${templateKind}` }, 500)
   }
 
-  // Compose confirmation_url. Supabase format:
-  //   {site_url}/auth/v1/verify?token={token_hash}&type={action}&redirect_to={redirect_to}
+  // Compose confirmation_url. The verify endpoint lives on the
+  // Supabase project URL (NOT site_url · site_url is the redirect
+  // destination after verify completes). Anonymous GET to
+  // /auth/v1/verify also needs the public anon key in the apikey
+  // query param — without it GoTrue replies
+  // {"message":"No API key found in request"}.
+  const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
   const redirect = payload.email_data.redirect_to || payload.email_data.site_url
-  const confirmationUrl = `${payload.email_data.site_url}/auth/v1/verify`
+  const confirmationUrl = `${SUPABASE_URL}/auth/v1/verify`
     + `?token=${encodeURIComponent(payload.email_data.token_hash)}`
     + `&type=${encodeURIComponent(action)}`
     + `&redirect_to=${encodeURIComponent(redirect)}`
+    + `&apikey=${encodeURIComponent(ANON_KEY)}`
 
   // display_name lookup · best-effort. members row may not exist yet
   // for a brand-new signup (race with handle_new_user trigger), so
@@ -242,14 +248,23 @@ async function handle(req: Request): Promise<Response> {
   // Log row · same notification_log table the rest of the email
   // pipeline uses, so /admin/emails surfaces auth mail next to
   // welcome / encore / etc.
+  //
+  // recipient_id is NULL on purpose · notification_log.recipient_id has
+  // an FK to members(id) and signup confirmation fires *during* the
+  // auth.users INSERT transaction, BEFORE handle_new_user has had a
+  // chance to create the matching members row. Inserting payload.user.id
+  // there raised an FK violation and Supabase Auth saw 500 → "Unexpected
+  // status code returned from hook." For auth emails the user is the
+  // unique address anyway; recipient_id is only useful for transactional
+  // mail to confirmed members.
   const { data: logRow, error: insertErr } = await admin
     .from('notification_log')
     .insert({
       channel:        'email',
       kind:           templateKind,
-      recipient_id:   payload.user.id,
+      recipient_id:   null,
       recipient_addr: payload.user.email,
-      payload:        { email_action_type: action, redirect_to: redirect },
+      payload:        { email_action_type: action, redirect_to: redirect, user_id: payload.user.id },
       dedupe_key:     dedupeKey,
       status:         'queued',
       provider:       RESEND_KEY ? 'resend' : null,
