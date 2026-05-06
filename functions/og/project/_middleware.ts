@@ -208,6 +208,33 @@ function cardMilestone(p: ProjectCard, milestoneLabel: string): string {
     ${FOOTER_TAGLINE}`
 }
 
+// ── ANSI Shadow figlet · same big-digit font the CLI uses for the
+// audit banner. Ported here so the tweet card's score reads as the
+// same artifact the user sees in their terminal — direct visual
+// continuity between CLI and the X embed.
+const BIG_DIGITS: Record<string, string[]> = {
+  '0': ['  ██████╗ ', ' ██╔═████╗', ' ██║██╔██║', ' ████╔╝██║', ' ╚██████╔╝', '  ╚═════╝ '],
+  '1': ['  ██╗', ' ███║', ' ╚██║', '  ██║', '  ██║', '  ╚═╝'],
+  '2': [' ██████╗ ', ' ╚════██╗', '  █████╔╝', ' ██╔═══╝ ', ' ███████╗', ' ╚══════╝'],
+  '3': [' ██████╗ ', ' ╚════██╗', '  █████╔╝', '  ╚═══██╗', ' ██████╔╝', ' ╚═════╝ '],
+  '4': [' ██╗  ██╗', ' ██║  ██║', ' ███████║', ' ╚════██║', '      ██║', '      ╚═╝'],
+  '5': [' ███████╗', ' ██╔════╝', ' ███████╗', ' ╚════██║', ' ███████║', ' ╚══════╝'],
+  '6': ['  ██████╗ ', ' ██╔════╝ ', ' ███████╗ ', ' ██╔═══██╗', ' ╚██████╔╝', '  ╚═════╝ '],
+  '7': [' ███████╗', ' ╚════██║', '     ██╔╝', '    ██╔╝ ', '    ██║  ', '    ╚═╝  '],
+  '8': ['  █████╗ ', ' ██╔══██╗', ' ╚█████╔╝', ' ██╔══██╗', ' ╚█████╔╝', '  ╚════╝ '],
+  '9': ['  █████╗ ', ' ██╔══██╗', ' ╚██████║', '  ╚═══██║', '  █████╔╝', '  ╚════╝ '],
+  ' ': ['  ',         '  ',         '  ',         '  ',         '  ',         '  '],
+}
+
+function bigText(s: string): string[] {
+  const rows = ['', '', '', '', '', '']
+  for (const ch of s.split('')) {
+    const glyph = BIG_DIGITS[ch] ?? BIG_DIGITS[' ']
+    for (let i = 0; i < 6; i++) rows[i] += glyph[i]
+  }
+  return rows
+}
+
 // ── Tweet card · terminal aesthetic. Designed for the @commitshow
 // auto-tweet flow: one image worth a thousand text bullets. Black-on-
 // gold COMMIT.SHOW wordmark up top, big score box, 3-axis bar,
@@ -231,9 +258,28 @@ function bar(value: number, max: number, width = 22): string {
 function cardTweet(p: ProjectCard): string {
   const isWalkOn = p.status === 'preview'
   const score    = p.score
-  const scoreText = score == null ? '—' : String(score)
+  const scoreText = score == null ? '00' : String(score)
   const accent   = (score ?? 0) >= 85 ? '#F0C040' : '#60A5FA'
   const projName = escapeXml(fitName(p.project_name, 28))
+
+  // ASCII art score · same ANSI Shadow figlet the CLI banner uses.
+  // 26px font fits 6 rows + box padding into the layout without
+  // colliding with the 3-axis bars below at y=460+.
+  const ASCII_FONT_SIZE = 26
+  const ASCII_LINE_H    = 26                // tight line-height · glyphs include their own gaps
+  const asciiRows       = bigText(scoreText)
+  // DM Mono ≈ 0.6em per char at size 26 → ~15.6px / col.
+  const longestRow = asciiRows.reduce((max, r) => Math.max(max, r.length), 0)
+  const asciiWidthPx = Math.round(longestRow * ASCII_FONT_SIZE * 0.6)
+  const boxWidth   = Math.max(380, asciiWidthPx + 80)
+  const boxHeight  = ASCII_LINE_H * 6 + 36   // 6 rows × 26 + 36 padding = 192
+  const boxX       = Math.round((1200 - boxWidth) / 2)
+  const boxY       = 200
+  const asciiX     = Math.round((1200 - asciiWidthPx) / 2)
+  const asciiY     = boxY + 26 + 6           // first row baseline + small top inset
+  const asciiBlock = asciiRows
+    .map((row, i) => `<text x="${asciiX}" y="${asciiY + i * ASCII_LINE_H}" font-family="DM Mono, Menlo, Consolas, monospace" font-size="${ASCII_FONT_SIZE}" fill="${accent}" xml:space="preserve">${row}</text>`)
+    .join('\n      ')
 
   // 3-axis bars · walk-on shows Audit only (Scout/Comm structurally
   // absent · don't render a fake-zero row, render an "n/a" line).
@@ -269,26 +315,25 @@ function cardTweet(p: ProjectCard): string {
     <!-- Project name -->
     <text x="600" y="190" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-size="36" fill="#F8F5EE" letter-spacing="-0.5">${projName}</text>
 
-    <!-- Score box · ASCII border like the CLI score banner -->
-    <g transform="translate(420, 220)">
-      <rect width="360" height="120" fill="rgba(0,0,0,0.35)" stroke="${accent}" stroke-width="3" rx="2"/>
-      <text x="180" y="92" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-size="100" font-weight="700" fill="${accent}" letter-spacing="-2">${escapeXml(scoreText)}</text>
-      <text x="320" y="100" font-family="Playfair Display, Georgia, serif" font-size="32" fill="rgba(248,245,238,0.4)">/100</text>
-    </g>
-    <text x="600" y="372" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(248,245,238,0.55)" letter-spacing="3">BAND · ${escapeXml(p.band.toUpperCase())}</text>
+    <!-- Score box · ASCII art digits in ANSI Shadow figlet (same as
+         CLI banner). Box auto-sizes to glyph block. /100 + band line
+         lives BELOW the box · no overflow. -->
+    <rect x="${boxX}" y="${boxY}" width="${boxWidth}" height="${boxHeight}" fill="rgba(0,0,0,0.35)" stroke="${accent}" stroke-width="3" rx="2"/>
+    ${asciiBlock}
+    <text x="600" y="${boxY + boxHeight + 36}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="20" fill="rgba(248,245,238,0.7)" letter-spacing="3">${escapeXml(scoreText)} / 100  ·  BAND · ${escapeXml(p.band.toUpperCase())}</text>
 
-    <!-- 3-axis bars · monospace, single column centered -->
+    <!-- 3-axis bars · monospace · sit below the box+caption · y starts at 460 -->
     <g font-family="DM Mono, Menlo, Consolas, monospace" font-size="20">
-      <text x="220" y="424" fill="#F0C040">${escapeXml(auditBar)}</text>
-      <text x="220" y="454" fill="rgba(0,212,170,0.85)">${escapeXml(scoutLine)}</text>
-      <text x="220" y="484" fill="rgba(0,212,170,0.85)">${escapeXml(commLine)}</text>
+      <text x="220" y="464" fill="#F0C040">${escapeXml(auditBar)}</text>
+      <text x="220" y="492" fill="rgba(0,212,170,0.85)">${escapeXml(scoutLine)}</text>
+      <text x="220" y="520" fill="rgba(0,212,170,0.85)">${escapeXml(commLine)}</text>
     </g>
 
-    ${strengthLine ? `<text x="72" y="528" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(0,212,170,0.95)">${escapeXml(strengthLine)}</text>` : ''}
-    ${concernLine  ? `<text x="72" y="552" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(248,120,113,0.95)">${escapeXml(concernLine)}</text>` : ''}
+    ${strengthLine ? `<text x="72" y="558" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(0,212,170,0.95)">${escapeXml(strengthLine)}</text>` : ''}
+    ${concernLine  ? `<text x="72" y="582" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(248,120,113,0.95)">${escapeXml(concernLine)}</text>` : ''}
 
-    ${scopeText ? `<text x="72" y="592" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.4)" letter-spacing="0.5">SCANNED · ${scopeText}</text>` : ''}
-    <text x="1128" y="592" text-anchor="end" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="14" fill="rgba(248,245,238,0.45)" letter-spacing="2">commit.show / projects / ${escapeXml(p.id.slice(0, 8))}</text>`
+    ${scopeText ? `<text x="72" y="616" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.4)" letter-spacing="0.5">SCANNED · ${scopeText}</text>` : ''}
+    <text x="1128" y="616" text-anchor="end" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="14" fill="rgba(248,245,238,0.45)" letter-spacing="2">commit.show / projects / ${escapeXml(p.id.slice(0, 8))}</text>`
 }
 
 function svgWrap(inner: string): string {
