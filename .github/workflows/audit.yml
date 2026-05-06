@@ -1,0 +1,29 @@
+# Self-audit · runs the commit.show audit on this repo via the
+# commitshow/audit-action GitHub Action and posts the result as a
+# sticky comment on every pull request. Doubles as the live ground
+# truth that the action keeps working against a real Supabase project.
+#
+# We intentionally don't gate merges on the score (no fail-below)
+# until the rubric stabilizes — the comment is informational for now.
+
+name: audit
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  audit:
+    name: commit.show audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: commitshow/audit-action@v1
