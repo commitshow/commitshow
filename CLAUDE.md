@@ -1847,16 +1847,16 @@ Creator Community 4 메뉴 (P4 · V1 Day 1 · 완료)
 
 Library v2 · Intent-first + Trending UX (P9)
   ✅ P9a · CLAUDE.md §15 spec 재정렬 (Intent primary · Format 격하 · 시간 축 · list layout)
-  ☐ P9b · Migration: md_library.intent 컬럼 + md_library_feed 시간 윈도우 집계
-  ☐ P9b · LibraryPage row list + Intent chip strip + 시간 토글
-  ☐ P9b · LibraryPackRow 컴포넌트 · URL query param 와이어
-  ☐ P9b · DiscoveryPanel Intent 입력 + LibraryDetailPage Intent 배지
+  ✅ P9b · Migration: md_library.intent 컬럼 + 4 카테고리 enum (build_feature · connect_service · tune_ai · start_project)
+  ✅ P9b · LibraryPage row list + Intent chip strip + 시간 윈도우 토글 (Today/Week/Month/All)
+  ✅ P9b · LibraryPackRow.tsx · URL query param 와이어 (?intent=...&t=week&format=...&tool=...&match=stack)
+  ✅ P9b · DiscoveryPanel Intent 입력 + LibraryDetailPage Intent 배지 + INTENT_TONE 색상
 
 3분 소화 UX · 기타 (P6)
+  ✅ 감정 태그 코멘트 입력 프리셋 (🙌🎯🔥🤔💡 · §2) — EmotionTagRow.tsx + ProjectComments.tsx + ProjectActionFooter.tsx
   ☐ 이번 주 하이라이트 카드 (Top 3 변화 · Audit 요약 자동 생성)
   ☐ 푸시 위젯 Vote (알림에서 앱 안 열고도 투표)
   ☐ 맞춤 다이제스트 (Creator/Scout 별 주간 이메일/푸시 요약)
-  ☐ 감정 태그 코멘트 입력 프리셋 (🙌🎯🔥🤔💡 · §2)
   ☐ 리그 리더보드 비주얼 (X=Audit 점수 · Y=Scout 점수 · 2D 지도)
   ☐ 궤적 공유 카드 (3주 애니메이션 GIF 자동 생성 · X/LinkedIn 바이럴)
 
@@ -1868,23 +1868,50 @@ Vote 트리거 마무리 (P2 후속)
 
 Brand verb 전역 교체 (P5)
   ✅ ProjectDetailPage · ApplaudButton · ProjectActionFooter (emoji CTA + Audition 톤)
-  ☐ Hero CTA: "Score your project →" → "Audition your product →"
-  ☐ Nav "Apply" 버튼 · Submit 플로우 카피 전반 Audition 통일
-  ☐ Claude API 프롬프트에 "Audit report" / 영어 prose "AI" 제거 명시
-  ☐ "AI 분석 리포트" 잔존 카피 전수 검색·치환
+  ✅ Hero CTA: "Audition your product →" — Hero.tsx · BackstagePage · LadderPage · ProfilePage · SubmitPage 전부 통일
+  ✅ Nav "Apply" 버튼 · Submit 플로우 카피 Audition 통일
+  ☐ Claude API 프롬프트에 "Audit report" / 영어 prose "AI" 제거 명시 (잔존 점검 필요)
+  ☐ "AI 분석 리포트" 잔존 카피 전수 검색·치환 (잔존 점검 필요)
 
 결제·OAuth (P7 · V1 런칭 필수)
-  ☐ Supabase Auth Google + X OAuth — 도메인 확정 후
-  ☐ Stripe 결제 flow (등록비 + Library 유료 tier · 금액은 INTERNAL.md §1)
+  ✅ Supabase Auth · Google + X(twitter) + GitHub + LinkedIn(oidc) 4종 OAuth — auth.tsx · AuthModal.tsx · sync_x/github/linkedin_identity 트리거 모두 wired
+  ✅ Stripe 결제 flow — Edge Functions create-checkout-session + stripe-webhook · audition fee + paid_audits_credit + founder pricing 모두 라이브
+  ☐ ballot_wallets 결제 연동 (월 Vote 추가 구매 — V1.5 후보)
 
-리그 종료 엔진 (P8 · 크론 최후 정책 · V1 끝)
-  ☐ Season-end engine — §6.2 %-based 상위 20% 자동 등급 전환 (Supabase Cron)
-  ☐ Scout 티어 OR 승급 (votes.is_correct 집계 · 적중률 경로)
-  ☐ Hall of Fame 자동 등재 · SSR
-  ☐ Graduation Day 영상 자동 게재 (@commitshow)
-  ☐ Creator 환급 페이아웃 (rail · 세무 양식은 INTERNAL.md §1)
-  ☐ Build Log 자동 씨앗 (recommit + Audit 변화 + Brief Phase 2 → 초안)
+리그 종료 엔진 (P8 · V1 끝)
+  ✅ Season-end engine — supabase/migrations/20260504_season_end_engine.sql · pg_cron 활성
+  ✅ ladder_streaks · ladder_milestones · ladder_rankings_mv 5분 refresh (20260504+20260501 마이그레이션)
+  ☐ Scout 티어 OR 승급 (votes.is_correct 집계 · 적중률 경로 · 검증 필요)
+  ☐ Hall of Fame 자동 등재 · SSR (시즌 종료 시점 트리거 검증 필요)
+  ☐ Graduation Day 영상 자동 게재 (@commitshow) — 미구현
+  ☐ Creator 환급 페이아웃 (rail · Wise/Trolley 연동 · 세무 양식은 INTERNAL.md §1) — 미구현
+  ☐ Build Log 자동 씨앗 (recommit + Audit 변화 + Brief Phase 2 → 초안) — 미구현
 ```
+
+### 16.2.1 진짜 V1 미진행 항목 (2026-05-06 audit 후 정리)
+
+위 ☐ 들 중에 V1 launch 까지 critical 한 것:
+
+**Code 작업 (남은 P6 sub-items)**
+1. 이번 주 하이라이트 카드 (Top 3 movers · 시즌 시작 후 매 월요일 갱신)
+2. 2D 리더보드 (X=Audit · Y=Scout scatter)
+3. 궤적 공유 카드 (3주 애니메이션 GIF) — 바이럴 hook
+4. 푸시 위젯 Vote — V1 launch 무리 · V1.5 보류 가능
+5. 맞춤 다이제스트 (주간 이메일) — V1 launch 무리 · V1.5 보류 가능
+
+**잔존 코피 정리 (P5 마무리)**
+6. Claude API 프롬프트의 "AI" 잔존 / "AI 분석 리포트" 잔존 — grep + replace 한번
+7. 사용자 노출 영역 전체 audit (legacy 카피 점검)
+
+**P8 운영 자동화**
+8. Hall of Fame SSR · Scout 티어 OR 승급 동작 검증 (이미 migration 들어가있어서 검증만)
+9. Creator 환급 페이아웃 (Wise/Trolley) — V1.5 보류 가능
+10. Build Log 자동 씨앗 — V1.5 보류 가능
+
+**Acquisition 트랙 (별도 · §17 신설 후보)**
+11. Outreach loop 4채널 잔여 (cursor forum · claude-code Discord · aider Discord · MCP Discord) — 사용자 매뉴얼
+12. SeizyC backup remote PAT 의 workflow scope 갱신 — push 에러 영구 해소
+13. audit-action v1.0.1 Marketplace publish click — 아이콘 색 적용
 
 ### 16.3 V1.5 — Library Scaffold · Community 성숙 · Bundle 큐레이션 · CLI
 
@@ -2079,45 +2106,53 @@ git add -A && git commit -m "..." && git push origin main
 ✅ hotfix · auditionStreak ap_events → activity_point_ledger (commit c6988bc)
 ```
 
-### 20.2 진행 대기 (우선순위 순)
+### 20.2 진행 대기 (2026-05-06 audit 후 갱신 · §16.2.1 와 sync)
+
+§16.2 의 trackers 가 stale 한 줄 알고 있던 P5b · P7 · P8 · P9b 가 실제론 거의 다 끝나있었음 (Hero CTA 통일 · OAuth 4종 · Stripe · Season-end pg_cron · Library v2 row list 전부 라이브). 진짜 미진행:
 
 ```
-P5b · Brand verb 전역 마무리
-  Hero CTA "Score your project" → "Audition your product"
-  Nav Apply 버튼 · Submit 플로우 · 기타 카피 전반
-  Claude API 프롬프트에 "Audit" / "AI" 제거 명시
+P5 잔존 (사용자 노출 카피)
+  ☐ Claude API 프롬프트의 "AI" 잔존 제거 (analyze-project Edge Function)
+  ☐ "AI 분석 리포트" / "AI score" / "AI feedback" 등 잔존 카피 grep+replace
 
-P9b · Library v2 UI 실구현
-  md_library.intent 컬럼 migration + 기존 행 backfill
-  md_library_feed 뷰 · 시간 윈도우 집계 (downloads_week · applications_week)
-  LibraryPage grid → row list + Intent chip strip + 시간 토글
-  LibraryPackRow 컴포넌트 + URL query param 와이어
-  DiscoveryPanel Intent 입력 · LibraryDetailPage Intent 배지
+P6 잔존 (3분 소화 UX · 감정 태그는 ✅ 완료)
+  ☐ 이번 주 하이라이트 카드 (Top 3 movers · 매주 월요일 갱신)
+  ☐ 2D 리더보드 (X=Audit · Y=Scout scatter)
+  ☐ 궤적 공유 카드 (3주 애니메이션 GIF · X/LinkedIn 바이럴)
+  ☐ 푸시 위젯 Vote — V1 무리 · V1.5 후보
+  ☐ 맞춤 다이제스트 — V1 무리 · V1.5 후보
 
-P6 · 3분 소화 UX
-  이번 주 하이라이트 카드 · X/Y 2D 리더보드 · 궤적 공유 카드
-  감정 태그 코멘트 프리셋 · 맞춤 다이제스트
+P8 잔존 (Season-end 운영 자동화)
+  ☐ Hall of Fame SSR · Scout 티어 OR 승급 동작 검증 (migration 박혀있음 · 검증만)
+  ☐ Creator 환급 페이아웃 (Wise / Trolley) — V1.5 후보
+  ☐ Graduation Day 영상 자동 게재 (@commitshow) — V1.5 후보
+  ☐ Build Log 자동 씨앗 (recommit + Audit 변화 + Brief Phase 2 → 초안) — V1.5 후보
 
-P7 · 결제·OAuth (V1 런칭 필수)
-  Supabase Auth Google + X OAuth
-  Stripe 결제 flow (audition fee + Library 유료 · 금액은 INTERNAL.md §1)
+P2 후속
+  ☐ ballot_wallets 기반 월 Vote 권 지갑 wiring (현재 monthly_votes_used 카운트만)
 
-P8 · Season-end 엔진 (크론 최후 · V1 끝)
-  §6.2 %-based 상대평가 자동 실행 · Scout 티어 OR 승급
-  Hall of Fame 자동 등재 · Graduation Day 영상 자동 게재
-  Creator 환급 페이아웃 (Wise / Trolley)
-  Build Log 자동 씨앗 (recommit + Audit 변화 + Brief Phase 2 → 초안)
+Acquisition 트랙 (어제 시작 · §17 신설 후보)
+  ✅ commitshow/audit-action GitHub Action + Marketplace 등록 (v1.0.1)
+  ✅ Web AuditCiBlock · CLI post-audit prompt
+  ✅ commitshow/.github org page · Topics · Discussions · welcome post
+  ✅ commitshow/template-saas-starter · is_template
+  ✅ continuedev/continue Discussion 게시 (#12309)
+  ☐ audit-action v1.0.1 Marketplace UI publish click — 사용자 1분
+  ☐ Outreach loop 잔여 4 채널 (cursor forum · claude-code Discord · aider Discord · MCP Discord) — 사용자 매뉴얼 + reception 톤 조정
+  ☐ SeizyC backup remote PAT 의 workflow scope 갱신
 
 Follow-up · 작은 정리
-  activity_point_ledger kind CHECK 에 audition_climb / audition_streak 추가
-  ProfilePage 에 Community 피드 탭
-  Community post Comment 시스템 (V1.5)
+  ☐ activity_point_ledger kind CHECK 에 audition_climb / audition_streak 추가
+  ☐ ProfilePage 에 Community 피드 탭
+  ☐ Community post Comment 시스템 (V1.5)
+  ☐ demo PR commitshow/commitshow#1 close (audit comment 검증 후)
 ```
 
 ---
 
 *이 파일은 프로젝트가 진행될수록 업데이트한다.*
-*마지막 업데이트: 2026-04-24 · **commit.show PRD v2** (통합 기획서 2026-04-19 + Creator Community 2026-04-23 기반 재정비 + §15 Intent-first/Trending UX)*
+*마지막 업데이트: 2026-05-06 · §16 / §20.2 backlog audit · 백로그가 실제 코드 상태와 어긋나있던 것 정리 (P5b · P7 OAuth+Stripe · P8 Season-end · P9b Library v2 모두 ✅ 라이브 확인 후 표시 갱신). + §17 GitHub acquisition 트랙 (audit-action / org page / template / outreach loop) 시작 *
+*이전 마지막 업데이트: 2026-04-24 · **commit.show PRD v2** (통합 기획서 2026-04-19 + Creator Community 2026-04-23 기반 재정비 + §15 Intent-first/Trending UX)*
 
 *v2 핵심 delta (§1-A)*:
 *① Vote ≠ Applaud 분리 확정 · ② 졸업 %-based 상대평가 (Valedictorian 1 · Honors 5% · Graduate 14.5% · Rookie Circle 80%) · ③ Applaud polymorphic target (product/comment/build_log/stack/brief/recommit · UNIQUE target 기준) · ④ Creator Community 4 메뉴 V1 Day 1 필수 (Build Logs · Stacks · Asks · Office Hours) · ⑤ Rookie Circle 톤 엄격 유지 · ⑥ 브랜드 verb 페어 = Creator Audition + Engine Audit (라틴어 audīre 공통 어원) · "AI" 사용자 노출 금지 · ⑦ Audit 5+3 비대칭 유지*
