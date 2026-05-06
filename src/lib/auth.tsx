@@ -112,14 +112,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithEmail: (email, password) =>
       supabase.auth.signInWithPassword({ email, password }).then(r => ({ error: r.error })),
     signUpWithEmail: (email, password) =>
-      supabase.auth.signUp({ email, password }).then(r => ({
-        error: r.error,
-        // No session = email confirmation required. Supabase returns
-        // { user, session: null } in that case · the user row is
-        // created server-side but stays inactive until they click
-        // the confirmation link.
-        confirmationPending: !r.error && !r.data.session,
-      })),
+      supabase.auth.signUp({ email, password }).then(r => {
+        // Supabase Auth's email enumeration protection: when an email
+        // already exists, signUp returns success with NO error AND a
+        // user object whose `identities` array is empty. We surface
+        // that as a synthetic "email_exists" error so the modal can
+        // show "Account already exists" instead of a fake check-your-
+        // inbox screen the user will never see anything land in.
+        if (!r.error && r.data?.user && (r.data.user.identities ?? []).length === 0) {
+          return { error: { name: 'AuthApiError', message: 'User already registered', code: 'email_exists' } as any }
+        }
+        return {
+          error: r.error,
+          // No session = email confirmation required. Supabase returns
+          // { user, session: null } in that case · user row created
+          // server-side but inactive until the confirmation click.
+          confirmationPending: !r.error && !r.data.session,
+        }
+      }),
     signInWithGoogle: () =>
       supabase.auth.signInWithOAuth({
         provider: 'google',

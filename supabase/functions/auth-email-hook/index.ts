@@ -79,6 +79,39 @@ function fill(template: string, vars: Record<string, string>): string {
 }
 
 Deno.serve(async (req) => {
+  try {
+    return await handle(req)
+  } catch (e) {
+    // Global unhandled-exception net. Edge Function logs aren't
+    // SQL-queryable, so we ALSO drop a diagnostic row into the
+    // notification_log table — that one we can SELECT via psql.
+    const err = e as Error
+    const diag = {
+      name:    err?.name ?? 'Error',
+      message: err?.message ?? String(e),
+      stack:   (err?.stack ?? '').split('\n').slice(0, 8).join('\n'),
+    }
+    console.error('[auth-email-hook] unhandled exception', diag)
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+      const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+      await admin.from('notification_log').insert({
+        channel:        'email',
+        kind:           'auth_hook_diagnostic',
+        recipient_addr: 'diagnostic@commit.show',
+        payload:        diag,
+        dedupe_key:     `auth_hook_diag:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+        status:         'failed',
+        provider:       null,
+        error_message:  diag.message,
+      })
+    } catch { /* ignore — we already returned 500 below */ }
+    return json({ error: 'unhandled exception', ...diag }, 500)
+  }
+})
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST')    return json({ error: 'POST required' }, 405)
 
@@ -280,4 +313,4 @@ Deno.serve(async (req) => {
   }
   console.log('[auth-email-hook] sent', { provider_id: providerId, log_id: logRow.id })
   return json({ ok: true, log_id: logRow.id, provider_id: providerId }, 200)
-})
+}
