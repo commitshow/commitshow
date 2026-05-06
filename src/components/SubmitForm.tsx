@@ -865,7 +865,7 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
           cursor:       busy ? 'wait' : 'pointer',
         }}
       >
-        {busy ? 'Opening Stripe Checkout…' : `Pay $${priceDollars} · proceed to audit →`}
+        {busy ? 'Opening Stripe Checkout…' : `Pay $${priceDollars} · proceed to Audition →`}
       </button>
 
       {error && (
