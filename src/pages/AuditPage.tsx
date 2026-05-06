@@ -6,6 +6,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { InstallInEditor } from '../components/InstallInEditor'
+import { AuditCiBlock } from '../components/AuditCiBlock'
 
 export function AuditPage() {
   const { user, loading } = useAuth()
@@ -411,6 +412,26 @@ function AuditPageContent() {
             production app with images and analytics. Most polished sites land
             70-89 (6 pts). Hitting 90 mobile perf requires aggressive bundling
             + edge caching + image optimization.
+          </P>
+        </Section>
+
+        <Section title="17 · Run the audit on every pull request" anchor="ci">
+          <P>
+            The same audit can run as a GitHub Action so the score and
+            top concerns get posted as a sticky comment on every pull
+            request — regressions surface during review instead of after
+            merge. The action is published on GitHub Marketplace as
+            "commit.show audit".
+          </P>
+          <AuditCiBlock githubUrl={null} />
+          <P>
+            <B>Inputs and quality gates</B> (e.g. fail the check when the
+            score drops below 70) are documented in the action's{' '}
+            <a href="https://github.com/commitshow/audit-action#inputs"
+               target="_blank" rel="noopener noreferrer"
+               className="underline" style={{ color: 'var(--gold-500)' }}>
+              README
+            </a>.
           </P>
         </Section>
 

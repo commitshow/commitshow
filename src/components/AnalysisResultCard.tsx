@@ -6,6 +6,7 @@ import type { ScoutTier } from '../lib/supabase'
 import { RoleIcon } from './iconMaps'
 import { IconLock } from './icons'
 import { DiscoveryPanel } from './DiscoveryPanel'
+import { AuditCiBlock } from './AuditCiBlock'
 import { supabase } from '../lib/supabase'
 
 // Color map — Ivy League palette, never generic rainbow.
@@ -678,6 +679,12 @@ export function AnalysisResultCard({
           {rerunError}
         </div>
       )}
+
+      {/* CONTINUOUS AUDIT · CI integration block · GitHub-only.
+          Surfaces right after the concerns + fix actions so beginner
+          users see "wire this into CI" as part of the next-steps
+          flow rather than a separate concept. */}
+      {githubUrl && <AuditCiBlock githubUrl={githubUrl} />}
 
       {/* v1.4 §15.6 — Library-worthy files suggested from this analysis · owner only */}
       {isOwner && projectId && <DiscoveryPanel projectId={projectId} githubUrl={githubUrl} />}
