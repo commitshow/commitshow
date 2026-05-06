@@ -1910,8 +1910,7 @@ Brand verb 전역 교체 (P5)
 
 **Acquisition 트랙 (별도 · §17 신설 후보)**
 11. Outreach loop 4채널 잔여 (cursor forum · claude-code Discord · aider Discord · MCP Discord) — 사용자 매뉴얼
-12. SeizyC backup remote PAT 의 workflow scope 갱신 — push 에러 영구 해소
-13. audit-action v1.0.1 Marketplace publish click — 아이콘 색 적용
+12. audit-action v1.0.1 Marketplace publish click — 아이콘 색 적용
 
 ### 16.3 V1.5 — Library Scaffold · Community 성숙 · Bundle 큐레이션 · CLI
 
@@ -2234,7 +2233,7 @@ Acquisition 트랙 (어제 시작 · §17 신설 후보)
   ✅ continuedev/continue Discussion 게시 (#12309)
   ☐ audit-action v1.0.1 Marketplace UI publish click — 사용자 1분
   ☐ Outreach loop 잔여 4 채널 (cursor forum · claude-code Discord · aider Discord · MCP Discord) — 사용자 매뉴얼 + reception 톤 조정
-  ☐ SeizyC backup remote PAT 의 workflow scope 갱신
+  ✅ SeizyC backup remote workflow scope (gh OAuth refresh로 해소 · 2026-05-07)
 
 Follow-up · 작은 정리
   ☐ activity_point_ledger kind CHECK 에 audition_climb / audition_streak 추가
