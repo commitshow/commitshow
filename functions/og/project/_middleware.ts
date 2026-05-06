@@ -259,7 +259,10 @@ function cardTweet(p: ProjectCard): string {
   const isWalkOn = p.status === 'preview'
   const score    = p.score
   const scoreText = score == null ? '00' : String(score)
-  const accent   = (score ?? 0) >= 85 ? '#F0C040' : '#60A5FA'
+  // Score color · always commit.show gold. The 85+/blue rule confused
+  // the brand identity (we read as a 'cool blue' product when it should
+  // read as 'gold trophy') · keep the visual signature consistent.
+  const accent   = '#F0C040'
   const projName = escapeXml(fitName(p.project_name, 28))
 
   // ASCII art score · same ANSI Shadow figlet the CLI banner uses.
@@ -274,7 +277,10 @@ function cardTweet(p: ProjectCard): string {
   const boxWidth   = Math.max(380, asciiWidthPx + 80)
   const boxHeight  = ASCII_LINE_H * 6 + 36   // 6 rows × 26 + 36 padding = 192
   const boxX       = Math.round((1200 - boxWidth) / 2)
-  const boxY       = 200
+  // Push the box down so there's breathing room between the project
+  // name (y=190) and the score frame · prevents the visual collision
+  // the user flagged.
+  const boxY       = 232
   const asciiX     = Math.round((1200 - asciiWidthPx) / 2)
   const asciiY     = boxY + 26 + 6           // first row baseline + small top inset
   const asciiBlock = asciiRows
@@ -320,20 +326,20 @@ function cardTweet(p: ProjectCard): string {
          lives BELOW the box · no overflow. -->
     <rect x="${boxX}" y="${boxY}" width="${boxWidth}" height="${boxHeight}" fill="rgba(0,0,0,0.35)" stroke="${accent}" stroke-width="3" rx="2"/>
     ${asciiBlock}
-    <text x="600" y="${boxY + boxHeight + 36}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="20" fill="rgba(248,245,238,0.7)" letter-spacing="3">${escapeXml(scoreText)} / 100  ·  BAND · ${escapeXml(p.band.toUpperCase())}</text>
+    <text x="600" y="${boxY + boxHeight + 28}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="18" fill="rgba(248,245,238,0.7)" letter-spacing="3">${escapeXml(scoreText)} / 100  ·  BAND · ${escapeXml(p.band.toUpperCase())}</text>
 
-    <!-- 3-axis bars · monospace · sit below the box+caption · y starts at 460 -->
-    <g font-family="DM Mono, Menlo, Consolas, monospace" font-size="20">
-      <text x="220" y="464" fill="#F0C040">${escapeXml(auditBar)}</text>
-      <text x="220" y="492" fill="rgba(0,212,170,0.85)">${escapeXml(scoutLine)}</text>
-      <text x="220" y="520" fill="rgba(0,212,170,0.85)">${escapeXml(commLine)}</text>
+    <!-- 3-axis bars · monospace · centered as a single column block -->
+    <g font-family="DM Mono, Menlo, Consolas, monospace" font-size="18" text-anchor="middle">
+      <text x="600" y="490" fill="#F0C040">${escapeXml(auditBar)}</text>
+      <text x="600" y="514" fill="rgba(0,212,170,0.85)">${escapeXml(scoutLine)}</text>
+      <text x="600" y="538" fill="rgba(0,212,170,0.85)">${escapeXml(commLine)}</text>
     </g>
 
-    ${strengthLine ? `<text x="72" y="558" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(0,212,170,0.95)">${escapeXml(strengthLine)}</text>` : ''}
-    ${concernLine  ? `<text x="72" y="582" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(248,120,113,0.95)">${escapeXml(concernLine)}</text>` : ''}
+    ${strengthLine ? `<text x="600" y="568" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="15" fill="rgba(0,212,170,0.95)">${escapeXml(strengthLine)}</text>` : ''}
+    ${concernLine  ? `<text x="600" y="588" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="15" fill="rgba(248,120,113,0.95)">${escapeXml(concernLine)}</text>` : ''}
 
-    ${scopeText ? `<text x="72" y="616" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.4)" letter-spacing="0.5">SCANNED · ${scopeText}</text>` : ''}
-    <text x="1128" y="616" text-anchor="end" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="14" fill="rgba(248,245,238,0.45)" letter-spacing="2">commit.show / projects / ${escapeXml(p.id.slice(0, 8))}</text>`
+    ${scopeText ? `<text x="72" y="618" font-family="DM Mono, Menlo, Consolas, monospace" font-size="12" fill="rgba(248,245,238,0.4)" letter-spacing="0.5">SCANNED · ${scopeText}</text>` : ''}
+    <text x="1128" y="618" text-anchor="end" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(248,245,238,0.45)" letter-spacing="2">commit.show / projects / ${escapeXml(p.id.slice(0, 8))}</text>`
 }
 
 function svgWrap(inner: string): string {
