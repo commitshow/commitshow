@@ -77,8 +77,14 @@ Deno.serve(async (req) => {
     })
   }
 
-  // 1. Fetch the SVG from the Pages Function.
-  const svgUrl = `https://commit.show/og/project/${id}?kind=${encodeURIComponent(kind)}`
+  // 1. Fetch the SVG from the Pages Function. Forward an optional
+  //    cache-bust query (`t`) through to the SVG URL so we don't get
+  //    stuck on Cloudflare's edge-cached SVG when iterating on the
+  //    card design.
+  const cacheBust = url.searchParams.get('t')
+  const svgUrl = cacheBust
+    ? `https://commit.show/og/project/${id}?kind=${encodeURIComponent(kind)}&t=${encodeURIComponent(cacheBust)}`
+    : `https://commit.show/og/project/${id}?kind=${encodeURIComponent(kind)}`
   let svgText: string
   try {
     const r = await fetch(svgUrl)
