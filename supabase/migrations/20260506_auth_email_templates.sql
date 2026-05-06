@@ -38,7 +38,7 @@ INSERT INTO email_templates (kind, subject, html_body, text_body, variables, des
             <a href="{{confirmation_url}}" style="display:inline-block;padding:14px 28px;font-family:DM Sans,system-ui,sans-serif;font-size:14px;font-weight:600;letter-spacing:1px;color:#060C1A;text-decoration:none;text-transform:uppercase;">Confirm email</a>
           </td></tr></table>
 
-          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:rgba(248,245,238,0.7);word-break:break-all;">{{confirmation_url}}</a></p>
+          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:#9CA3AF;text-decoration:underline;word-break:break-all;"><span style="color:#9CA3AF;">{{confirmation_url}}</span></a></p>
           <p style="font-size:12px;color:rgba(248,245,238,0.4);margin:32px 0 0;">If you didn''t sign up for commit.show, you can ignore this email.</p>
         </td></tr>
       </table>
@@ -68,7 +68,7 @@ INSERT INTO email_templates (kind, subject, html_body, text_body, variables, des
             <a href="{{confirmation_url}}" style="display:inline-block;padding:14px 28px;font-family:DM Sans,system-ui,sans-serif;font-size:14px;font-weight:600;letter-spacing:1px;color:#060C1A;text-decoration:none;text-transform:uppercase;">Sign in</a>
           </td></tr></table>
 
-          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:rgba(248,245,238,0.7);word-break:break-all;">{{confirmation_url}}</a></p>
+          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:#9CA3AF;text-decoration:underline;word-break:break-all;"><span style="color:#9CA3AF;">{{confirmation_url}}</span></a></p>
           <p style="font-size:12px;color:rgba(248,245,238,0.4);margin:32px 0 0;">If you didn''t request this, you can safely ignore this email.</p>
         </td></tr>
       </table>
@@ -98,7 +98,7 @@ INSERT INTO email_templates (kind, subject, html_body, text_body, variables, des
             <a href="{{confirmation_url}}" style="display:inline-block;padding:14px 28px;font-family:DM Sans,system-ui,sans-serif;font-size:14px;font-weight:600;letter-spacing:1px;color:#060C1A;text-decoration:none;text-transform:uppercase;">Reset password</a>
           </td></tr></table>
 
-          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:rgba(248,245,238,0.7);word-break:break-all;">{{confirmation_url}}</a></p>
+          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:#9CA3AF;text-decoration:underline;word-break:break-all;"><span style="color:#9CA3AF;">{{confirmation_url}}</span></a></p>
           <p style="font-size:12px;color:rgba(248,245,238,0.4);margin:32px 0 0;">If you didn''t request a password reset, you can safely ignore this email — your account stays as-is.</p>
         </td></tr>
       </table>
@@ -128,7 +128,7 @@ INSERT INTO email_templates (kind, subject, html_body, text_body, variables, des
             <a href="{{confirmation_url}}" style="display:inline-block;padding:14px 28px;font-family:DM Sans,system-ui,sans-serif;font-size:14px;font-weight:600;letter-spacing:1px;color:#060C1A;text-decoration:none;text-transform:uppercase;">Accept invite</a>
           </td></tr></table>
 
-          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:rgba(248,245,238,0.7);word-break:break-all;">{{confirmation_url}}</a></p>
+          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:#9CA3AF;text-decoration:underline;word-break:break-all;"><span style="color:#9CA3AF;">{{confirmation_url}}</span></a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -157,7 +157,7 @@ INSERT INTO email_templates (kind, subject, html_body, text_body, variables, des
             <a href="{{confirmation_url}}" style="display:inline-block;padding:14px 28px;font-family:DM Sans,system-ui,sans-serif;font-size:14px;font-weight:600;letter-spacing:1px;color:#060C1A;text-decoration:none;text-transform:uppercase;">Confirm email</a>
           </td></tr></table>
 
-          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:rgba(248,245,238,0.7);word-break:break-all;">{{confirmation_url}}</a></p>
+          <p style="font-size:13px;line-height:1.6;color:rgba(248,245,238,0.5);margin:24px 0 0;">Or copy this link: <br><a href="{{confirmation_url}}" style="color:#9CA3AF;text-decoration:underline;word-break:break-all;"><span style="color:#9CA3AF;">{{confirmation_url}}</span></a></p>
           <p style="font-size:12px;color:rgba(248,245,238,0.4);margin:32px 0 0;">If you didn''t request this change, contact support — your account email may be at risk.</p>
         </td></tr>
       </table>
