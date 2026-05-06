@@ -986,7 +986,15 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const ENV_SKIP_DIR     = /(^|\/)(examples?|demo|demos|sample|samples|fixtures?|tests?|e2e|playground|cookbook|docs)\//i
   const ENV_MONOREPO_RE  = /^(apps|packages)\/[^/]+\//i
   const ENV_DOTENVX_RE   = /dotenvx/i
-  const env_committed = paths.some(p =>
+  // env_committed scans the FULL repo (rootPaths), not the workspace
+  // shadow. Reason: ENV_MONOREPO_RE excludes apps/<ws>/.env files as
+  // "per-workspace public defaults, no production secret pattern" —
+  // but the path-shadow strips the apps/<ws>/ prefix so that exclusion
+  // would no longer trigger. Scanning rootPaths preserves the original
+  // intent: a committed real .env at repo root or in a non-workspace
+  // dir = secret leak; same file inside a recognized workspace dir =
+  // tolerated.
+  const env_committed = rootPaths.some(p =>
     ENV_FILE_RE.test(p) &&
     !ENV_DOC_RE.test(p) &&
     !ENV_SKIP_DIR.test(p) &&
