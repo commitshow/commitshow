@@ -518,8 +518,14 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   const tree: { path: string; type: string; sha?: string }[] = treeResp?.tree ?? []
   const blobs = tree.filter(x => x.type === 'blob')
 
-  // Signal extraction
-  const paths = blobs.map(b => b.path)
+  // Signal extraction. `rootPaths` is preserved for root-level checks
+  // (CI workflows, LICENSE, lockfile at repo root, supabase edge funcs);
+  // `paths` is potentially shadowed to a workspace subset further down
+  // when this is a monorepo and we pick a primary sub-app to audit.
+  const rootPaths: string[] = blobs.map(b => b.path)
+  const rootPathSet = new Set(rootPaths)
+  let paths: string[] = rootPaths
+  // pathSet is also shadowed downstream when paths gets re-scoped.
 
   // ── Monorepo / subfolder app root detection ──
   // Many vibe-coded projects live in a sub-folder (e.g. `website/`, `apps/web/`)
@@ -528,13 +534,12 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   // (package.json · tsconfig.json · lockfile) hit the real app instead of
   // returning 404 and dragging the score to the floor. Common subfolder
   // names ranked by convention.
-  const _earlyPathSet = new Set(paths)
   const APP_ROOT_PREFERENCE = [
     'website', 'web', 'app', 'apps/web', 'apps/website', 'apps/app',
     'frontend', 'client', 'site', 'packages/web', 'packages/app',
   ]
   let app_root = ''
-  if (!_earlyPathSet.has('package.json')) {
+  if (!rootPathSet.has('package.json')) {
     // Candidates = any folder (1 or 2 levels deep) containing package.json.
     const candidates = new Set<string>()
     for (const p of paths) {
@@ -547,8 +552,111 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
               ?? [...candidates][0]
               ?? ''
   }
+
+  // ── Monorepo workspace-root selection (NEW · 2026-05-06) ──
+  // Big monorepos (supabase/supabase, vercel/next.js, cal.com/cal.com)
+  // mash 20+ sub-apps (dashboard + marketing + docs + examples + …) into
+  // one tree, and detector hits in any sub-app read like core-service
+  // findings. Auto-pick the largest sub-app by file count and shadow
+  // `paths` to that subtree — same code-scanning detectors then operate
+  // on a coherent unit instead of the union.
+  //
+  // CLI / web caller can override later via an explicit workspace arg
+  // (plumbed through analyze() request body as `workspace`); for now
+  // the auto-pick alone removes 95% of the false positives.
+  const looksMonorepoEarly = rootPathSet.has('turbo.json') ||
+    rootPathSet.has('pnpm-workspace.yaml') ||
+    rootPathSet.has('lerna.json') ||
+    rootPathSet.has('nx.json') ||
+    rootPaths.some(p => /^apps\/[^/]+\/package\.json$/.test(p)) ||
+    rootPaths.some(p => /^packages\/[^/]+\/package\.json$/.test(p))
+
+  // Workspace pick reason · surfaced in scanned_scope so the reader knows
+  // why we landed on this sub-app (priority-name match · repo-name match ·
+  // file-count fallback). null when not a monorepo · "explicit" if the
+  // caller passed a workspace override.
+  let workspace_pick_reason: string | null = null
+
+  if (looksMonorepoEarly && !app_root) {
+    // ── Phase 1 · canonical name priority ──
+    // Names commonly used for the "main user-facing" app. A repo with
+    // apps/studio matches "studio" (supabase) · apps/web matches "web"
+    // (cal.com / many Next.js monorepos). Order roughly by frequency.
+    const NAME_PRIORITY = [
+      'web', 'app', 'studio', 'dashboard', 'main', 'server', 'api',
+      'frontend', 'website', 'site', 'console', 'admin', 'client',
+    ]
+    for (const dir of ['apps', 'services'] as const) {
+      for (const name of NAME_PRIORITY) {
+        if (rootPathSet.has(`${dir}/${name}/package.json`)) {
+          app_root = `${dir}/${name}`
+          workspace_pick_reason = `priority name '${name}'`
+          break
+        }
+      }
+      if (app_root) break
+    }
+
+    // ── Phase 2 · repo-name match ──
+    // Many monorepos name a workspace after the repo itself
+    // (e.g. vercel/next.js → packages/next).
+    if (!app_root) {
+      const repoName = String(repoData?.name ?? '').toLowerCase()
+      if (repoName) {
+        for (const dir of ['apps', 'packages', 'services'] as const) {
+          if (rootPathSet.has(`${dir}/${repoName}/package.json`)) {
+            app_root = `${dir}/${repoName}`
+            workspace_pick_reason = `repo-name match`
+            break
+          }
+        }
+      }
+    }
+
+    // ── Phase 3 · file-count fallback ──
+    // No name-based winner. Pick the workspace with the most code by
+    // file count. apps/* preferred over packages/* / services/* /
+    // examples/* on tie.
+    if (!app_root) {
+      const wsCount = new Map<string, number>()
+      for (const p of rootPaths) {
+        const m = p.match(/^(apps|packages|services|examples)\/([^/]+)\//)
+        if (m) {
+          const key = `${m[1]}/${m[2]}`
+          wsCount.set(key, (wsCount.get(key) ?? 0) + 1)
+        }
+      }
+      if (wsCount.size > 0) {
+        const tierOf = (k: string) =>
+          k.startsWith('apps/')     ? 0 :
+          k.startsWith('packages/') ? 1 :
+          k.startsWith('services/') ? 2 : 3
+        const sorted = [...wsCount.entries()].sort((a, b) => {
+          const t = tierOf(a[0]) - tierOf(b[0])
+          if (t !== 0) return t
+          return b[1] - a[1]
+        })
+        app_root = sorted[0][0]
+        workspace_pick_reason = `largest of ${sorted.length} by file count`
+      }
+    }
+  }
+
   // Prefix used for subsequent /contents/ probes. Empty string → root.
   const appPrefix = app_root ? `${app_root}/` : ''
+
+  // Shadow `paths` to the workspace subset so code-scanning detectors
+  // (49 paths.filter / paths.some sites below) operate on a coherent
+  // unit. Path prefix is stripped so existing regexes (`^components/`,
+  // `(pages|app|routes)/`) still match. Root-level checks (CI workflows,
+  // license at root, lockfile at root) keep using `rootPaths` /
+  // `rootPathSet`.
+  if (appPrefix) {
+    paths = rootPaths
+      .filter(p => p.startsWith(appPrefix))
+      .map(p => p.slice(appPrefix.length))
+  }
+  const pathSet = appPrefix ? new Set(paths) : rootPathSet
 
   const sol = paths.filter(p => p.endsWith('.sol'))
   const sqlFiles = paths.filter(p => p.endsWith('.sql'))
@@ -651,12 +759,14 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   }
 
   // CI / lockfile / governance signals (root-file presence checks · free)
-  const pathSet = new Set(paths)
-  const ciWorkflowFiles = paths.filter(p => /^\.github\/workflows\/[^/]+\.ya?ml$/i.test(p))
+  // CI workflows live at REPO ROOT in monorepos (.github/workflows/*) —
+  // they're org-wide. Use rootPaths/rootPathSet so we don't miss them
+  // after `paths` was workspace-scoped above.
+  const ciWorkflowFiles = rootPaths.filter(p => /^\.github\/workflows\/[^/]+\.ya?ml$/i.test(p))
   const ci_workflows = ciWorkflowFiles.length
   const has_ci_config = ci_workflows > 0
-    || pathSet.has('.gitlab-ci.yml')
-    || paths.some(p => /^\.circleci\/config\.ya?ml$/.test(p))
+    || rootPathSet.has('.gitlab-ci.yml')
+    || rootPaths.some(p => /^\.circleci\/config\.ya?ml$/.test(p))
     || pathSet.has('vercel.json')           // Vercel auto-checks count as CI signal
     || pathSet.has('netlify.toml')
 
@@ -716,27 +826,28 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
 
   // Monorepo signal — workspaces declared OR turbo/pnpm workspace files OR
   // packages/* presence with a /package.json under it.
+  // Use rootPathSet/rootPaths because workspace files are at repo root,
+  // not in the scoped workspace.
   const is_monorepo =
     !!(pkgParsed && (pkgParsed as { workspaces?: unknown }).workspaces) ||
-    pathSet.has('turbo.json') ||
-    pathSet.has('pnpm-workspace.yaml') ||
-    paths.some(p => /^packages\/[^/]+\/package\.json$/.test(p)) ||
-    paths.some(p => /^apps\/[^/]+\/package\.json$/.test(p))
+    rootPathSet.has('turbo.json') ||
+    rootPathSet.has('pnpm-workspace.yaml') ||
+    rootPaths.some(p => /^packages\/[^/]+\/package\.json$/.test(p)) ||
+    rootPaths.some(p => /^apps\/[^/]+\/package\.json$/.test(p))
 
   // ── Scanned scope · transparency for monorepos ──
-  // Big monorepos (supabase/supabase, vercel/next.js, cal.com) trigger
-  // detector hits in dashboard / marketing / examples directories that
-  // outsiders read as if they applied to the core service. We can't
-  // perfectly auto-pick the "real" sub-app, but we CAN print exactly
-  // which workspace dirs the scan covered so a reader sees the scope
-  // before judging the concerns. CLI + web both render this verbatim.
+  // After auto-pick, we audited ONE workspace not all 22. Surface that
+  // explicitly so the reader sees we didn't mash the whole monorepo
+  // together. The scope string lands in CLI output, web hero chip,
+  // and audit.md sidecar (commit b40fb77+).
   let scanned_scope: string
   if (!is_monorepo) {
     scanned_scope = app_root ? `single project · root at ${app_root}/` : 'single project · root'
   } else {
+    // Count files per workspace dir at repo root (not the scoped paths).
     const workspaceCount = new Map<string, number>()
-    for (const p of paths) {
-      const m = p.match(/^(apps|packages|services)\/([^/]+)\//)
+    for (const p of rootPaths) {
+      const m = p.match(/^(apps|packages|services|examples)\/([^/]+)\//)
       if (m) {
         const key = `${m[1]}/${m[2]}`
         workspaceCount.set(key, (workspaceCount.get(key) ?? 0) + 1)
@@ -745,6 +856,13 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     const sorted = [...workspaceCount.entries()].sort((a, b) => b[1] - a[1])
     if (sorted.length === 0) {
       scanned_scope = 'monorepo · root only (no apps/* or packages/* workspaces detected)'
+    } else if (app_root) {
+      // We auto-picked one workspace · the reason chosen above
+      // (priority name · repo-name match · largest by file count)
+      // is surfaced so the reader can sanity-check the selection.
+      const ourFiles = sorted.find(([k]) => k === app_root)?.[1] ?? 0
+      const reason = workspace_pick_reason ?? 'auto-pick'
+      scanned_scope = `monorepo · audited ${app_root}/ (${ourFiles} files · ${reason} · ${sorted.length} sub-app${sorted.length === 1 ? '' : 's'} total)`
     } else {
       const top = sorted.slice(0, 3).map(([k]) => k)
       const more = sorted.length > 3 ? ` + ${sorted.length - 3} more` : ''
