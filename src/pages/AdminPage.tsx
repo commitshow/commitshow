@@ -926,10 +926,11 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
           // 사용자 리스트 · 최근 가입 50명
         </div>
         <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
-          <div className="grid grid-cols-[1fr_minmax(0,1fr)_120px_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 font-mono text-[10px] tracking-widest uppercase"
+          {/* Header · sm+ only · table layout */}
+          <div className="hidden sm:grid grid-cols-[1fr_minmax(0,1fr)_120px_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 font-mono text-[10px] tracking-widest uppercase"
                style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)' }}>
             <span>이름</span>
-            <span className="hidden sm:block">ID</span>
+            <span>ID</span>
             <span>로그인</span>
             <span>티어</span>
             <span>등급</span>
@@ -945,54 +946,83 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
             const isSelf = u.id === currentUserId
             const busy   = grantBusyId === u.id
             const disabled = busy || isSelf || !hasToken
+            const rowBg = u.is_admin ? 'rgba(240,192,64,0.08)' : i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent'
+            const grantBtn = (
+              <button
+                onClick={() => onToggleAdmin(u)}
+                disabled={disabled}
+                className="font-mono text-[10px] tracking-wide px-2 py-1"
+                title={
+                  isSelf       ? '자기 자신은 토글 불가 (lock-out 방지)'
+                  : !hasToken  ? '도구 탭에서 관리자 토큰을 먼저 저장하세요'
+                  : u.is_admin ? '관리자 권한 회수'
+                               : '관리자 권한 부여'
+                }
+                style={{
+                  background:  u.is_admin ? 'transparent'                : 'var(--gold-500)',
+                  color:       u.is_admin ? 'var(--scarlet)'             : 'var(--navy-900)',
+                  border:      u.is_admin ? '1px solid rgba(200,16,46,0.4)' : 'none',
+                  borderRadius: '2px',
+                  cursor:      disabled ? 'not-allowed' : 'pointer',
+                  opacity:     disabled ? 0.4 : 1,
+                  whiteSpace:  'nowrap',
+                }}
+              >
+                {busy ? '…' : u.is_admin ? '회수' : '부여'}
+              </button>
+            )
+
             return (
               <div key={u.id}
-                   className="grid grid-cols-[1fr_minmax(0,1fr)_120px_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 items-center text-xs"
-                   style={{
-                     background:    u.is_admin ? 'rgba(240,192,64,0.08)' : i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent',
-                     borderTop:     '1px solid rgba(255,255,255,0.04)',
-                   }}>
-                <span className="font-mono truncate" style={{ color: '#fff' }}>
-                  {u.display_name ?? '(미설정)'}
-                  {u.is_admin && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(240,192,64,0.2)', color: 'var(--gold-500)', borderRadius: '2px', fontSize: '10px' }}>ADMIN</span>}
-                  {isSelf && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)', borderRadius: '2px', fontSize: '10px' }}>본인</span>}
-                </span>
-                <span className="hidden sm:block font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{u.id.slice(0, 8)}</span>
-                <span className="flex flex-wrap gap-1">
-                  {(u.providers ?? []).length === 0 && (
-                    <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>—</span>
+                   style={{ background: rowBg, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+
+                {/* Mobile card · stacked, name dominant */}
+                <div className="sm:hidden px-3 py-3">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="font-mono text-[13px] leading-tight min-w-0" style={{ color: '#fff' }}>
+                      <span className="break-words">{u.display_name ?? '(미설정)'}</span>
+                      {u.is_admin && <span className="ml-2 px-1.5 py-0.5 align-middle" style={{ background: 'rgba(240,192,64,0.2)', color: 'var(--gold-500)', borderRadius: '2px', fontSize: '10px' }}>ADMIN</span>}
+                      {isSelf && <span className="ml-2 px-1.5 py-0.5 align-middle" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)', borderRadius: '2px', fontSize: '10px' }}>본인</span>}
+                    </div>
+                    {grantBtn}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    <span>{u.id.slice(0, 8)}</span>
+                    <span>{u.tier ?? '—'} · {u.creator_grade ?? '—'}</span>
+                    <span>AP <span style={{ color: '#fff' }}>{u.activity_points ?? 0}</span></span>
+                    <span>Encore <span style={{ color: '#fff' }}>{u.total_graduated ?? 0}</span></span>
+                    <span>{new Date(u.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
+                  </div>
+                  {(u.providers ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {u.providers!.map(p => <ProviderBadge key={p} provider={p} />)}
+                    </div>
                   )}
-                  {(u.providers ?? []).map(p => <ProviderBadge key={p} provider={p} />)}
-                </span>
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.tier ?? '—'}</span>
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.creator_grade ?? '—'}</span>
-                <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: '#fff' }}>{u.activity_points ?? 0}</span>
-                <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: '#fff' }}>{u.total_graduated ?? 0}</span>
-                <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                  {new Date(u.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
-                </span>
-                <button
-                  onClick={() => onToggleAdmin(u)}
-                  disabled={disabled}
-                  className="font-mono text-[10px] tracking-wide px-2 py-1"
-                  title={
-                    isSelf       ? '자기 자신은 토글 불가 (lock-out 방지)'
-                    : !hasToken  ? '도구 탭에서 관리자 토큰을 먼저 저장하세요'
-                    : u.is_admin ? '관리자 권한 회수'
-                                 : '관리자 권한 부여'
-                  }
-                  style={{
-                    background:  u.is_admin ? 'transparent'                : 'var(--gold-500)',
-                    color:       u.is_admin ? 'var(--scarlet)'             : 'var(--navy-900)',
-                    border:      u.is_admin ? '1px solid rgba(200,16,46,0.4)' : 'none',
-                    borderRadius: '2px',
-                    cursor:      disabled ? 'not-allowed' : 'pointer',
-                    opacity:     disabled ? 0.4 : 1,
-                    whiteSpace:  'nowrap',
-                  }}
-                >
-                  {busy ? '…' : u.is_admin ? '회수' : '부여'}
-                </button>
+                </div>
+
+                {/* sm+ table row */}
+                <div className="hidden sm:grid grid-cols-[1fr_minmax(0,1fr)_120px_70px_70px_60px_50px_70px_90px] gap-3 px-3 py-2 items-center text-xs">
+                  <span className="font-mono truncate" style={{ color: '#fff' }}>
+                    {u.display_name ?? '(미설정)'}
+                    {u.is_admin && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(240,192,64,0.2)', color: 'var(--gold-500)', borderRadius: '2px', fontSize: '10px' }}>ADMIN</span>}
+                    {isSelf && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)', borderRadius: '2px', fontSize: '10px' }}>본인</span>}
+                  </span>
+                  <span className="font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{u.id.slice(0, 8)}</span>
+                  <span className="flex flex-wrap gap-1">
+                    {(u.providers ?? []).length === 0 && (
+                      <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>—</span>
+                    )}
+                    {(u.providers ?? []).map(p => <ProviderBadge key={p} provider={p} />)}
+                  </span>
+                  <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.tier ?? '—'}</span>
+                  <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.creator_grade ?? '—'}</span>
+                  <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: '#fff' }}>{u.activity_points ?? 0}</span>
+                  <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: '#fff' }}>{u.total_graduated ?? 0}</span>
+                  <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    {new Date(u.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                  </span>
+                  {grantBtn}
+                </div>
               </div>
             )
           })}
