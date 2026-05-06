@@ -21,15 +21,22 @@ interface Env {
   SUPABASE_ANON_KEY?: string
 }
 
-type CardKind = 'audit' | 'encore' | 'milestone'
+type CardKind = 'audit' | 'encore' | 'milestone' | 'tweet'
 
 interface ProjectCard {
-  id:           string
-  project_name: string
-  score:        number | null
-  band:         string
-  encore_kind:  'production' | 'streak' | 'climb' | 'spotlight' | null
-  encore_serial: number | null
+  id:             string
+  project_name:   string
+  score:          number | null
+  score_auto:     number | null
+  score_forecast: number | null
+  score_community: number | null
+  status:         string
+  band:           string
+  encore_kind:    'production' | 'streak' | 'climb' | 'spotlight' | null
+  encore_serial:  number | null
+  scanned_scope:  string | null
+  top_concern:    string | null
+  top_strength:   string | null
 }
 
 const ENCORE_LABEL: Record<string, { label: string; symbol: string }> = {
@@ -52,12 +59,16 @@ async function loadProject(env: Env, id: string): Promise<ProjectCard | null> {
   const anonKey = env.SUPABASE_ANON_KEY ?? ''
   if (!anonKey) return null
 
-  const cols = 'id,project_name,score_total'
+  const cols = 'id,project_name,score_total,score_auto,score_forecast,score_community,status'
   const projRes = await fetch(`${url}/rest/v1/projects?id=eq.${id}&select=${cols}`, {
     headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
   })
   if (!projRes.ok) return null
-  const rows = await projRes.json() as Array<{ id: string; project_name: string; score_total: number | null }>
+  const rows = await projRes.json() as Array<{
+    id: string; project_name: string; score_total: number | null
+    score_auto: number | null; score_forecast: number | null; score_community: number | null
+    status: string
+  }>
   if (rows.length === 0) return null
   const p = rows[0]
 
@@ -71,13 +82,44 @@ async function loadProject(env: Env, id: string): Promise<ProjectCard | null> {
   const encs = encRes.ok ? await encRes.json() as Array<{ kind: string; serial: number }> : []
   const enc = encs.find(e => e.kind === 'production') ?? encs[0] ?? null
 
+  // Latest snapshot · used by the tweet card to pull scope + a single
+  // top strength + a single top concern. Cheap (single row fetch).
+  let scanned_scope: string | null = null
+  let top_concern:   string | null = null
+  let top_strength:  string | null = null
+  try {
+    const snapRes = await fetch(
+      `${url}/rest/v1/analysis_snapshots?project_id=eq.${id}&select=rich_analysis,github_signals&order=created_at.desc&limit=1`,
+      { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } },
+    )
+    if (snapRes.ok) {
+      const snaps = await snapRes.json() as Array<{
+        rich_analysis: { scout_brief?: { strengths?: Array<{ bullet?: string }>; weaknesses?: Array<{ bullet?: string }> } } | null
+        github_signals: { scanned_scope?: string } | null
+      }>
+      const snap = snaps[0]
+      if (snap) {
+        scanned_scope = snap.github_signals?.scanned_scope ?? null
+        top_strength = snap.rich_analysis?.scout_brief?.strengths?.[0]?.bullet ?? null
+        top_concern  = snap.rich_analysis?.scout_brief?.weaknesses?.[0]?.bullet ?? null
+      }
+    }
+  } catch { /* best-effort · snapshot is optional for the card */ }
+
   return {
-    id:            p.id,
-    project_name:  p.project_name,
-    score:         p.score_total,
-    band:          bandLabel(p.score_total),
-    encore_kind:   enc ? (enc.kind as ProjectCard['encore_kind']) : null,
-    encore_serial: enc?.serial ?? null,
+    id:               p.id,
+    project_name:     p.project_name,
+    score:            p.score_total,
+    score_auto:       p.score_auto,
+    score_forecast:   p.score_forecast,
+    score_community:  p.score_community,
+    status:           p.status,
+    band:             bandLabel(p.score_total),
+    encore_kind:      enc ? (enc.kind as ProjectCard['encore_kind']) : null,
+    encore_serial:    enc?.serial ?? null,
+    scanned_scope,
+    top_concern,
+    top_strength,
   }
 }
 
@@ -166,6 +208,89 @@ function cardMilestone(p: ProjectCard, milestoneLabel: string): string {
     ${FOOTER_TAGLINE}`
 }
 
+// ── Tweet card · terminal aesthetic. Designed for the @commitshow
+// auto-tweet flow: one image worth a thousand text bullets. Black-on-
+// gold COMMIT.SHOW wordmark up top, big score box, 3-axis bar,
+// one-line top strength + one-line top concern. Scope chip surfaces
+// monorepo workspace selection so the score reads in context.
+function fitOneLine(s: string, max: number): string {
+  // Strip trailing punctuation that looks bad mid-bullet, keep the
+  // sentence terse. Naive — no need for a full NLP pass.
+  const trimmed = s.replace(/^[\s·\-—]+/, '').trim()
+  if (trimmed.length <= max) return trimmed
+  return trimmed.slice(0, max - 1).replace(/[\s,;:.\-—]+$/, '') + '…'
+}
+
+function bar(value: number, max: number, width = 22): string {
+  if (max <= 0) return '─'.repeat(width)
+  const v = Math.max(0, Math.min(value, max))
+  const filled = Math.round((v / max) * width)
+  return '▰'.repeat(filled) + '▱'.repeat(width - filled)
+}
+
+function cardTweet(p: ProjectCard): string {
+  const isWalkOn = p.status === 'preview'
+  const score    = p.score
+  const scoreText = score == null ? '—' : String(score)
+  const accent   = (score ?? 0) >= 85 ? '#F0C040' : '#60A5FA'
+  const projName = escapeXml(fitName(p.project_name, 28))
+
+  // 3-axis bars · walk-on shows Audit only (Scout/Comm structurally
+  // absent · don't render a fake-zero row, render an "n/a" line).
+  const audit     = p.score_auto ?? 0
+  const auditMax  = 50
+  const scoutMax  = 30
+  const commMax   = 20
+
+  const auditBar = `Audit  ${audit.toString().padStart(2)}/${auditMax}  ${bar(audit, auditMax)}`
+  const scoutLine = isWalkOn
+    ? `Scout  ── /${scoutMax}  (preview · audition pending)`
+    : `Scout  ${(p.score_forecast ?? 0).toString().padStart(2)}/${scoutMax}  ${bar(p.score_forecast ?? 0, scoutMax)}`
+  const commLine = isWalkOn
+    ? `Comm.  ── /${commMax}`
+    : `Comm.  ${(p.score_community ?? 0).toString().padStart(2)}/${commMax}  ${bar(p.score_community ?? 0, commMax)}`
+
+  const strengthLine = p.top_strength ? `↑ ${fitOneLine(p.top_strength, 76)}` : ''
+  const concernLine  = p.top_concern  ? `↓ ${fitOneLine(p.top_concern, 76)}`  : ''
+
+  // Scope chip · only when scanned_scope contains a workspace path
+  // (monorepo case). Single project audits skip it to keep the card
+  // breathable.
+  const scopeText = p.scanned_scope && p.scanned_scope.startsWith('monorepo')
+    ? escapeXml(fitOneLine(p.scanned_scope, 60))
+    : null
+
+  return `${BG}
+    <!-- COMMIT.SHOW wordmark · gold on dark · larger than other cards
+         to dominate the embed thumbnail -->
+    <text x="600" y="92" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-weight="700" font-size="56" fill="#F0C040" letter-spacing="-1.5">commit.show</text>
+    <text x="600" y="124" text-anchor="middle" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="14" fill="rgba(248,245,238,0.45)" letter-spacing="6">AUDIT  ·  AUDITION  ·  ENCORE</text>
+
+    <!-- Project name -->
+    <text x="600" y="190" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-size="36" fill="#F8F5EE" letter-spacing="-0.5">${projName}</text>
+
+    <!-- Score box · ASCII border like the CLI score banner -->
+    <g transform="translate(420, 220)">
+      <rect width="360" height="120" fill="rgba(0,0,0,0.35)" stroke="${accent}" stroke-width="3" rx="2"/>
+      <text x="180" y="92" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-size="100" font-weight="700" fill="${accent}" letter-spacing="-2">${escapeXml(scoreText)}</text>
+      <text x="320" y="100" font-family="Playfair Display, Georgia, serif" font-size="32" fill="rgba(248,245,238,0.4)">/100</text>
+    </g>
+    <text x="600" y="372" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(248,245,238,0.55)" letter-spacing="3">BAND · ${escapeXml(p.band.toUpperCase())}</text>
+
+    <!-- 3-axis bars · monospace, single column centered -->
+    <g font-family="DM Mono, Menlo, Consolas, monospace" font-size="20">
+      <text x="220" y="424" fill="#F0C040">${escapeXml(auditBar)}</text>
+      <text x="220" y="454" fill="rgba(0,212,170,0.85)">${escapeXml(scoutLine)}</text>
+      <text x="220" y="484" fill="rgba(0,212,170,0.85)">${escapeXml(commLine)}</text>
+    </g>
+
+    ${strengthLine ? `<text x="72" y="528" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(0,212,170,0.95)">${escapeXml(strengthLine)}</text>` : ''}
+    ${concernLine  ? `<text x="72" y="552" font-family="DM Mono, Menlo, Consolas, monospace" font-size="16" fill="rgba(248,120,113,0.95)">${escapeXml(concernLine)}</text>` : ''}
+
+    ${scopeText ? `<text x="72" y="592" font-family="DM Mono, Menlo, Consolas, monospace" font-size="13" fill="rgba(248,245,238,0.4)" letter-spacing="0.5">SCANNED · ${scopeText}</text>` : ''}
+    <text x="1128" y="592" text-anchor="end" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="14" fill="rgba(248,245,238,0.45)" letter-spacing="2">commit.show / projects / ${escapeXml(p.id.slice(0, 8))}</text>`
+}
+
 function svgWrap(inner: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
@@ -205,9 +330,12 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     })
   }
 
-  // Pick the variant. ?kind=encore|milestone, default audit.
+  // Pick the variant. ?kind=encore|milestone|tweet, default audit.
   const kindParam = url.searchParams.get('kind') as CardKind | null
-  const kind: CardKind = kindParam === 'encore' || kindParam === 'milestone' ? kindParam : 'audit'
+  const kind: CardKind =
+    kindParam === 'encore' || kindParam === 'milestone' || kindParam === 'tweet'
+      ? kindParam
+      : 'audit'
   const milestoneLabel = url.searchParams.get('label') ?? ''
 
   let body: string
@@ -217,6 +345,9 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       break
     case 'milestone':
       body = cardMilestone(proj, milestoneLabel || 'Milestone reached')
+      break
+    case 'tweet':
+      body = cardTweet(proj)
       break
     case 'audit':
     default:
