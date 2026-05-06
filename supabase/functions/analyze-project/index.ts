@@ -597,26 +597,40 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       if (app_root) break
     }
 
-    // ── Phase 2 · repo-name match ──
+    // ── Phase 2 · repo-name match (with suffix variants) ──
     // Many monorepos name a workspace after the repo itself
-    // (e.g. vercel/next.js → packages/next).
+    // (e.g. vercel/next.js → packages/next · denoland/deno-ts → packages/deno).
+    // Strip common suffixes so vercel/next.js still matches packages/next.
     if (!app_root) {
-      const repoName = String(repoData?.name ?? '').toLowerCase()
-      if (repoName) {
-        for (const dir of ['apps', 'packages', 'services'] as const) {
-          if (rootPathSet.has(`${dir}/${repoName}/package.json`)) {
-            app_root = `${dir}/${repoName}`
-            workspace_pick_reason = `repo-name match`
-            break
+      const repoNameRaw = String(repoData?.name ?? '').toLowerCase()
+      if (repoNameRaw) {
+        const variants = new Set<string>([repoNameRaw])
+        // Strip common JS-ecosystem suffixes
+        for (const suffix of ['.js', '.ts', '-js', '-ts', '.io', '.dev']) {
+          if (repoNameRaw.endsWith(suffix)) {
+            variants.add(repoNameRaw.slice(0, -suffix.length))
+          }
+        }
+        outer: for (const variant of variants) {
+          for (const dir of ['packages', 'apps', 'services'] as const) {
+            if (rootPathSet.has(`${dir}/${variant}/package.json`)) {
+              app_root = `${dir}/${variant}`
+              workspace_pick_reason = variant === repoNameRaw
+                ? `repo-name match`
+                : `repo-name match (stripped suffix)`
+              break outer
+            }
           }
         }
       }
     }
 
-    // ── Phase 3 · file-count fallback ──
-    // No name-based winner. Pick the workspace with the most code by
-    // file count. apps/* preferred over packages/* / services/* /
-    // examples/* on tie.
+    // ── Phase 3 · file-count fallback (absolute · no tier preference) ──
+    // No name-based winner. Pick the workspace with the most code BY
+    // ABSOLUTE FILE COUNT. The earlier "apps/* always wins" rule was
+    // wrong for repos like vercel/next.js where apps/* contains a
+    // sprinkle of tiny example apps and packages/next is the actual
+    // 5000-file framework. Tier preference is a tiebreaker only.
     if (!app_root) {
       const wsCount = new Map<string, number>()
       for (const p of rootPaths) {
@@ -632,9 +646,9 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
           k.startsWith('packages/') ? 1 :
           k.startsWith('services/') ? 2 : 3
         const sorted = [...wsCount.entries()].sort((a, b) => {
-          const t = tierOf(a[0]) - tierOf(b[0])
-          if (t !== 0) return t
-          return b[1] - a[1]
+          // Absolute file count first · tier as tiebreaker
+          if (a[1] !== b[1]) return b[1] - a[1]
+          return tierOf(a[0]) - tierOf(b[0])
         })
         app_root = sorted[0][0]
         workspace_pick_reason = `largest of ${sorted.length} by file count`
@@ -761,14 +775,15 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   // CI / lockfile / governance signals (root-file presence checks · free)
   // CI workflows live at REPO ROOT in monorepos (.github/workflows/*) —
   // they're org-wide. Use rootPaths/rootPathSet so we don't miss them
-  // after `paths` was workspace-scoped above.
+  // after `paths` was workspace-scoped above. Same applies to vercel.json
+  // / netlify.toml / lockfile / LICENSE / governance docs.
   const ciWorkflowFiles = rootPaths.filter(p => /^\.github\/workflows\/[^/]+\.ya?ml$/i.test(p))
   const ci_workflows = ciWorkflowFiles.length
   const has_ci_config = ci_workflows > 0
     || rootPathSet.has('.gitlab-ci.yml')
     || rootPaths.some(p => /^\.circleci\/config\.ya?ml$/.test(p))
-    || pathSet.has('vercel.json')           // Vercel auto-checks count as CI signal
-    || pathSet.has('netlify.toml')
+    || rootPathSet.has('vercel.json')      // Vercel auto-checks count as CI signal
+    || rootPathSet.has('netlify.toml')
 
   const LOCKFILE_MAP: Record<string, 'npm' | 'yarn' | 'pnpm' | 'bun'> = {
     'package-lock.json': 'npm',
@@ -779,25 +794,26 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   }
   let lockfile_kind: 'npm' | 'yarn' | 'pnpm' | 'bun' | null = null
   for (const [file, kind] of Object.entries(LOCKFILE_MAP)) {
-    // Accept lockfile at root OR at the detected app root (monorepos).
-    if (pathSet.has(file) || (appPrefix && pathSet.has(`${appPrefix}${file}`))) {
+    // Accept lockfile at REPO ROOT (most common in monorepos) OR at the
+    // detected app root (single-package projects in subfolders).
+    if (rootPathSet.has(file) || (appPrefix && rootPathSet.has(`${appPrefix}${file}`))) {
       lockfile_kind = kind; break
     }
   }
   const has_lockfile = !!lockfile_kind
 
-  const has_license          = paths.some(p => /^LICENSE(\.[a-zA-Z0-9]+)?$/i.test(p))
-  const has_contributing     = paths.some(p => /^CONTRIBUTING\.md$/i.test(p))
-  const has_changelog        = paths.some(p => /^CHANGELOG\.md$/i.test(p))
-  const has_code_of_conduct  = paths.some(p => /^CODE_OF_CONDUCT\.md$/i.test(p))
+  const has_license          = rootPaths.some(p => /^LICENSE(\.[a-zA-Z0-9]+)?$/i.test(p))
+  const has_contributing     = rootPaths.some(p => /^CONTRIBUTING\.md$/i.test(p))
+  const has_changelog        = rootPaths.some(p => /^CHANGELOG\.md$/i.test(p))
+  const has_code_of_conduct  = rootPaths.some(p => /^CODE_OF_CONDUCT\.md$/i.test(p))
 
   // Skill-form signals · used by form_factor='skill' branch in slot math.
   // Detection mirrors detectFormFactor() — kept in sync but evaluated again
   // here so the booleans land in `signals` for both Claude evidence and
-  // deterministic scoring.
-  const has_skill_canonical = paths.some(p => /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(p))
-  const has_skill_md        = pathSet.has('SKILL.md') || has_skill_canonical
-  const has_plugin_manifest = paths.some(p => /^\.claude-plugin\/(marketplace|plugin)\.json$/.test(p))
+  // deterministic scoring. SKILL.md / .claude-plugin live at root.
+  const has_skill_canonical = rootPaths.some(p => /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(p))
+  const has_skill_md        = rootPathSet.has('SKILL.md') || has_skill_canonical
+  const has_plugin_manifest = rootPaths.some(p => /^\.claude-plugin\/(marketplace|plugin)\.json$/.test(p))
   // Frontmatter validity: read the canonical or root SKILL.md (whichever we
   // find first) and check for both `name` and `description` YAML fields.
   // description length is surfaced as a separate signal — short descriptions
@@ -805,7 +821,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
   let skill_frontmatter_valid = false
   let skill_description_chars = 0
   if (has_skill_md) {
-    const skillPath = paths.find(p => /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(p)) ?? (pathSet.has('SKILL.md') ? 'SKILL.md' : null)
+    const skillPath = rootPaths.find(p => /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(p)) ?? (rootPathSet.has('SKILL.md') ? 'SKILL.md' : null)
     if (skillPath) {
       const skillText = await ghText(`/contents/${skillPath}?ref=${defBranch}`)
       if (skillText) {
