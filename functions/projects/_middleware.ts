@@ -78,9 +78,9 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     return passthrough
   }
 
-  // Variant routing · ?og=encore | ?og=milestone | ?og=tweet, default 'audit'
+  // Variant routing · ?og=encore | ?og=milestone | ?og=tweet | ?og=trajectory, default 'audit'
   const ogParam   = url.searchParams.get('og')
-  const ogKind    = ogParam === 'encore' || ogParam === 'milestone' || ogParam === 'tweet' ? ogParam : 'audit'
+  const ogKind    = ogParam === 'encore' || ogParam === 'milestone' || ogParam === 'tweet' || ogParam === 'trajectory' ? ogParam : 'audit'
   const milestone = url.searchParams.get('milestone') ?? ''
   const ogQuery   = ogKind === 'audit'
     ? ''

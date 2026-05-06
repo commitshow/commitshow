@@ -122,15 +122,89 @@ const TEMPLATES = [
   { id: 'd', render: templateD },
 ] as const
 
+// ── Trajectory templates · narrate the climb (start → end · days · band).
+// Used when kind='trajectory' (special events like graduation / encore).
+// Each takes a richer input shape with the start/end scores + days span.
+type TrajectoryInput = {
+  name:        string
+  startScore:  number
+  endScore:    number
+  delta:       number
+  days:        number
+  band:        string
+  url:         string
+}
+
+function trajectoryA(t: TrajectoryInput): string {
+  // Climb narrative
+  const lines: string[] = []
+  lines.push(`${t.name} · ${t.startScore} → ${t.endScore} on commit.show`)
+  lines.push('')
+  lines.push(`+${t.delta} pts in ${t.days} day${t.days === 1 ? '' : 's'} · band ${t.band}`)
+  lines.push('')
+  lines.push(t.url)
+  return lines.join('\n')
+}
+
+function trajectoryB(t: TrajectoryInput): string {
+  // Receipt framing
+  const lines: string[] = []
+  lines.push(`audition arc · ${t.name}`)
+  lines.push('')
+  lines.push(`day 0  · ${t.startScore} / 100`)
+  lines.push(`day ${t.days} · ${t.endScore} / 100`)
+  lines.push('')
+  lines.push(`band ${t.band} · audited by the engine, auditioned for Scouts`)
+  lines.push(t.url)
+  return lines.join('\n')
+}
+
+function trajectoryC(t: TrajectoryInput): string {
+  // Question / curiosity hook
+  const lines: string[] = []
+  lines.push(`how does an AI-built project go from ${t.startScore} to ${t.endScore} in ${t.days} day${t.days === 1 ? '' : 's'}?`)
+  lines.push('')
+  lines.push(`${t.name} · the trajectory ↓`)
+  lines.push(t.url)
+  return lines.join('\n')
+}
+
+function trajectoryD(t: TrajectoryInput): string {
+  // Minimal · let the card carry the story
+  const lines: string[] = []
+  lines.push(`${t.name} · ${t.endScore} / 100 · band ${t.band}`)
+  lines.push('')
+  lines.push(`+${t.delta} over ${t.days} day${t.days === 1 ? '' : 's'} of audits.`)
+  lines.push('')
+  lines.push(t.url)
+  return lines.join('\n')
+}
+
+const TRAJECTORY_TEMPLATES = [
+  { id: 'ta', render: trajectoryA },
+  { id: 'tb', render: trajectoryB },
+  { id: 'tc', render: trajectoryC },
+  { id: 'td', render: trajectoryD },
+] as const
+
 function pickTemplate(seedString: string): typeof TEMPLATES[number] {
+  const idx = Math.abs(djb2(seedString)) % TEMPLATES.length
+  return TEMPLATES[idx]
+}
+
+function pickTrajectoryTemplate(seedString: string): typeof TRAJECTORY_TEMPLATES[number] {
+  const idx = Math.abs(djb2(seedString)) % TRAJECTORY_TEMPLATES.length
+  return TRAJECTORY_TEMPLATES[idx]
+}
+
+function djb2(s: string): number {
   // Tiny stable hash · djb2-ish. Avoids needing crypto.
   let h = 5381
-  for (let i = 0; i < seedString.length; i++) {
-    h = ((h << 5) + h) + seedString.charCodeAt(i)
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) + s.charCodeAt(i)
     h |= 0
   }
-  const idx = Math.abs(h) % TEMPLATES.length
-  return TEMPLATES[idx]
+  return h
 }
 
 function truncate(s: string, max: number): string {
@@ -203,10 +277,15 @@ Deno.serve(async (req) => {
     .maybeSingle()
   const hasToken = !!(tokRow && (tokRow as { access_token?: string }).access_token)
 
-  let payload: { project_id?: string }
+  let payload: { project_id?: string; kind?: string }
   try { payload = await req.json() } catch { return json({ error: 'invalid json' }, 400) }
   const projectId = payload.project_id
   if (!projectId) return json({ error: 'project_id required' }, 400)
+  // Card kind · 'tweet' (default · static score card · score-cross trigger)
+  // or 'trajectory' (climb arc card · special events like graduation /
+  // encore). Determines BOTH the og:image variant we point X at AND
+  // which template family renders the tweet body.
+  const kind = (payload.kind === 'trajectory' ? 'trajectory' : 'tweet') as 'tweet' | 'trajectory'
 
   // Load project + latest snapshot.
   const { data: project, error: pErr } = await admin
@@ -262,16 +341,52 @@ Deno.serve(async (req) => {
   const topConcern  = rich?.scout_brief?.weaknesses?.[0]?.bullet ?? null
   const scope       = ghSig?.scanned_scope ?? null
 
-  // Render template · stable per (project_id, score) so retries don't reroll.
-  const template = pickTemplate(`${projectId}:${score}`)
-  const tweetText = template.render({
-    name:        project.project_name,
-    score,
-    scope,
-    topStrength,
-    topConcern,
-    url:         `https://commit.show/projects/${project.id}`,
-  })
+  // URL the tweet links to · ?og=trajectory swaps the page's og:image
+  // to the trajectory PNG (via /functions/projects/_middleware.ts), so
+  // X unfurls the climb arc card instead of the static score card.
+  const shareUrl = kind === 'trajectory'
+    ? `https://commit.show/projects/${project.id}?og=trajectory`
+    : `https://commit.show/projects/${project.id}`
+
+  // Render template · stable per (project_id, score, kind) so retries
+  // don't reroll. Trajectory kind uses richer input pulled from the
+  // snapshot timeline (start, end, days, delta).
+  let templateId: string
+  let tweetText: string
+  if (kind === 'trajectory') {
+    // Pull the full snapshot arc to compute start/end/delta/days.
+    const { data: arc } = await admin
+      .from('analysis_snapshots')
+      .select('created_at, score_total')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .limit(30)
+    const pts = (arc ?? []) as Array<{ created_at: string; score_total: number }>
+    if (pts.length < 2) {
+      return json({ skipped: true, reason: 'trajectory_needs_2_snapshots', snapshot_count: pts.length })
+    }
+    const startScore = pts[0].score_total
+    const endScore   = pts[pts.length - 1].score_total
+    const t0 = new Date(pts[0].created_at).getTime()
+    const tN = new Date(pts[pts.length - 1].created_at).getTime()
+    const days  = Math.max(0, Math.round((tN - t0) / 86400_000))
+    const delta = endScore - startScore
+    const band  = score >= 85 ? 'encore' : score >= 70 ? 'strong' : score >= 50 ? 'building' : 'early'
+    const tpl   = pickTrajectoryTemplate(`${projectId}:${endScore}`)
+    templateId  = tpl.id
+    tweetText   = tpl.render({ name: project.project_name, startScore, endScore, delta, days, band, url: shareUrl })
+  } else {
+    const tpl  = pickTemplate(`${projectId}:${score}`)
+    templateId = tpl.id
+    tweetText  = tpl.render({
+      name:        project.project_name,
+      score,
+      scope,
+      topStrength,
+      topConcern,
+      url:         shareUrl,
+    })
+  }
 
   // Truncate to 280 chars (X hard limit). Templates are ~250 chars
   // headroom but a long project name + concern can push over.
@@ -282,33 +397,35 @@ Deno.serve(async (req) => {
     await admin.from('auto_tweets').insert({
       project_id:    projectId,
       score_at_post: score,
-      template_used: template.id,
+      template_used: templateId,
       status:        'skipped',
       error_message: 'no_x_token',
-      payload:       { tweet_text: finalText, scope, topStrength, topConcern },
+      payload:       { tweet_text: finalText, scope, topStrength, topConcern, kind },
     })
     return json({
       skipped:    true,
       reason:     'no_x_token',
       dry_run:    true,
-      template:   template.id,
+      kind,
+      template:   templateId,
       tweet_text: finalText,
     })
   }
 
-  // Idempotent dedupe key · same project + same score → same key, so a
-  // retry of analyze-project doesn't double-post. send-tweet's
-  // x_share_log unique check converts duplicates to a no-op return.
-  const dedupeKey = `auto:${projectId}:${score}`
+  // Idempotent dedupe key · includes kind so the same project can have
+  // both a tweet card (score-cross) and a trajectory card (encore) post
+  // without colliding. send-tweet's x_share_log unique check converts
+  // duplicates to a no-op return.
+  const dedupeKey = `auto:${projectId}:${kind}:${score}`
   const post = await postViaSendTweet(SUPABASE_URL, SERVICE_KEY, finalText, dedupeKey)
   if (!post.ok) {
     await admin.from('auto_tweets').insert({
       project_id:    projectId,
       score_at_post: score,
-      template_used: template.id,
+      template_used: templateId,
       status:        'failed',
       error_message: `send-tweet ${post.status}: ${post.body.slice(0, 500)}`,
-      payload:       { tweet_text: finalText, scope, topStrength, topConcern },
+      payload:       { tweet_text: finalText, scope, topStrength, topConcern, kind },
     })
     return json({ error: 'send_tweet_failed', status: post.status, body: post.body }, 502)
   }
@@ -316,17 +433,18 @@ Deno.serve(async (req) => {
   await admin.from('auto_tweets').insert({
     project_id:    projectId,
     score_at_post: score,
-    template_used: template.id,
+    template_used: templateId,
     status:        'posted',
     tweet_id:      post.id,
     tweet_url:     post.tweet_url,
-    payload:       { tweet_text: finalText, scope, topStrength, topConcern },
+    payload:       { tweet_text: finalText, scope, topStrength, topConcern, kind },
   })
 
   return json({
     ok:        true,
+    kind,
     tweet_id:  post.id,
     tweet_url: post.tweet_url,
-    template:  template.id,
+    template:  templateId,
   })
 })
