@@ -144,8 +144,9 @@ interface GitHubInfo {
     has_contributing: boolean
     has_changelog: boolean
     has_code_of_conduct: boolean
-    is_monorepo: boolean                 // workspaces / turbo.json / pnpm-workspace.yaml
+    is_monorepo: boolean                 // workspaces / turbo.json / pnpm-watch / yarn-workspaces
     app_root: string                     // detected sub-folder app root ('' when at repo root)
+    scanned_scope: string                // human-readable description for transparency (monorepo big-repo case)
     form_factor: string                  // mirror of gh.form_factor for snapshot persistence (B18)
     is_saas: boolean                     // SaaS sub-form (app + api routes + db + auth) · 2026-04-29
     has_auth_signals: boolean            // auth lib / middleware / sign-in routes detected
@@ -414,6 +415,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_license: false, has_contributing: false, has_changelog: false, has_code_of_conduct: false,
       is_monorepo: false,
       app_root: '',
+      scanned_scope: 'fallback · github fetch failed (rate limit or repo unreachable)',
       form_factor: 'unknown',
       is_saas: false,
       has_auth_signals: false,
@@ -720,6 +722,35 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
     pathSet.has('pnpm-workspace.yaml') ||
     paths.some(p => /^packages\/[^/]+\/package\.json$/.test(p)) ||
     paths.some(p => /^apps\/[^/]+\/package\.json$/.test(p))
+
+  // ── Scanned scope · transparency for monorepos ──
+  // Big monorepos (supabase/supabase, vercel/next.js, cal.com) trigger
+  // detector hits in dashboard / marketing / examples directories that
+  // outsiders read as if they applied to the core service. We can't
+  // perfectly auto-pick the "real" sub-app, but we CAN print exactly
+  // which workspace dirs the scan covered so a reader sees the scope
+  // before judging the concerns. CLI + web both render this verbatim.
+  let scanned_scope: string
+  if (!is_monorepo) {
+    scanned_scope = app_root ? `single project · root at ${app_root}/` : 'single project · root'
+  } else {
+    const workspaceCount = new Map<string, number>()
+    for (const p of paths) {
+      const m = p.match(/^(apps|packages|services)\/([^/]+)\//)
+      if (m) {
+        const key = `${m[1]}/${m[2]}`
+        workspaceCount.set(key, (workspaceCount.get(key) ?? 0) + 1)
+      }
+    }
+    const sorted = [...workspaceCount.entries()].sort((a, b) => b[1] - a[1])
+    if (sorted.length === 0) {
+      scanned_scope = 'monorepo · root only (no apps/* or packages/* workspaces detected)'
+    } else {
+      const top = sorted.slice(0, 3).map(([k]) => k)
+      const more = sorted.length > 3 ? ` + ${sorted.length - 3} more` : ''
+      scanned_scope = `monorepo · ${sorted.length} sub-app${sorted.length === 1 ? '' : 's'} · audit covers ${top.join(' + ')}${more}`
+    }
+  }
 
   // TypeScript strict mode (strip line/block comments before JSON.parse —
   // tsconfig.json officially supports comments).
@@ -1645,6 +1676,7 @@ async function inspectGitHub(url: string): Promise<GitHubInfo> {
       has_code_of_conduct,
       is_monorepo,
       app_root,                         // detected sub-folder when no root package.json (e.g. 'website')
+      scanned_scope,                    // human-readable description of what was actually audited (transparency for monorepos)
       form_factor,                      // mirror of gh.form_factor so snapshot.github_signals retains it (B18)
       is_saas,                          // SaaS sub-form (app + api routes + db + auth) · 2026-04-29
       has_auth_signals,

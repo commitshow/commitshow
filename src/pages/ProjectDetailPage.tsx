@@ -63,6 +63,11 @@ export function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [snapshotResult, setSnapshotResult] = useState<AnalysisResult | null>(null)
   const [vibeConcerns, setVibeConcerns] = useState<any>(null)
+  // Scanned-scope transparency · for monorepo audits, names the workspace
+  // dirs that were actually traversed. Disarms the "you said our service
+  // fails X" trap when the scan only saw a sub-app of a big monorepo
+  // (apps/studio in supabase/supabase, etc.).
+  const [scannedScope, setScannedScope] = useState<string | null>(null)
   const [nativeBreakdown, setNativeBreakdown] = useState<NativeAppBreakdown | null>(null)
   const [nativeFootguns,  setNativeFootguns]  = useState<NativeFootguns | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
@@ -132,12 +137,14 @@ export function ProjectDetailPage() {
         const lhRaw = (latest.lighthouse ?? {}) as { performance?: number; accessibility?: number; bestPractices?: number; seo?: number }
         const ghSig = (latest.github_signals ?? {}) as {
           vibe_concerns?: unknown
+          scanned_scope?: string
           native_permissions_overreach?: NativeFootguns['permissions']
           native_secrets_in_bundle?:     NativeFootguns['secrets_in_bundle']
           has_privacy_manifest?:         boolean
           has_permissions_manifest?:     boolean
         }
         setVibeConcerns(ghSig.vibe_concerns ?? null)
+        setScannedScope(ghSig.scanned_scope ?? null)
         // Native-app distribution + permissions block (only present when
         // form_factor='native_app'). Pulled from rich_analysis.breakdown.
         const richBreakdown = (latest.rich_analysis as { breakdown?: NativeAppBreakdown } | null)?.breakdown ?? null
@@ -503,6 +510,29 @@ export function ProjectDetailPage() {
                     · {project.creator_grade}
                   </span>
                 </div>
+
+                {/* Scanned-scope · transparency for monorepo audits.
+                    For supabase / vercel / cal.com style big monorepos,
+                    states what was actually traversed so a reader doesn't
+                    interpret apps/studio findings as core-service issues.
+                    Only renders when github_signals reports it (newer
+                    snapshots · older audits stay quiet rather than
+                    surfacing a stale empty value). */}
+                {scannedScope && (
+                  <div
+                    className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] px-2 py-1"
+                    style={{
+                      background: 'rgba(96,165,250,0.08)',
+                      color: 'rgba(96,165,250,0.95)',
+                      border: '1px solid rgba(96,165,250,0.30)',
+                      borderRadius: '2px',
+                    }}
+                    title="Names the workspace dirs the scan actually traversed. Useful when a project is a monorepo — concerns may apply to a sub-app, not the whole org."
+                  >
+                    <span style={{ opacity: 0.7 }}>SCANNED · </span>
+                    <span>{scannedScope}</span>
+                  </div>
+                )}
               </div>
 
               {/* Action row · 2026-05-05 trimmed to engagement primitives only.
