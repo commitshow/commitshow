@@ -321,10 +321,9 @@ function cardTweet(p: ProjectCard): string {
     <!-- Project name -->
     <text x="600" y="190" text-anchor="middle" font-family="Playfair Display, Georgia, serif" font-size="36" fill="#F8F5EE" letter-spacing="-0.5">${projName}</text>
 
-    <!-- Score box · ASCII art digits in ANSI Shadow figlet (same as
-         CLI banner). Box auto-sizes to glyph block. /100 + band line
-         lives BELOW the box · no overflow. -->
-    <rect x="${boxX}" y="${boxY}" width="${boxWidth}" height="${boxHeight}" fill="rgba(0,0,0,0.35)" stroke="${accent}" stroke-width="3" rx="2"/>
+    <!-- Score · ASCII art digits in ANSI Shadow figlet (same as CLI
+         banner). No frame · the glyphs themselves carry the visual
+         weight; an extra rect makes the layout feel boxed-in. -->
     ${asciiBlock}
     <text x="600" y="${boxY + boxHeight + 28}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-size="18" fill="rgba(248,245,238,0.7)" letter-spacing="3">${escapeXml(scoreText)} / 100  ·  BAND · ${escapeXml(p.band.toUpperCase())}</text>
 
