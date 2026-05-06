@@ -110,19 +110,32 @@ for ENTRY in "${TARGETS[@]}"; do
   RX=$(echo    "$MATCH" | jq -r '.reactions.totalCount')
   CN=$(echo    "$MATCH" | jq -r '.comments.totalCount')
 
+  # Compute age in hours so the heuristic distinguishes "too early to
+  # tell" from "weak after 24h+." A fresh post with 0/0 is normal,
+  # not a signal. macOS `date -j -f` parses the input as LOCAL time
+  # by default · TZ=UTC forces it to read the trailing Z literally.
+  CREATED_EPOCH=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$AT" "+%s" 2>/dev/null \
+                || date -u -d "$AT" "+%s" 2>/dev/null || echo 0)
+  NOW_EPOCH=$(date -u "+%s")
+  AGE_HOURS=$(( (NOW_EPOCH - CREATED_EPOCH) / 3600 ))
+
   printf '   %s● posted%s  %s\n' "$GREEN" "$RESET" "$URL"
-  printf '   %s%s · created %s · %s reactions · %s comments%s\n' \
-    "$DIM" "$TITLE" "$AT" "$RX" "$CN" "$RESET"
+  printf '   %s%s · created %s (%sh ago) · %s reactions · %s comments%s\n' \
+    "$DIM" "$TITLE" "$AT" "$AGE_HOURS" "$RX" "$CN" "$RESET"
 
   if [ "$CN" != "0" ]; then
     echo "$MATCH" | jq -r '.comments.nodes[]? | "   ↳ @\(.author.login // "?"): \(.bodyText // "" | gsub("\n"; " ") | .[0:100])"'
   fi
 
-  # 3) Iteration heuristic from memory/project_outreach_loop.md
-  if [ "$RX" -ge 5 ] && [ "$CN" -ge 1 ]; then
+  # 3) Iteration heuristic · age-aware (memory/project_outreach_loop.md)
+  if [ "$AGE_HOURS" -lt 24 ]; then
+    printf '   %sheuristic: too fresh (<24h) · check again in 24-48h before drawing conclusions%s\n' "$DIM" "$RESET"
+  elif [ "$RX" -ge 5 ] && [ "$CN" -ge 1 ]; then
     printf '   %sheuristic: positive · proceed with next target (mild tone tweak)%s\n' "$GREEN" "$RESET"
   elif [ "$RX" -le 4 ] && [ "$CN" -eq 0 ]; then
-    printf '   %sheuristic: weak signal · rewrite next draft more usage-driven before posting%s\n' "$DIM" "$RESET"
+    printf '   %sheuristic: weak signal after %sh · rewrite next draft more usage-driven before posting%s\n' "$DIM" "$AGE_HOURS" "$RESET"
+  else
+    printf '   %sheuristic: mixed (rx=%s · cn=%s · %sh) · check the comment tone before deciding%s\n' "$DIM" "$RX" "$CN" "$AGE_HOURS" "$RESET"
   fi
   echo
 done
