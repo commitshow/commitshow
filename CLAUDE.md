@@ -2007,6 +2007,101 @@ X → commit.show:
 | 앱 상세 타임라인 | X 포스트 자동 수집 | 방문자 체류 증가·발견 경로 확장 |
 | 졸업식 영상 공식 게재 | 졸업 확정 | 미디어 연계·외부 노출 |
 
+### 18-B.4 Auto-tweet 파이프라인 (V1 · 2026-05-06 ~ 05-07 구현)
+
+**목적**: 어떤 프로젝트가 audit 후 score≥85 를 찍으면 공식 @commitshow 계정에서 자동 트윗 발송. CLI 든 웹이든 외부 누군가 우리 audit 을 돌렸다는 사실 자체가 marketing 자산이고, 무대(공식 X 타임라인)에 자동으로 올라간다.
+
+**4-gate eligibility** (auto-tweet Edge Function 안에서 enforce):
+1. `score_total >= 85`
+2. `projects.status = 'preview'` (CLI/익명 walk-on track 만 — 회원 본인이 올린 건 본인이 직접 공유)
+3. **14-day cooldown**: `auto_tweets` 테이블에 같은 project 의 `posted_at > now() - 14d` 행이 있으면 skip
+4. `projects.social_share_disabled = false` (per-project opt-out · 누구나 URL 알면 토글 가능)
+
+**4 templates · 안정 hash 로테이션**:
+- 4 템플릿 (a/b/c/d) · `djb2(${projectId}:${score}) % 4` 로 결정 → 같은 project 가 같은 점수로 두 번 검사돼도 같은 카피 (재현성)
+- 모든 템플릿이 OG PNG 카드 + project URL 동봉 → X timeline 에서 카드 unfurl
+
+**OG PNG 카드** (`og-png` Edge Function · resvg-wasm + JetBrains Mono):
+- 1200×630 PNG · ANSI Shadow figlet score (BIG_DIGITS 6-row unicode block art) · 3-axis bars + top strength/concern + scope chip
+- 항상 골드 (`#F0C040`), 점수 박스 frame 없음, 중앙 정렬 (사용자 피드백 반영 · §4 톤 정합)
+- X 가 SVG 거부하므로 server-side SVG→PNG · 5-min edge cache · `?t=` cache-bust 지원
+- 콜드 ~3.5s · 워밍 1.6s
+
+**twitter:image meta wiring**:
+- `/functions/projects/_middleware.ts` 신설 — 기존 singular `/project/<slug>` 미들웨어가 못 잡던 plural+UUID 라우트 (`/projects/<uuid>`) 처리
+- HTMLRewriter + MetaRewriter 패턴으로 `og:image` / `twitter:image` 를 `https://tekemubwihsjdzittoqf.supabase.co/functions/v1/og-png?id=<id>&kind=tweet` 로 swap
+- 결과: 누구나 project URL 을 X 에 paste 만 해도 카드가 펼쳐진다
+
+**X API 호출 경로** — `send-tweet` 위임 (DRY):
+- auto-tweet 은 X API 직접 호출 X · 기존 `send-tweet` Edge Function 한테 `kind:'official'` 로 위임
+- `x_official_account` 테이블 (singleton) 의 access_token + refresh_token + scopes 재사용 · token expiry 60s 내 자동 refresh
+- `x_share_log` 의 dedupe_key 패턴 그대로 (`auto:${projectId}:${score}`) → 재시도 idempotent
+- send-tweet · auto-tweet · og-png · audit-preview 모두 `verify_jwt = false` · 함수 내부에서 자체 인증
+
+**트리거 위치**:
+- `analyze-project` 가 새 snapshot insert 한 직후 (initial / resubmit 만 · weekly cron 은 트윗 안 날림)
+- `EdgeRuntime.waitUntil(fetch(/auto-tweet, …))` · fire-and-forget · 사용자 응답 지연 0
+
+**DB 스키마** — `supabase/migrations/20260507_auto_tweets.sql`:
+```
+auto_tweets (id · project_id · posted_at · tweet_id · tweet_url ·
+             score_at_post · template_used · status · error_message · payload jsonb)
+projects.social_share_disabled boolean DEFAULT false
+```
+- service_role only (admin-tier · `tweet_url` 만 향후 public view 로 expose 가능)
+- 14-day cooldown 은 unique partial index 대신 Edge Function pre-INSERT SELECT 로 enforce (PG 가 date-bucket index 표현식을 IMMUTABLE 로 인정 안 함)
+
+**옵트아웃 UX**:
+- `projects.social_share_disabled` 토글 — 익명 walk-on 도 anyone-with-URL 로 끌 수 있음 (creator_id IS NULL 이면 어떤 authenticated 사용자든 끄기 허용 · friction 은 URL 자체)
+- ProjectDetailPage 푸터 버튼은 V1.5 후속 (현재는 RPC/SQL 로 토글 가능)
+
+---
+
+## 18-C. GitHub 오픈소스 acquisition 트랙 (2026-05-05 ~ 05-07 시작)
+
+**문제 인식**: 우리 사용자(바이브코더)는 GitHub · Cursor · Claude Code · MCP · aider · continue 같은 도구 생태계 안에 산다. commit.show 도 거기로 들어가야 한다 — landing page 에 광고 띄우는 게 아니라.
+
+### 18-C.1 commitshow/audit-action (GitHub Action)
+
+- **위치**: `github.com/commitshow/audit-action` (v1.0.1 · separate repo)
+- **구조**: composite shell action — `npx commitshow@latest audit ... --json` 호출 후 score band 비교 · sticky PR comment (marker `<!--commitshow-audit-action-->`) · branding `gray-dark` (네이비 톤 · yellow 거부 후 톤 변경)
+- **Marketplace 등록**: v1.0.0 publish 완료 · v1.0.1 은 사용자 수동 publish click 대기 (§17 · API 없음)
+- **Pre-wired template**: `commitshow/template-saas-starter` (is_template=true) · `.github/workflows/audit.yml` 박힘 → fork 만 하면 audit-on-PR 즉시 동작
+- **Web AuditCiBlock** + CLI post-audit prompt: 사용자가 audit 결과 본 직후 "PR 마다 audit 돌리고 싶나?" CTA 제시 (initial 진입점이지만 사용자 매뉴얼 수동 적용 — passive marketplace 만으로는 부족)
+- **commit.show repo 자체 self-audit**: `.github/workflows/audit.yml` · 모든 PR 에 sticky comment · merge gate 는 X (현재 advisory)
+
+### 18-C.2 commitshow org page · `.github` 프로필
+
+- `github.com/commitshow/.github/profile/README.md` — org gateway · 5-repo table · Topics · Discussions · welcome post
+- 5 repos: `commitshow` (web/main) · `cli` · `audit-action` · `template-saas-starter` · `.github`
+- Topics 표준화 + Discussions 활성
+
+### 18-C.3 Tool 생태계 outreach loop
+
+5개 외부 repo / community 에 acquisition push (CEO 가 직접 게시 · 톤은 북미 원어민 · 과장 없음):
+
+| 채널 | 종류 | 상태 |
+|---|---|---|
+| `continuedev/continue` Discussions | GitHub Discussions | ✅ #12309 게시 완료 |
+| Cursor forum | 외부 forum | ☐ 드래프트 ready (`/tmp/commitshow-discussion-drafts/`) |
+| `claude-code` Discord | Discord | ☐ 드래프트 ready |
+| `aider` Discord | Discord | ☐ 드래프트 ready |
+| MCP Discord | Discord | ☐ 드래프트 ready |
+
+**모니터링** — `scripts/outreach-status.sh`: 5개 채널 reaction/reply 폴링 · age-aware heuristic ('5분 전 글에 0 reaction' 은 약한 시그널로 안 친다 · macOS TZ 보정 포함)
+
+### 18-C.4 awesome-list PR
+
+- ComposioHQ 류 awesome-list 들에 commit.show / audit-action 항목 PR — CI 가 카테고리 내 알파벳 순서 강제하므로 끝에 append 금지 · 정확한 위치 계산해서 삽입 (memory 기록됨)
+
+### 18-C.5 commit.show audit 정확도 보강 (acquisition 의 전제)
+
+외부에서 우리 audit 을 돌렸을 때 점수가 합당해야 게시·공유가 의미 있다. 그래서 같이 진행:
+- **Monorepo workspace auto-pick** (3-tier · §6 audit pillar) — Phase 0 explicit override (`--workspace`) → Phase 1 priority name (`apps/web` · `packages/<repo-name>` 등) → Phase 2 repo-name match with suffix strip (`.js` `.ts` `-js` `-ts` `.io` `.dev`) → Phase 3 absolute file count
+- **rootPaths preserved**: env_committed / lockfile / LICENSE / CI workflow 같은 root-level 시그널은 workspace shadow 후에도 root 경로로 검사 (path-shadow regression 회복 · supabase 점수 35→39 복구)
+- **scanned_scope 노출**: github_signals 에 어느 sub-app 을 봤는지 명시 → "vercel 95 · supabase 76" 식 점수 차이를 "우린 이 workspace 만 봤다" 로 변호 가능 (사용자 피드백: "수파베이스가 85 라는 게 사람들이 받아들이기 힘들거야 — 근거가 있어야")
+- **CLI `--workspace` flag**: `commitshow audit github.com/owner/repo --workspace apps/web` · 인라인 URL path (`github.com/owner/repo/tree/main/apps/web`) 도 자동 감지
+
 ---
 
 ## 19. Claude Code 작업 가이드
@@ -2151,7 +2246,8 @@ Follow-up · 작은 정리
 ---
 
 *이 파일은 프로젝트가 진행될수록 업데이트한다.*
-*마지막 업데이트: 2026-05-06 · §16 / §20.2 backlog audit · 백로그가 실제 코드 상태와 어긋나있던 것 정리 (P5b · P7 OAuth+Stripe · P8 Season-end · P9b Library v2 모두 ✅ 라이브 확인 후 표시 갱신). + §17 GitHub acquisition 트랙 (audit-action / org page / template / outreach loop) 시작 *
+*마지막 업데이트: 2026-05-07 · §18-B.4 auto-tweet 파이프라인 (4-gate · 4 templates · OG PNG card · send-tweet 위임) + §18-C GitHub acquisition 트랙 정리 (audit-action v1.0.1 · org page · template · outreach loop · monorepo workspace auto-pick · scanned_scope 노출 · CLI --workspace) *
+*이전 마지막 업데이트: 2026-05-06 · §16 / §20.2 backlog audit · 백로그가 실제 코드 상태와 어긋나있던 것 정리*
 *이전 마지막 업데이트: 2026-04-24 · **commit.show PRD v2** (통합 기획서 2026-04-19 + Creator Community 2026-04-23 기반 재정비 + §15 Intent-first/Trending UX)*
 
 *v2 핵심 delta (§1-A)*:

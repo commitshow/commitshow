@@ -12,3 +12,15 @@ verify_jwt = false
 
 [functions.apply-artifact]
 verify_jwt = false
+
+[functions.send-tweet]
+verify_jwt = false
+
+[functions.auto-tweet]
+verify_jwt = false
+
+[functions.og-png]
+verify_jwt = false
+
+[functions.audit-preview]
+verify_jwt = false

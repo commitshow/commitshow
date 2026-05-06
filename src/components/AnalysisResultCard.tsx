@@ -944,6 +944,20 @@ function ScoutBriefSection({
   const visibleWeaknesses = hasFullAccess ? allWeaknesses : allWeaknesses.slice(0, SCOUT_VISIBLE_WEAKNESSES)
   const hiddenCount = Math.max(0, allWeaknesses.length - visibleWeaknesses.length)
   const [copied, setCopied] = useState(false)
+  // First-audition spoon-feed: a coach banner sits above the brief and
+  // gives owners a single obvious next step (copy → paste → re-audit).
+  // Dismissed once globally — returning users have already learned the loop.
+  // localStorage flag flips on explicit dismiss OR after first successful copy.
+  const [coachDismissed, setCoachDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try { return window.localStorage.getItem('coach.fixPrompt.dismissed') === '1' }
+    catch { return false }
+  })
+  const dismissCoach = () => {
+    setCoachDismissed(true)
+    try { window.localStorage.setItem('coach.fixPrompt.dismissed', '1') } catch {}
+  }
+  const showCoach = isOwner && visibleWeaknesses.length > 0 && !coachDismissed
 
   const handleCopyPrompt = async () => {
     const target = projectName && githubUrl
@@ -1028,6 +1042,9 @@ function ScoutBriefSection({
       await navigator.clipboard.writeText(prompt)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+      // Implicit dismissal: once they've copied, the coach has done its job
+      // and the regular header button stays available for next time.
+      dismissCoach()
     } catch (e) {
       console.error('[copy fix prompt] failed', e)
     }
@@ -1035,6 +1052,58 @@ function ScoutBriefSection({
 
   return (
     <div>
+      {showCoach && (
+        <div
+          className="mb-5 p-4 md:p-5"
+          style={{
+            background: 'linear-gradient(180deg, rgba(240,192,64,0.08) 0%, rgba(240,192,64,0.03) 100%)',
+            border: '1px solid rgba(240,192,64,0.32)',
+            borderRadius: '2px',
+          }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--gold-500)' }}>
+              // NEXT STEP · 30 SEC
+            </div>
+            <button
+              type="button"
+              onClick={dismissCoach}
+              className="font-mono text-[10px] tracking-wide"
+              style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+              aria-label="Hide this guide"
+            >
+              hide ×
+            </button>
+          </div>
+          <p className="font-display font-bold text-base md:text-lg leading-snug mb-1" style={{ color: 'var(--cream)' }}>
+            Score landed. Now ship the fixes.
+          </p>
+          <p className="text-xs md:text-sm font-light mb-4" style={{ color: 'rgba(248,245,238,0.7)', lineHeight: 1.6 }}>
+            Copy the fix prompt, paste it into Cursor / Claude Code / your AI tool of choice. It already lists the {visibleWeaknesses.length} concern{visibleWeaknesses.length === 1 ? '' : 's'} below with rules of engagement. Re-audit once patches land.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleCopyPrompt}
+              className="font-mono text-xs tracking-wide px-4 py-2"
+              style={{
+                background:   copied ? 'rgba(63,168,116,0.18)' : 'var(--gold-500)',
+                color:        copied ? '#3FA874' : 'var(--navy-900)',
+                border:       copied ? '1px solid rgba(63,168,116,0.45)' : 'none',
+                borderRadius: '2px',
+                cursor:       'pointer',
+                fontWeight:   700,
+              }}
+              aria-label="Copy fix prompt for AI tool"
+            >
+              {copied ? '✓ Copied · paste in your AI tool' : 'Copy fix prompt →'}
+            </button>
+            <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              then ⌘V in Cursor
+            </span>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
           // SCOUT BRIEF · {strengths.length}+{allWeaknesses.length}
