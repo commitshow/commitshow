@@ -62,6 +62,28 @@ export function LeaderboardPage() {
     [rows],
   )
 
+  // Quadrant breakdown · "5 in graduation zone, 23 in rookie circle" gives
+  // a one-glance snapshot of the league's overall shape. Cuts at the same
+  // excellence thresholds as the dashed crosshair so the visual and the
+  // numeric strip agree.
+  const quadrants = useMemo(() => {
+    let graduationZone = 0   // top-right
+    let auditOnly      = 0   // bottom-right (engine likes it · scouts cool)
+    let scoutOnly      = 0   // top-left    (scouts believe · engine concerns)
+    let rookieCircle   = 0   // bottom-left
+    rows.forEach(p => {
+      const a = p.score_auto     ?? 0
+      const s = p.score_forecast ?? 0
+      const auditHigh = a >= AUDIT_EXCELLENT
+      const scoutHigh = s >= SCOUT_EXCELLENT
+      if (auditHigh && scoutHigh) graduationZone++
+      else if (auditHigh)         auditOnly++
+      else if (scoutHigh)         scoutOnly++
+      else                        rookieCircle++
+    })
+    return { graduationZone, auditOnly, scoutOnly, rookieCircle, total: rows.length }
+  }, [rows])
+
   return (
     <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -265,6 +287,36 @@ export function LeaderboardPage() {
           </div>
         </div>
 
+        {/* Quadrant breakdown · league pulse strip */}
+        {!loading && quadrants.total > 0 && (
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+            <QuadStat
+              label="GRADUATION ZONE"
+              count={quadrants.graduationZone}
+              hint="audit + scout both high"
+              tone="#F0C040"
+            />
+            <QuadStat
+              label="ENGINE FAVORITES"
+              count={quadrants.auditOnly}
+              hint="strong audit · scouts not yet"
+              tone="#00D4AA"
+            />
+            <QuadStat
+              label="SCOUT FAVORITES"
+              count={quadrants.scoutOnly}
+              hint="scouts believe · audit catching up"
+              tone="#7AA8FF"
+            />
+            <QuadStat
+              label="ROOKIE CIRCLE"
+              count={quadrants.rookieCircle}
+              hint="early · room to climb"
+              tone="rgba(248,245,238,0.45)"
+            />
+          </div>
+        )}
+
         {/* Legend */}
         <div className="mt-4 flex items-center gap-4 font-mono text-[11px] flex-wrap" style={{ color: 'var(--text-secondary)' }}>
           <Legend tone="#00D4AA" label="graduation-ready · score 75+" />
@@ -285,6 +337,31 @@ function toneFor(d: ProjectDot): string {
   if (d.status === 'graduated' || total >= 75) return '#00D4AA'
   if (total >= 50)                              return '#F0C040'
   return '#6B7280'
+}
+
+function QuadStat({ label, count, hint, tone }: { label: string; count: number; hint: string; tone: string }) {
+  return (
+    <div
+      className="px-3 py-2.5"
+      style={{
+        background:   'rgba(255,255,255,0.025)',
+        borderLeft:   `2px solid ${tone}`,
+        borderRadius: '0 2px 2px 0',
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-0.5">
+        <span className="font-mono text-[10px] tracking-widest" style={{ color: tone }}>
+          {label}
+        </span>
+        <span className="font-display font-bold tabular-nums text-lg" style={{ color: 'var(--cream)' }}>
+          {count}
+        </span>
+      </div>
+      <p className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        {hint}
+      </p>
+    </div>
+  )
 }
 
 function Legend({ tone, label }: { tone: string; label: string }) {

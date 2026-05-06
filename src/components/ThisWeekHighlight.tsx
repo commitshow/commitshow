@@ -1,6 +1,13 @@
-// "This week in Commit" — Top 3 projects by absolute audit delta in the
-// last 7 days. Reads analysis_snapshots since cutoff, keeps the largest
-// delta per project, joins project row for name / thumbnail.
+// "This week in Commit" — Top 3 projects by 7-day BOOKEND delta
+// (latest snapshot − earliest snapshot inside the window). The bookend
+// view rewards cumulative climb (47→52→60→89 reads as +42, not +29)
+// which is the bragging artifact creators actually share to X /
+// LinkedIn — pairs with the trajectory share card (§18-B.4).
+//
+// Earlier version walked single-snapshot deltas client-side and
+// surfaced regressions too. Switched to top_movers_week RPC
+// (positive-only · service-side) so the landing strip becomes
+// the "biggest climbs" view without negative shocks.
 //
 // Landing mount point only. One bright, glanceable row — the 3-minute
 // digest hook per CLAUDE.md §16.2 (P6).
@@ -14,11 +21,11 @@ interface TopMover {
   projectName:   string
   thumbnailUrl:  string | null
   currentScore:  number
+  startScore:    number
   delta:         number
   when:          string
+  snapshots:     number
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000
 
 export function ThisWeekHighlight() {
   const [movers, setMovers] = useState<TopMover[] | null>(null)
@@ -26,58 +33,45 @@ export function ThisWeekHighlight() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const since = new Date(Date.now() - 7 * DAY_MS).toISOString()
-      // Pull every snapshot in the last 7 days that carries a non-zero delta.
-      // A single project can snapshot multiple times in the window — we keep
-      // only the biggest |delta| per project and take the top 3 after that.
-      // currentScore comes from projects.score_total (live, post-trigger),
-      // NOT from snapshot.score_total, so the headline number always matches
-      // what the ladder shows. snapshot.score_total is the score AT audit
-      // time and goes stale the moment any vote/applaud lifts the live total.
-      const { data } = await supabase
-        .from('analysis_snapshots')
-        .select(`
-          project_id, created_at, score_total_delta,
-          project:projects!analysis_snapshots_project_id_fkey(id, project_name, thumbnail_url, status, score_total)
-        `)
-        .gte('created_at', since)
-        .not('score_total_delta', 'is', null)
-        .neq('score_total_delta', 0)
-        .order('created_at', { ascending: false })
-
-      if (cancelled) return
-
-      const bestByProject = new Map<string, TopMover>()
-      ;(data ?? []).forEach((row: unknown) => {
-        const r = row as {
-          project_id:        string
-          created_at:        string
-          score_total_delta: number
-          project:           { id: string; project_name: string; thumbnail_url: string | null; status: string | null; score_total: number } | Array<{ id: string; project_name: string; thumbnail_url: string | null; status: string | null; score_total: number }>
-        }
-        const proj = Array.isArray(r.project) ? r.project[0] : r.project
-        if (!proj) return
-        // Skip CLI preview shadows · they didn't enter the season, so they
-        // shouldn't sit at the top of "this week's movers" on the landing.
-        if (proj.status === 'preview') return
-        const mover: TopMover = {
-          projectId:    r.project_id,
-          projectName:  proj.project_name,
-          thumbnailUrl: proj.thumbnail_url,
-          currentScore: proj.score_total,    // live, matches ladder
-          delta:        r.score_total_delta,
-          when:         r.created_at,
-        }
-        const prev = bestByProject.get(r.project_id)
-        if (!prev || Math.abs(mover.delta) > Math.abs(prev.delta)) {
-          bestByProject.set(r.project_id, mover)
-        }
+      const { data, error } = await supabase.rpc('top_movers_week', {
+        p_window_days: 7,
+        p_limit:       3,
       })
+      if (cancelled) return
+      if (error) { console.error('[ThisWeekHighlight] rpc', error); setMovers([]); return }
+      const rows = (data ?? []) as Array<{
+        project_id:   string
+        project_name: string
+        start_score:  number
+        end_score:    number
+        delta:        number
+        snapshots:    number
+        end_at:       string
+      }>
 
-      const top = Array.from(bestByProject.values())
-        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-        .slice(0, 3)
+      // Hydrate thumbnails — RPC is lean (no joins) so we fetch
+      // thumbnail_url separately. Cheap: at most 3 ids.
+      let thumbs: Record<string, string | null> = {}
+      if (rows.length > 0) {
+        const ids = rows.map(r => r.project_id)
+        const { data: tdata } = await supabase
+          .from('projects')
+          .select('id, thumbnail_url')
+          .in('id', ids)
+        if (cancelled) return
+        thumbs = Object.fromEntries((tdata ?? []).map((t: { id: string; thumbnail_url: string | null }) => [t.id, t.thumbnail_url]))
+      }
 
+      const top: TopMover[] = rows.map(r => ({
+        projectId:    r.project_id,
+        projectName:  r.project_name,
+        thumbnailUrl: thumbs[r.project_id] ?? null,
+        currentScore: r.end_score,
+        startScore:   r.start_score,
+        delta:        r.delta,
+        when:         r.end_at,
+        snapshots:    r.snapshots,
+      }))
       setMovers(top)
     })().catch(err => {
       if (!cancelled) { console.error('[ThisWeekHighlight]', err); setMovers([]) }
@@ -98,7 +92,7 @@ export function ThisWeekHighlight() {
           Top movers this week
         </h2>
         <p className="font-light max-w-lg mb-6" style={{ color: 'var(--text-secondary)' }}>
-          The three products whose audit score shifted the most in the last 7 days.
+          The three biggest audit climbs over the last 7 days · start to current.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -110,9 +104,10 @@ export function ThisWeekHighlight() {
 }
 
 function MoverCard({ rank, mover }: { rank: number; mover: TopMover }) {
-  const positive = mover.delta > 0
-  const tone = positive ? '#00D4AA' : '#F88771'
-  const sign = positive ? '+' : ''
+  // RPC only returns positive movers (climbs) — no need to render a
+  // regression branch.
+  const tone = '#00D4AA'
+  const sign = '+'
 
   return (
     <Link
@@ -169,7 +164,12 @@ function MoverCard({ rank, mover }: { rank: number; mover: TopMover }) {
           {mover.projectName}
         </h3>
         <div className="mt-auto flex items-baseline justify-between font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-          <span>now <strong style={{ color: 'var(--cream)' }}>{mover.currentScore}</strong> / 100</span>
+          <span className="tabular-nums">
+            <span style={{ color: 'var(--text-muted)' }}>{mover.startScore}</span>
+            <span style={{ color: 'var(--text-muted)' }}> → </span>
+            <strong style={{ color: 'var(--cream)' }}>{mover.currentScore}</strong>
+            <span style={{ color: 'var(--text-muted)' }}> / 100</span>
+          </span>
           <span style={{ color: 'var(--text-muted)' }}>{formatRelative(mover.when)}</span>
         </div>
       </div>

@@ -2206,13 +2206,13 @@ git add -A && git commit -m "..." && git push origin main
 
 ```
 P5 잔존 (사용자 노출 카피)
-  ☐ Claude API 프롬프트의 "AI" 잔존 제거 (analyze-project Edge Function)
-  ☐ "AI 분석 리포트" / "AI score" / "AI feedback" 등 잔존 카피 grep+replace
+  ✅ Claude API 프롬프트 "AI" 잔존 — analyze-project line 2631 의 prose-field 룰이 이미 forbidden 처리 (2026-05-07 audit)
+  ✅ 사용자 노출 "AI" 카피 잔존 — 전부 사용자 AI 도구 (Cursor/Claude/Lovable) 지칭 = §19 rule 11 예외 허용. 우리 엔진을 "AI" 라고 부르는 케이스 0건 확인
 
 P6 잔존 (3분 소화 UX · 감정 태그는 ✅ 완료)
-  ☐ 이번 주 하이라이트 카드 (Top 3 movers · 매주 월요일 갱신)
-  ☐ 2D 리더보드 (X=Audit · Y=Scout scatter)
-  ☐ 궤적 공유 카드 (3주 애니메이션 GIF · X/LinkedIn 바이럴)
+  ✅ 이번 주 하이라이트 카드 (ThisWeekHighlight · top_movers_week RPC bookend 방식 · 누적 climb 표시 · 2026-05-07)
+  ✅ 2D 리더보드 (LeaderboardPage · X=Audit Y=Scout scatter + 4-quadrant 카운트 stat strip · /leaderboard · 2026-05-07)
+  ✅ 궤적 공유 카드 (og?kind=trajectory SVG/PNG + auto-tweet kind=trajectory · encore production INSERT 자동 트리거 · 2026-05-07)
   ☐ 푸시 위젯 Vote — V1 무리 · V1.5 후보
   ☐ 맞춤 다이제스트 — V1 무리 · V1.5 후보
 
@@ -2245,7 +2245,8 @@ Follow-up · 작은 정리
 ---
 
 *이 파일은 프로젝트가 진행될수록 업데이트한다.*
-*마지막 업데이트: 2026-05-07 · §18-B.4 auto-tweet 파이프라인 (4-gate · 4 templates · OG PNG card · send-tweet 위임) + §18-C GitHub acquisition 트랙 정리 (audit-action v1.0.1 · org page · template · outreach loop · monorepo workspace auto-pick · scanned_scope 노출 · CLI --workspace) *
+*마지막 업데이트: 2026-05-07 · trajectory 카드 풀스택 (kind=trajectory SVG/PNG · auto-tweet 4 trajectory 템플릿 · encore production INSERT pg_net trigger · projects middleware ?og=trajectory swap) + ThisWeekHighlight bookend RPC 전환 · LeaderboardPage 4-quadrant 카운트 strip · "AI" 잔존 audit (위반 0건 확인) · SeizyC backup workflow scope 해소*
+*이전: 2026-05-07 §18-B.4 auto-tweet 파이프라인 + §18-C GitHub acquisition 트랙*
 *이전 마지막 업데이트: 2026-05-06 · §16 / §20.2 backlog audit · 백로그가 실제 코드 상태와 어긋나있던 것 정리*
 *이전 마지막 업데이트: 2026-04-24 · **commit.show PRD v2** (통합 기획서 2026-04-19 + Creator Community 2026-04-23 기반 재정비 + §15 Intent-first/Trending UX)*
 
