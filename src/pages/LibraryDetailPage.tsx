@@ -258,54 +258,64 @@ export function LibraryDetailPage() {
           )}
         </header>
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={handleCopy}
-            disabled={!item.content_md}
-            className="font-mono text-xs font-medium tracking-wide px-4 py-2.5 transition-colors"
-            style={{
-              background: copied ? 'rgba(0,212,170,0.15)' : 'var(--gold-500)',
-              color: copied ? '#00D4AA' : 'var(--navy-900)',
-              border: copied ? '1px solid rgba(0,212,170,0.4)' : 'none',
-              borderRadius: '2px',
-              cursor: item.content_md ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {copied ? '✓ COPIED TO CLIPBOARD' : '📋 COPY CONTENT'}
-          </button>
-          <button
-            onClick={handleDownload}
-            disabled={!item.content_md}
-            className="font-mono text-xs tracking-wide px-4 py-2.5"
-            style={{
-              background: 'transparent',
-              color: 'var(--cream)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '2px',
-              cursor: item.content_md ? 'pointer' : 'not-allowed',
-            }}
-          >
-            ⬇ DOWNLOAD
-          </button>
-          <button
-            onClick={() => {
-              if (!user) { setAuthOpen(true); return }
-              setApplyOpen(true)
-            }}
-            disabled={!item.content_md}
-            className="font-mono text-xs font-medium tracking-wide px-4 py-2.5"
-            style={{
-              background: 'rgba(167,139,250,0.14)',
-              color: '#A78BFA',
-              border: '1px solid rgba(167,139,250,0.4)',
-              borderRadius: '2px',
-              cursor: item.content_md ? 'pointer' : 'not-allowed',
-            }}
-          >
-            <span className="inline-flex items-center gap-1.5"><IconWand size={12} /> APPLY TO MY REPO</span>
-          </button>
-        </div>
+        {/* Actions
+            Imperative pack (has bundle_url) → single CLI install CTA.
+            Static artifact (content_md only)  → existing 3 buttons.
+            Imperative packs aren't a copy-paste-into-repo thing; they
+            run an installer against the user's Supabase + Resend, so
+            offering Apply-to-my-repo (PR a file) makes no sense and
+            Download (just the .tar.gz) is what the CLI does anyway. */}
+        {item.bundle_url && item.slug ? (
+          <ImperativeInstallCta slug={item.slug} item={item} onCopy={() => recordDownload(item.id).catch(() => {})} />
+        ) : (
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button
+              onClick={handleCopy}
+              disabled={!item.content_md}
+              className="font-mono text-xs font-medium tracking-wide px-4 py-2.5 transition-colors"
+              style={{
+                background: copied ? 'rgba(0,212,170,0.15)' : 'var(--gold-500)',
+                color: copied ? '#00D4AA' : 'var(--navy-900)',
+                border: copied ? '1px solid rgba(0,212,170,0.4)' : 'none',
+                borderRadius: '2px',
+                cursor: item.content_md ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {copied ? '✓ COPIED TO CLIPBOARD' : '📋 COPY CONTENT'}
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={!item.content_md}
+              className="font-mono text-xs tracking-wide px-4 py-2.5"
+              style={{
+                background: 'transparent',
+                color: 'var(--cream)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '2px',
+                cursor: item.content_md ? 'pointer' : 'not-allowed',
+              }}
+            >
+              ⬇ DOWNLOAD
+            </button>
+            <button
+              onClick={() => {
+                if (!user) { setAuthOpen(true); return }
+                setApplyOpen(true)
+              }}
+              disabled={!item.content_md}
+              className="font-mono text-xs font-medium tracking-wide px-4 py-2.5"
+              style={{
+                background: 'rgba(167,139,250,0.14)',
+                color: '#A78BFA',
+                border: '1px solid rgba(167,139,250,0.4)',
+                borderRadius: '2px',
+                cursor: item.content_md ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <span className="inline-flex items-center gap-1.5"><IconWand size={12} /> APPLY TO MY REPO</span>
+            </button>
+          </div>
+        )}
 
         {lastPrUrl && (
           <div className="mb-6 pl-3 pr-3 py-2 flex items-center justify-between gap-3 font-mono text-[11px]"
@@ -449,6 +459,83 @@ function InfoList({ label, children }: { label: string; children: React.ReactNod
     <div>
       <div className="font-mono text-[10px] tracking-widest mb-1.5" style={{ color: 'var(--text-label)' }}>{label}</div>
       <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  )
+}
+
+// Imperative install CTA — single command + copy button. Replaces the
+// 3-button stack (Copy / Download / Apply-to-repo) for marketplace
+// packs that ship a bundle and an install.sh, since none of those
+// actions actually accomplish what the user wants (run the installer
+// against THEIR Supabase + Resend).
+function ImperativeInstallCta({
+  slug, item, onCopy,
+}: {
+  slug: string
+  item: MDLibraryFeedItem
+  onCopy: () => void
+}) {
+  const cmd = `npx commitshow@latest install ${slug}`
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(cmd) }
+    catch {
+      const ta = document.createElement('textarea')
+      ta.value = cmd
+      document.body.appendChild(ta); ta.select()
+      document.execCommand('copy'); document.body.removeChild(ta)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+    onCopy()
+  }
+
+  return (
+    <div className="mb-6">
+      <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-label)' }}>
+        INSTALL IN YOUR PROJECT
+      </div>
+      <div className="flex items-stretch gap-2">
+        <code
+          onClick={copy}
+          className="flex-1 font-mono text-[13px] px-3 py-3 cursor-pointer truncate"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            color: 'var(--text-primary)',
+            borderRadius: '2px',
+          }}
+          title="Click to copy"
+        >
+          <span style={{ color: 'var(--text-muted)' }}>$ </span>{cmd}
+        </code>
+        <button
+          onClick={copy}
+          className="font-mono text-xs font-medium tracking-wide px-4 transition-colors"
+          style={{
+            background: copied ? 'rgba(0,212,170,0.15)' : 'var(--gold-500)',
+            color: copied ? '#00D4AA' : 'var(--navy-900)',
+            border: copied ? '1px solid rgba(0,212,170,0.4)' : 'none',
+            borderRadius: '2px',
+            cursor: 'pointer',
+            minWidth: '110px',
+          }}
+        >
+          {copied ? '✓ COPIED' : 'COPY'}
+        </button>
+      </div>
+      <p className="font-mono text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+        Runs in your project directory. Walks you through every required input
+        (your Supabase project, your Resend account, brand colors). All credentials
+        stay on your machine — commit.show only delivers the bundle.
+      </p>
+      {item.bundle_size_bytes != null && (
+        <p className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-faint)' }}>
+          {item.bundle_version ? `v${item.bundle_version} · ` : ''}
+          {(item.bundle_size_bytes / 1024).toFixed(1)} KB ·
+          sha256 {item.bundle_sha256 ? item.bundle_sha256.slice(0, 16) : '—'}…
+        </p>
+      )}
     </div>
   )
 }

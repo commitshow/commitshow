@@ -580,6 +580,13 @@ export type MDLibraryItem = {
   bundle_files: ArtifactBundleFile[]         // multi-file artifacts (Skills, Recipes)
   stack_tags: string[]                       // e.g. ['nextjs','supabase','stripe']
   discovery_total_score: number | null       // snapshot of md_discoveries.total_score at publish
+  // v1 marketplace · imperative pack fields (2026-05-06)
+  slug: string | null                        // unique install identifier · `commitshow install <slug>`
+  bundle_url: string | null                  // public Storage URL of the .tar.gz
+  bundle_sha256: string | null               // hash for integrity check
+  bundle_size_bytes: number | null
+  bundle_version: string | null              // pack manifest version (semver)
+  manifest_version: string | null            // pack.yaml schema version (e.g. 'v0.1')
 }
 
 export type MDPurchase = {
