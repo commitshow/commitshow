@@ -2,22 +2,35 @@
 // project's current commit.show standing. Powered by the `badge` Edge Function
 // which serves a dynamic SVG.
 //
-// 2026-05-07 simplification: one primary CTA (copy markdown), one obvious
-// next step (paste at top of README). Earlier version surfaced 4 buttons
-// (md/html × FLAT/PILL) with no priority — too many decisions for a
-// drop-in tool. Style + HTML options collapsed into a single disclosure.
+// 2026-05-07 v2: GitHub deep-link CTA when we know the repo URL. Earlier
+// version stopped at "copy markdown" — user had to navigate to GitHub,
+// open README, scroll, paste, commit. Now a single click opens GitHub's
+// edit page for README.md AND auto-copies the markdown · user just hits
+// ⌘V at the top of the file and commits. Fallback for repos without a
+// README points at /new/<branch>?filename=README.md with the badge
+// pre-filled.
 
 import { useState } from 'react'
 import { SUPABASE_URL } from '../lib/supabase'
 
 interface Props {
-  projectId: string
+  projectId:   string
   projectName: string
+  /** Canonical https://github.com/owner/repo URL · enables the
+   *  one-click "Open README" deep-link. Null falls back to the
+   *  copy-only flow used on the /audit explainer page. */
+  githubUrl?:  string | null
+}
+
+function parseRepo(url: string): { owner: string; repo: string } | null {
+  const m = url.match(/github\.com\/([^/\s]+)\/([^/\s?#]+?)(?:\.git)?\/?(?:[#?]|$)/i)
+  if (!m) return null
+  return { owner: m[1], repo: m[2] }
 }
 
 type Style = 'flat' | 'pill'
 
-export function BadgeSnippet({ projectId, projectName }: Props) {
+export function BadgeSnippet({ projectId, projectName, githubUrl }: Props) {
   const [style, setStyle]       = useState<Style>('flat')
   const [showMore, setShowMore] = useState(false)
   const [copied, setCopied]     = useState<'md' | 'html' | null>(null)
@@ -29,10 +42,37 @@ export function BadgeSnippet({ projectId, projectName }: Props) {
   const markdown = `[![${altText}](${badgeUrl})](${projectUrl})`
   const html     = `<a href="${projectUrl}"><img src="${badgeUrl}" alt="${altText}" /></a>`
 
+  // GitHub deep-link · /edit/ for existing READMEs (clipboard auto-copy
+  // before the new tab opens lets the user just ⌘V at the top). /new/
+  // for repos without a README · pre-fills the badge + title.
+  const repo = githubUrl ? parseRepo(githubUrl) : null
+  const editReadmeUrl = repo
+    ? `https://github.com/${repo.owner}/${repo.repo}/edit/main/README.md`
+    : null
+  const newReadmeUrl = repo
+    ? (() => {
+        const u = new URL(`https://github.com/${repo.owner}/${repo.repo}/new/main`)
+        u.searchParams.set('filename', 'README.md')
+        u.searchParams.set('value',    `${markdown}\n\n# ${projectName}\n`)
+        u.searchParams.set('message',  'Add commit.show audit badge')
+        return u.toString()
+      })()
+    : null
+
   const copy = async (which: 'md' | 'html', text: string) => {
     await navigator.clipboard.writeText(text)
     setCopied(which)
     setTimeout(() => setCopied(null), 1800)
+  }
+
+  // Click handler for the primary CTA · clipboard write must be sync
+  // inside the user gesture, then we open the new tab.
+  const handleOpenReadme = async () => {
+    try { await navigator.clipboard.writeText(markdown) }
+    catch { /* user can still copy manually below */ }
+    setCopied('md')
+    setTimeout(() => setCopied(null), 4000)
+    if (editReadmeUrl) window.open(editReadmeUrl, '_blank', 'noopener,noreferrer')
   }
 
   const primaryCopied = copied === 'md'
@@ -46,7 +86,9 @@ export function BadgeSnippet({ projectId, projectName }: Props) {
         Show your score on GitHub
       </h3>
       <p className="font-light text-sm mt-1 mb-5" style={{ color: 'var(--text-secondary)' }}>
-        One copy, one paste in your README. The badge auto-updates as your score moves.
+        {editReadmeUrl
+          ? 'Click below · GitHub opens your README in edit mode and the badge markdown is in your clipboard. Paste at the top, commit. Done.'
+          : 'One copy, one paste in your README. The badge auto-updates as your score moves.'}
       </p>
 
       {/* Live preview */}
@@ -66,22 +108,57 @@ export function BadgeSnippet({ projectId, projectName }: Props) {
         />
       </div>
 
-      {/* Primary CTA · single button does the only thing 99% of users want */}
-      <button
-        type="button"
-        onClick={() => copy('md', markdown)}
-        className="w-full font-mono text-xs tracking-wide px-4 py-3 mb-3"
-        style={{
-          background:   primaryCopied ? 'rgba(0,212,170,0.15)' : 'var(--gold-500)',
-          color:        primaryCopied ? '#00D4AA'              : 'var(--navy-900)',
-          border:       primaryCopied ? '1px solid rgba(0,212,170,0.5)' : 'none',
-          borderRadius: '2px',
-          cursor:       'pointer',
-          fontWeight:   700,
-        }}
-      >
-        {primaryCopied ? '✓ Copied · paste it at the top of your README' : 'Copy markdown for README →'}
-      </button>
+      {/* Primary CTA · GitHub deep-link when we know the repo, copy-only otherwise */}
+      {editReadmeUrl ? (
+        <button
+          type="button"
+          onClick={handleOpenReadme}
+          className="w-full font-mono text-xs tracking-wide px-4 py-3 mb-2"
+          style={{
+            background:   primaryCopied ? 'rgba(0,212,170,0.15)' : 'var(--gold-500)',
+            color:        primaryCopied ? '#00D4AA'              : 'var(--navy-900)',
+            border:       primaryCopied ? '1px solid rgba(0,212,170,0.5)' : 'none',
+            borderRadius: '2px',
+            cursor:       'pointer',
+            fontWeight:   700,
+          }}
+        >
+          {primaryCopied ? '✓ Markdown copied · paste at top of README on the GitHub tab' : 'Open README on GitHub →'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => copy('md', markdown)}
+          className="w-full font-mono text-xs tracking-wide px-4 py-3 mb-2"
+          style={{
+            background:   primaryCopied ? 'rgba(0,212,170,0.15)' : 'var(--gold-500)',
+            color:        primaryCopied ? '#00D4AA'              : 'var(--navy-900)',
+            border:       primaryCopied ? '1px solid rgba(0,212,170,0.5)' : 'none',
+            borderRadius: '2px',
+            cursor:       'pointer',
+            fontWeight:   700,
+          }}
+        >
+          {primaryCopied ? '✓ Copied · paste it at the top of your README' : 'Copy markdown for README →'}
+        </button>
+      )}
+
+      {/* Fallback for repos without a README · smaller secondary link */}
+      {newReadmeUrl && (
+        <a
+          href={newReadmeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block font-mono text-[11px] mb-3"
+          style={{
+            color:        'var(--text-muted)',
+            textDecoration: 'none',
+            paddingBottom: 1,
+          }}
+        >
+          No README yet? <span style={{ color: 'var(--gold-500)', borderBottom: '1px dashed rgba(240,192,64,0.5)' }}>Create one with the badge →</span>
+        </a>
+      )}
 
       <p className="font-mono text-[11px] mb-4" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
         Tip · paste right above your project's title in the README so visitors see the score

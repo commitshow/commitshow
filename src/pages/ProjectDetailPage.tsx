@@ -904,7 +904,7 @@ export function ProjectDetailPage() {
               <SectionHeader label="PRIVATE BRIEF" hint="Only you can see this — editor + integrity score." />
               <OwnerBriefPanel projectId={project.id} />
               <div className="mt-6">
-                <BadgeSnippet projectId={project.id} projectName={project.project_name} />
+                <BadgeSnippet projectId={project.id} projectName={project.project_name} githubUrl={project.github_url} />
               </div>
               <div className="mt-6">
                 <TokenReceiptForm
