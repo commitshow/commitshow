@@ -391,7 +391,7 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
             <span>{row.audit_count} audit{row.audit_count === 1 ? '' : 's'}</span>
             {row.status === 'graduated' && <>
               <span>·</span>
-              <span style={{ color: '#00D4AA' }}>graduated</span>
+              <span style={{ color: '#00D4AA' }}>encore</span>
             </>}
             <StreakBadge row={row} />
           </div>

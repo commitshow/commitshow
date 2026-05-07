@@ -41,7 +41,7 @@ export function BuildLogsPage() {
       {posts === null ? (
         <EmptyState label="Loading…" />
       ) : posts.length === 0 ? (
-        <EmptyState label={tag ? `No Build Logs tagged #${tag} yet.` : 'No Build Logs yet. Graduation Week seeds the first batch.'} />
+        <EmptyState label={tag ? `No Build Logs tagged #${tag} yet.` : 'No Build Logs yet. Encore Week seeds the first batch.'} />
       ) : (
         <div className="grid gap-3">
           {posts.map(p => <CommunityPostCard key={p.id} post={p} />)}

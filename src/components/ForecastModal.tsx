@@ -198,7 +198,7 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
                 </div>
               )}
               <div className="font-mono text-xs mt-2" style={{ color: 'rgba(248,245,238,0.4)' }}>
-                Accuracy bonus resolves at graduation if your forecast is on target.
+                Accuracy bonus resolves once this build crosses the Encore line if your forecast is on target.
               </div>
             </div>
 
@@ -295,7 +295,7 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
               </div>
               <div className="flex justify-between font-mono text-[10px] mt-1" style={{ color: 'rgba(248,245,238,0.3)' }}>
                 <span>Will fail</span>
-                <span>At graduation threshold</span>
+                <span>At Encore line</span>
                 <span>Valedictorian</span>
               </div>
             </div>

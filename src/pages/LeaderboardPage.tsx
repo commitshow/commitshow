@@ -107,7 +107,7 @@ export function LeaderboardPage() {
           </h1>
           <p className="font-light max-w-2xl" style={{ color: 'var(--text-secondary)' }}>
             Each dot is one project. Right means the engine likes your technical work.
-            Up means Scouts are betting on your finish. Top-right is graduation territory.
+            Up means Scouts are betting on your finish. Top-right is Encore territory.
           </p>
         </header>
 
@@ -156,7 +156,7 @@ export function LeaderboardPage() {
               <text x={VIEW_W - PAD_RIGHT - 8} y={PAD_TOP + 16}
                 textAnchor="end" fontFamily="DM Mono, monospace" fontSize={10}
                 fill="rgba(240,192,64,0.65)">
-                GRADUATION ZONE
+                ENCORE ZONE
               </text>
               <text x={PAD_LEFT + 8} y={VIEW_H - PAD_BOTTOM - 8}
                 textAnchor="start" fontFamily="DM Mono, monospace" fontSize={10}
@@ -310,7 +310,7 @@ export function LeaderboardPage() {
         {!loading && quadrants.total > 0 && (
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
             <QuadStat
-              label="GRADUATION ZONE"
+              label="ENCORE ZONE"
               count={quadrants.graduationZone}
               hint="audit + scout both high"
               tone="#F0C040"
@@ -338,7 +338,7 @@ export function LeaderboardPage() {
 
         {/* Legend */}
         <div className="mt-4 flex items-center gap-4 font-mono text-[11px] flex-wrap" style={{ color: 'var(--text-secondary)' }}>
-          <Legend tone="#00D4AA" label="graduation-ready · score 75+" />
+          <Legend tone="#00D4AA" label="Encore-ready · score 75+" />
           <Legend tone="#F0C040" label="contender · score 50–74" />
           <Legend tone="#6B7280" label="rookie · below 50" />
           <span style={{ color: 'var(--text-muted)' }}>

@@ -821,7 +821,7 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
         <div className="grid grid-cols-[1fr_auto] gap-y-1 font-mono text-[12px]" style={{ color: 'var(--text-secondary)' }}>
           <span>Audit & operations cost <span style={{ color: 'var(--text-muted)' }}>· non-refundable</span></span>
           <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${costDollars}</span>
-          <span>Graduation deposit <span style={{ color: 'var(--text-muted)' }}>· refunded on Diploma</span></span>
+          <span>Encore deposit <span style={{ color: 'var(--text-muted)' }}>· refunded on Diploma</span></span>
           <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${depositDollars}</span>
           <span style={{ borderTop: '1px solid rgba(240,192,64,0.2)', paddingTop: 4, color: 'var(--gold-500)' }}>Total</span>
           <span className="tabular-nums" style={{ borderTop: '1px solid rgba(240,192,64,0.2)', paddingTop: 4, color: 'var(--gold-500)', fontWeight: 700 }}>${priceDollars}</span>

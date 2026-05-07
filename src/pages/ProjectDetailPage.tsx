@@ -503,7 +503,7 @@ export function ProjectDetailPage() {
                   )}
                   <span
                     className="font-mono text-[11px]"
-                    title="Creator career grade — based on cumulative graduations (§8)."
+                    title="Creator career grade — based on cumulative Encores (§8)."
                     style={{ color: 'var(--gold-500)' }}
                   >
                     · {project.creator_grade}

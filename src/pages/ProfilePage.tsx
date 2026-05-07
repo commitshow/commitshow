@@ -899,7 +899,7 @@ function LibraryRow({ item }: { item: MDLibraryItem & { projects_applied: number
         </span>
         {item.projects_graduated > 0 && (
           <span className="inline-flex items-center gap-1" style={{ color: '#00D4AA' }}>
-            <IconGraduation size={10} /> {item.projects_graduated} graduated
+            <IconGraduation size={10} /> {item.projects_graduated} Encore
           </span>
         )}
         {item.projects_applied > 0 && (

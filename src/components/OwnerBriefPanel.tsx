@@ -60,7 +60,7 @@ export function OwnerBriefPanel({ projectId }: Props) {
             Build Brief (Phase 2 details)
           </h3>
           <p className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            The public only sees the summary. These specifics unlock for everyone after graduation.
+            The public only sees the summary. These specifics unlock for everyone once this build earns Encore.
           </p>
         </div>
         <span className="font-mono text-xs px-2 py-1" style={{

@@ -247,11 +247,11 @@ export function LibraryPackRow({ item }: Props) {
             )}
             {graduated > 0 && (
               <span
-                title={`${graduated} graduated project${graduated === 1 ? '' : 's'} used this artifact`}
+                title={`${graduated} Encore project${graduated === 1 ? '' : 's'} used this artifact`}
                 className="inline-flex items-center gap-1"
               >
                 <IconGraduation size={11} style={{ color: '#00D4AA' }} />
-                <span style={{ color: '#00D4AA' }}>{graduated}</span> graduated
+                <span style={{ color: '#00D4AA' }}>{graduated}</span> Encore
               </span>
             )}
             {item.source_project_score != null && (

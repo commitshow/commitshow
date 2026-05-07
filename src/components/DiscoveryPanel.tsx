@@ -481,7 +481,7 @@ function PublishDialog({ discovery, projectId, creatorId, authorGrade, onClose, 
             color: 'var(--text-secondary)',
             lineHeight: 1.6,
           }}>
-            Reputation compounds over time — creator grade + downloads + adopted-by projects + graduated-with-this
+            Reputation compounds over time — creator grade + downloads + adopted-by projects + Encore-with-this
             become your quality signal. Every Apply-to-my-repo lands on your public "Library contributions" profile.
             {isPaid && <> Paid artifacts pay out 80/20 (Creator / platform).</>}
           </div>
@@ -489,19 +489,19 @@ function PublishDialog({ discovery, projectId, creatorId, authorGrade, onClose, 
           {tryingPaid && (
             <div className="pl-3 py-2 pr-3 font-mono text-xs"
               style={{ borderLeft: '2px solid var(--scarlet)', background: 'rgba(200,16,46,0.05)', color: 'rgba(248,120,113,0.85)' }}>
-              Paid listings require <strong>{PAID_MIN_GRADE}</strong> grade (1 graduation). Switch to free — you still earn AP.
+              Paid listings require <strong>{PAID_MIN_GRADE}</strong> grade (1 Encore). Switch to free — you still earn AP.
             </div>
           )}
           {tryingPremium && (
             <div className="pl-3 py-2 pr-3 font-mono text-xs"
               style={{ borderLeft: '2px solid var(--scarlet)', background: 'rgba(200,16,46,0.05)', color: 'rgba(248,120,113,0.85)' }}>
-              Premium pricing (above $30) requires <strong>{PREMIUM_MIN_GRADE}</strong> grade (2 graduations).
+              Premium pricing (above $30) requires <strong>{PREMIUM_MIN_GRADE}</strong> grade (2 Encores).
             </div>
           )}
           {tryingScaffold && (
             <div className="pl-3 py-2 pr-3 font-mono text-xs"
               style={{ borderLeft: '2px solid var(--scarlet)', background: 'rgba(200,16,46,0.05)', color: 'rgba(248,120,113,0.85)' }}>
-              Scaffold pricing (above $100) requires <strong>Architect</strong> grade (3 graduations).
+              Scaffold pricing (above $100) requires <strong>Architect</strong> grade (3 Encores).
             </div>
           )}
           {tryingPromptPaid && (
