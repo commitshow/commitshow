@@ -52,29 +52,12 @@ export function TokenEfficiencyPanel({ projectId, isOwner }: { projectId: string
   }, [projectId])
 
   if (loading) return null
-  if (!summary || summary.total_tokens === 0) {
-    // Empty state · CTA only for owner. Visitors see nothing (no value
-    // showing them an empty card for someone else's project).
-    if (!isOwner) return null
-    return (
-      <div className="card-navy p-5" style={{ borderRadius: '2px', border: '1px solid rgba(240,192,64,0.18)' }}>
-        <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-          // TOKEN RECEIPT
-        </div>
-        <p className="text-sm font-light mb-3" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          Add your build's token receipt and a verified efficiency score lands on this page.
-        </p>
-        <div className="font-mono text-xs p-2.5" style={{
-          background:   'rgba(6,12,26,0.6)',
-          color:        'var(--gold-500)',
-          borderRadius: '2px',
-          border:       '1px solid rgba(240,192,64,0.18)',
-        }}>
-          $ npx commitshow@latest extract
-        </div>
-      </div>
-    )
-  }
+  // No receipt yet · render nothing. Owner already sees the
+  // TokenReceiptForm in PRIVATE BRIEF · duplicating the CLI hint here
+  // double-stacks the same message. Visitors see nothing either way.
+  if (!summary || summary.total_tokens === 0) return null
+  // Mark unused param to keep lint happy after empty-state removal.
+  void isOwner
 
   const eff = summary.efficiency_score
   return (

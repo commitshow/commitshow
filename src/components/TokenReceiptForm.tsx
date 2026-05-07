@@ -87,15 +87,133 @@ interface Props {
   /** Current project audit score · used to compute the projected efficiency
    *  preview (score / tokens·1M). null/undefined hides the projection. */
   projectScore?: number | null
+  /** GitHub URL of the project · used to pre-filter sessions to ones that
+   *  match this repo's working directory during in-browser scan. */
+  projectGithubUrl?: string | null
   /** Called with the ingest summary after a successful submit. */
   onSuccess?: (summary: { inserted: number; total_tokens: number; total_cost_usd: number }) => void
 }
 
-export function TokenReceiptForm({ projectId, projectScore, onSuccess }: Props) {
+/** Recursively read every .jsonl file under a directory handle.
+ *  Returns the parsed sessions matching the optional cwd filter. */
+async function scanDirectoryForSessions(
+  dirHandle: FileSystemDirectoryHandle,
+  matchCwd: string | null,
+): Promise<BlobSession[]> {
+  const sessions: BlobSession[] = []
+
+  async function walk(handle: FileSystemDirectoryHandle, depth = 0): Promise<void> {
+    if (depth > 3) return  // ~/.claude/projects/<encoded>/ is depth 0/1 — anything deeper is unexpected
+    // @ts-ignore · entries() is part of FileSystemDirectoryHandle but TS lib lags
+    for await (const [name, entry] of handle.entries()) {
+      if (entry.kind === 'directory') {
+        await walk(entry as FileSystemDirectoryHandle, depth + 1)
+      } else if (entry.kind === 'file' && name.endsWith('.jsonl')) {
+        const fileHandle = entry as FileSystemFileHandle
+        try {
+          const file = await fileHandle.getFile()
+          const text = await file.text()
+          const sessionTotals: BlobSession = {
+            session_id:          name.replace(/\.jsonl$/, ''),
+            input_tokens:        0,
+            output_tokens:       0,
+            cache_create_tokens: 0,
+            cache_read_tokens:   0,
+            message_count:       0,
+            cwd:                 undefined,
+          }
+          let firstAt: string | null = null
+          let lastAt:  string | null = null
+          for (const line of text.split('\n')) {
+            if (!line.trim()) continue
+            let evt: any
+            try { evt = JSON.parse(line) } catch { continue }
+            if (typeof evt.cwd === 'string') sessionTotals.cwd = evt.cwd
+            const usage = evt?.message?.usage
+            if (usage && typeof usage === 'object') {
+              sessionTotals.input_tokens!        += usage.input_tokens                ?? 0
+              sessionTotals.output_tokens!       += usage.output_tokens               ?? 0
+              sessionTotals.cache_create_tokens! += usage.cache_creation_input_tokens ?? 0
+              sessionTotals.cache_read_tokens!   += usage.cache_read_input_tokens     ?? 0
+              sessionTotals.message_count!++
+              const ts = evt.timestamp ?? null
+              if (ts) {
+                if (!firstAt || ts < firstAt) firstAt = ts
+                if (!lastAt  || ts > lastAt)  lastAt  = ts
+              }
+            }
+          }
+          sessionTotals.first_seen_at = firstAt ?? undefined
+          sessionTotals.last_seen_at  = lastAt  ?? undefined
+          // Filter to sessions whose cwd matches the target repo (if known).
+          if (matchCwd && sessionTotals.cwd && sessionTotals.cwd !== matchCwd) continue
+          // Skip empty sessions · cache-only / no-usage records pollute totals.
+          const total = (sessionTotals.input_tokens ?? 0) + (sessionTotals.output_tokens ?? 0) +
+                        (sessionTotals.cache_create_tokens ?? 0) + (sessionTotals.cache_read_tokens ?? 0)
+          if (total > 0) sessions.push(sessionTotals)
+        } catch {
+          // Skip unreadable / locked files.
+        }
+      }
+    }
+  }
+
+  await walk(dirHandle)
+  return sessions
+}
+
+function buildBlob(sessions: BlobSession[], githubUrl: string | null): string {
+  const payload: BlobPayload = {
+    v: 1,
+    source: 'claude_code',
+    tool_version: 'browser-scan',
+    github_url: githubUrl,
+    extracted_at: new Date().toISOString(),
+    sessions,
+  }
+  // btoa expects latin1 · JSON is ASCII-safe for our shape (token numbers + UUIDs + ISO timestamps + paths)
+  return `cs_v1:${btoa(JSON.stringify(payload))}`
+}
+
+export function TokenReceiptForm({ projectId, projectScore, projectGithubUrl, onSuccess }: Props) {
   const [blob, setBlob]         = useState<string>('')
   const [submitting, setSubmit] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const [success, setSuccess]   = useState<{ inserted: number; total_tokens: number; total_cost_usd: number; efficiency: number | null } | null>(null)
+
+  // File System Access API · Chromium-family browsers only. We feature-
+  // detect at render time so the button hides on Firefox / Safari.
+  const supportsBrowserScan = typeof window !== 'undefined'
+    && 'showDirectoryPicker' in window
+
+  const handleBrowserScan = async () => {
+    if (!supportsBrowserScan) return
+    setScanning(true); setError(null)
+    try {
+      // @ts-ignore · TS lib doesn't ship showDirectoryPicker yet
+      const dirHandle: FileSystemDirectoryHandle = await window.showDirectoryPicker({
+        id: 'commitshow-claude-projects',
+        startIn: 'home',
+        mode: 'read',
+      })
+      const sessions = await scanDirectoryForSessions(dirHandle, null)
+      if (sessions.length === 0) {
+        setError('No Claude Code sessions found in that folder. Pick the ~/.claude/projects directory (or any subfolder of it).')
+        setScanning(false)
+        return
+      }
+      const newBlob = buildBlob(sessions, projectGithubUrl ?? null)
+      setBlob(newBlob)
+    } catch (e: any) {
+      // User cancellation = AbortError · silent. Other errors surface.
+      if (e?.name !== 'AbortError') {
+        setError(`Browser scan failed: ${e?.message ?? String(e)}`)
+      }
+    } finally {
+      setScanning(false)
+    }
+  }
 
   const decoded = useMemo(() => (blob.trim() ? decodeBlob(blob) : null), [blob])
   const previewOk = decoded?.ok === true
@@ -177,56 +295,108 @@ export function TokenReceiptForm({ projectId, projectScore, onSuccess }: Props) 
         </Link>.
       </p>
 
-      {/* Step 1 · run the CLI */}
-      <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: 'var(--text-label)' }}>
-        STEP 1 · RUN THIS IN YOUR TERMINAL
-      </div>
-      <div className="font-mono text-xs mb-4 p-3" style={{
-        background:   'rgba(6,12,26,0.6)',
-        color:        'var(--gold-500)',
-        borderRadius: '2px',
-        border:       '1px solid rgba(240,192,64,0.18)',
-      }}>
-        $ npx commitshow@latest extract
-      </div>
+      {/* Primary path · browser scan (Chromium) — no terminal needed.
+          Falls back to the CLI path on Firefox / Safari. */}
+      {supportsBrowserScan && !blob && (
+        <>
+          <button
+            type="button"
+            onClick={handleBrowserScan}
+            disabled={scanning}
+            className="w-full font-mono text-xs tracking-wide px-4 py-3 mb-2"
+            style={{
+              background:   scanning ? 'rgba(240,192,64,0.25)' : 'var(--gold-500)',
+              color:        scanning ? 'var(--text-muted)'    : 'var(--navy-900)',
+              border:       'none',
+              borderRadius: '2px',
+              cursor:       scanning ? 'wait' : 'pointer',
+              fontWeight:   700,
+            }}
+          >
+            {scanning ? 'Scanning…' : 'Scan Claude Code sessions in browser →'}
+          </button>
+          <p className="font-mono text-[11px] mb-4" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Click above · pick the <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0 4px', borderRadius: '2px' }}>~/.claude/projects</code> folder when prompted ·
+            browser reads JSONL files and builds the receipt locally. Prompt content never leaves your machine.
+          </p>
+        </>
+      )}
 
-      {/* Step 2 · paste */}
-      <div className="flex items-center gap-2 mb-1">
-        <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
-          STEP 2 · PASTE THE BLOB
-        </span>
-        <button
-          type="button"
-          onClick={handlePasteFromClipboard}
-          className="font-mono text-[10px] tracking-wide px-2 py-0.5"
-          style={{
-            background:   'transparent',
-            color:        'var(--gold-500)',
-            border:       '1px solid rgba(240,192,64,0.4)',
-            borderRadius: '2px',
-            cursor:       'pointer',
-          }}
-        >
-          paste from clipboard
-        </button>
-      </div>
-      <textarea
-        value={blob}
-        onChange={e => setBlob(e.target.value)}
-        placeholder="cs_v1:eyJ2IjoxLCJzb3VyY2UiOiJjbGF1ZGVfY29kZSIsLi4u"
-        rows={3}
-        spellCheck={false}
-        className="w-full font-mono text-[11px] p-3 mb-4"
-        style={{
-          background:    'var(--navy-950)',
-          color:         'var(--cream)',
-          border:        `1px solid ${decoded?.ok === false ? 'rgba(248,120,113,0.5)' : 'rgba(255,255,255,0.12)'}`,
-          borderRadius:  '2px',
-          resize:        'vertical',
-          lineHeight:    1.4,
-          wordBreak:     'break-all',
-        }}
-      />
+      {/* CLI fallback · also useful for re-paste after edits.
+          On Chromium this is hidden behind the disclosure once a blob is
+          present; on Firefox/Safari it's the only path. */}
+      {(!supportsBrowserScan || blob) && (
+        <>
+          <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: 'var(--text-label)' }}>
+            {!supportsBrowserScan
+              ? 'RUN IN TERMINAL · auto-copies blob to clipboard'
+              : 'OR PASTE A BLOB FROM CLI'}
+          </div>
+          {!supportsBrowserScan && (
+            <div className="font-mono text-xs mb-3 p-3" style={{
+              background:   'rgba(6,12,26,0.6)',
+              color:        'var(--gold-500)',
+              borderRadius: '2px',
+              border:       '1px solid rgba(240,192,64,0.18)',
+            }}>
+              $ npx commitshow@latest extract
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+              BLOB
+            </span>
+            <button
+              type="button"
+              onClick={handlePasteFromClipboard}
+              className="font-mono text-[10px] tracking-wide px-2 py-0.5"
+              style={{
+                background:   'transparent',
+                color:        'var(--gold-500)',
+                border:       '1px solid rgba(240,192,64,0.4)',
+                borderRadius: '2px',
+                cursor:       'pointer',
+              }}
+            >
+              paste from clipboard
+            </button>
+            {blob && (
+              <button
+                type="button"
+                onClick={() => setBlob('')}
+                className="font-mono text-[10px] tracking-wide px-2 py-0.5"
+                style={{
+                  background:   'transparent',
+                  color:        'var(--text-muted)',
+                  border:       '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '2px',
+                  cursor:       'pointer',
+                }}
+              >
+                clear
+              </button>
+            )}
+          </div>
+          <textarea
+            value={blob}
+            onChange={e => setBlob(e.target.value)}
+            placeholder="cs_v1:eyJ2IjoxLCJzb3VyY2UiOiJjbGF1ZGVfY29kZSIsLi4u"
+            rows={3}
+            spellCheck={false}
+            className="w-full font-mono text-[11px] p-3 mb-4"
+            style={{
+              background:    'var(--navy-950)',
+              color:         'var(--cream)',
+              border:        `1px solid ${decoded?.ok === false ? 'rgba(248,120,113,0.5)' : 'rgba(255,255,255,0.12)'}`,
+              borderRadius:  '2px',
+              resize:        'vertical',
+              lineHeight:    1.4,
+              wordBreak:     'break-all',
+            }}
+          />
+        </>
+      )}
 
       {decoded?.ok === false && (
         <p className="font-mono text-[11px] mb-4" style={{ color: 'rgba(248,120,113,0.85)' }}>

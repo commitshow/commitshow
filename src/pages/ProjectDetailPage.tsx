@@ -907,7 +907,11 @@ export function ProjectDetailPage() {
                 <BadgeSnippet projectId={project.id} projectName={project.project_name} />
               </div>
               <div className="mt-6">
-                <TokenReceiptForm projectId={project.id} projectScore={project.score_total} />
+                <TokenReceiptForm
+                  projectId={project.id}
+                  projectScore={project.score_total}
+                  projectGithubUrl={project.github_url}
+                />
               </div>
             </section>
           )}
