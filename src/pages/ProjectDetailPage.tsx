@@ -23,6 +23,7 @@ import { TokenEfficiencyPanel } from '../components/TokenEfficiencyPanel'
 import { OwnerNextStepBanner } from '../components/OwnerNextStepBanner'
 import { MarketPositionForm } from '../components/MarketPositionForm'
 import { AboutProjectSection } from '../components/AboutProjectSection'
+import { MakerIntroBanner } from '../components/MakerIntroBanner'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -711,6 +712,19 @@ export function ProjectDetailPage() {
             tldr={snapshotResult.rich.tldr ?? null}
             strengths={snapshotResult.rich.scout_brief.strengths ?? []}
             weaknesses={snapshotResult.rich.scout_brief.weaknesses ?? []}
+          />
+        )}
+
+        {/* ── Maker's launch post draft · owner-only · auto-prefilled
+              from brief + market position. Hides itself once the owner
+              has commented on the project (or explicitly dismisses).
+              Sits above the comments preview so the published intro
+              becomes the first thing anyone sees in the thread. */}
+        {isOwner && project.creator_id && (
+          <MakerIntroBanner
+            projectId={project.id}
+            projectName={project.project_name}
+            ownerMemberId={project.creator_id}
           />
         )}
 
