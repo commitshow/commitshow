@@ -17,6 +17,7 @@ import {
 import type { AnalysisResult } from '../lib/analysis'
 import { analyzeProject, CooldownError } from '../lib/analysis'
 import { AnalysisResultCard } from '../components/AnalysisResultCard'
+import { NotFoundPage } from './NotFoundPage'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -310,18 +311,14 @@ export function ProjectDetailPage() {
     )
   }
   if (notFound || !project) {
+    // NotFoundPage injects <meta robots noindex> so Google's crawler
+    // doesn't classify missing-project URLs as Soft 404 in the index.
     return (
-      <div className="pt-24 pb-16 px-6 text-center min-h-[60vh]">
-        <div className="font-display font-bold text-2xl mb-2" style={{ color: 'var(--cream)' }}>Project not found</div>
-        <p className="font-mono text-xs mb-6" style={{ color: 'rgba(248,245,238,0.4)' }}>It may have been removed or the URL is wrong.</p>
-        <button
-          onClick={() => navigate('/projects')}
-          className="px-5 py-2 font-mono text-xs tracking-wide"
-          style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', cursor: 'pointer' }}
-        >
-          BACK TO PROJECTS
-        </button>
-      </div>
+      <NotFoundPage
+        title="Project not found"
+        message="It may have been removed or the URL is wrong. Try the ladder for active products."
+        homeHref="/products"
+      />
     )
   }
 

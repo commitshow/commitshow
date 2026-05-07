@@ -39,6 +39,7 @@ const CreatorsPage            = lazy(() => import('./pages/CreatorsPage').then(m
 const CreatorDetailPage       = lazy(() => import('./pages/CreatorDetailPage').then(m => ({ default: m.CreatorDetailPage })))
 const CommunityFeedPage       = lazy(() => import('./pages/CommunityFeedPage').then(m => ({ default: m.CommunityFeedPage })))
 const ProjectSlugRedirect     = lazy(() => import('./pages/ProjectSlugRedirect').then(m => ({ default: m.ProjectSlugRedirect })))
+const NotFoundPage            = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -114,7 +115,12 @@ export default function App() {
           {/* `typeSegment` is read by the editor to pick build_log / stack / ask */}
           <Route path="/community/:typeSegment/new"    element={<NewCommunityPostPage />} />
           <Route path="/community/:typeSegment/:id"    element={<CommunityPostDetailPage />} />
-          <Route path="*"                 element={<LandingPage />} />
+          {/* Real 404 catch-all · was rendering LandingPage which made
+              Google's crawler flag every unknown URL as a Soft 404 (200
+              status with content reading like "wrong page"). NotFoundPage
+              injects <meta name="robots" content="noindex"> so the bot
+              recognizes this as a non-canonical surrogate. */}
+          <Route path="*"                 element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>
