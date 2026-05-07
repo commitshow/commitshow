@@ -1,17 +1,20 @@
-// TokenReceiptForm · paste a `commitshow extract` blob to attach a
-// verified Claude Code token receipt to your audition.
+// TokenReceiptForm · the leaderboard opt-in surface.
 //
-// Used in two surfaces:
-//   1. Post-audition success view (AnalysisResultCard) · "you just
-//      submitted · drop a receipt for your build's token usage"
-//   2. ProjectDetailPage owner section · retroactive add or resubmit
+// What it actually does: takes the user's `commitshow extract` blob and
+// puts them on the public token leaderboard with a verified efficiency
+// score for THIS project. The previous version framed it as "save a
+// receipt" — which sounded like a passive bookkeeping action and buried
+// the actual outcome (public ranking). 2026-05-07 reframe leads with
+// the leaderboard CTA.
 //
-// Privacy posture · the blob carries token NUMBERS only (input/output/
+// Privacy contract · the blob carries token NUMBERS only (input/output/
 // cache + session UUIDs + first/last timestamps + cwd). Prompt content
-// stays on the user's machine. We decode + preview client-side before
-// the user confirms · so they can verify what's about to be uploaded.
+// stays on the user's machine. Submitting publishes the totals to the
+// public leaderboard at /leaderboard/tokens — that's the explicit consent
+// step, called out before the user hits the button.
 
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 interface BlobSession {
@@ -80,24 +83,33 @@ function formatNumber(n: number): string {
 }
 
 interface Props {
-  projectId: string
+  projectId:   string
+  /** Current project audit score · used to compute the projected efficiency
+   *  preview (score / tokens·1M). null/undefined hides the projection. */
+  projectScore?: number | null
   /** Called with the ingest summary after a successful submit. */
   onSuccess?: (summary: { inserted: number; total_tokens: number; total_cost_usd: number }) => void
-  /** Hide the explanatory copy block · for compact placements. */
-  compact?: boolean
 }
 
-export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Props) {
+export function TokenReceiptForm({ projectId, projectScore, onSuccess }: Props) {
   const [blob, setBlob]         = useState<string>('')
   const [submitting, setSubmit] = useState(false)
   const [error, setError]       = useState<string | null>(null)
-  const [success, setSuccess]   = useState<{ inserted: number; total_tokens: number; total_cost_usd: number } | null>(null)
+  const [success, setSuccess]   = useState<{ inserted: number; total_tokens: number; total_cost_usd: number; efficiency: number | null } | null>(null)
 
   const decoded = useMemo(() => (blob.trim() ? decodeBlob(blob) : null), [blob])
   const previewOk = decoded?.ok === true
 
-  // Paste-from-clipboard helper · saves the user one extra step when they
-  // just ran `npx commitshow extract` (which auto-copies the blob).
+  // Projected efficiency · score per 1M tokens. Same formula the
+  // /leaderboard/tokens efficiency tab uses, so the preview matches the
+  // ranking the user is about to enter.
+  const projectedEfficiency: number | null = useMemo(() => {
+    if (!decoded?.ok) return null
+    if (decoded.totals.total === 0) return null
+    if (projectScore == null) return null
+    return Number((projectScore / (decoded.totals.total / 1_000_000)).toFixed(2))
+  }, [decoded, projectScore])
+
   const handlePasteFromClipboard = async () => {
     try {
       const txt = await navigator.clipboard.readText()
@@ -112,7 +124,7 @@ export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Prop
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       if (!token) {
-        setError('You need to be signed in to submit a token receipt.')
+        setError('You need to be signed in to publish to the leaderboard.')
         setSubmit(false); return
       }
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/usage-ingest`
@@ -129,11 +141,13 @@ export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Prop
       if (!r.ok || body.error) {
         setError(body.error ? `${body.error}${body.reason ? ` · ${body.reason}` : ''}` : `HTTP ${r.status}`)
       } else {
-        setSuccess({
+        const summary = {
           inserted:       body.inserted ?? 0,
           total_tokens:   body.total_tokens ?? 0,
           total_cost_usd: body.total_cost_usd ?? 0,
-        })
+          efficiency:     projectedEfficiency,
+        }
+        setSuccess(summary)
         onSuccess?.(body)
       }
     } catch (e) {
@@ -143,48 +157,44 @@ export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Prop
     }
   }
 
-  // Reset success when blob changes · lets the user resubmit a fresh blob.
   useEffect(() => {
     if (success && blob !== '') setSuccess(null)
   }, [blob])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="card-navy p-5 md:p-6" style={{ borderRadius: '2px', border: '1px solid rgba(240,192,64,0.22)' }}>
-      <div className="flex items-baseline justify-between mb-3">
-        <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
-          // TOKEN RECEIPT · CLAUDE CODE
-        </div>
-        <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          optional
-        </span>
+    <div className="card-navy p-5 md:p-6" style={{ borderRadius: '2px', border: '1px solid rgba(240,192,64,0.35)' }}>
+      <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: 'var(--gold-500)' }}>
+        // JOIN THE TOKEN LEADERBOARD
+      </div>
+      <h3 className="font-display font-bold text-lg" style={{ color: 'var(--cream)' }}>
+        Show how efficiently you built this
+      </h3>
+      <p className="font-light text-sm mt-1 mb-5" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        Drop your Claude Code receipt → your build's efficiency score (points per 1M tokens)
+        lands on the public leaderboard at{' '}
+        <Link to="/leaderboard/tokens" style={{ color: 'var(--gold-500)' }}>
+          /leaderboard/tokens
+        </Link>.
+      </p>
+
+      {/* Step 1 · run the CLI */}
+      <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: 'var(--text-label)' }}>
+        STEP 1 · RUN THIS IN YOUR TERMINAL
+      </div>
+      <div className="font-mono text-xs mb-4 p-3" style={{
+        background:   'rgba(6,12,26,0.6)',
+        color:        'var(--gold-500)',
+        borderRadius: '2px',
+        border:       '1px solid rgba(240,192,64,0.18)',
+      }}>
+        $ npx commitshow@latest extract
       </div>
 
-      {!compact && (
-        <p className="text-sm font-light mb-4" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          Run this in any terminal to get your build's token receipt. Privacy: only counters
-          leave your machine, prompt text stays local.
-        </p>
-      )}
-
-      {!compact && (
-        <div className="font-mono text-xs mb-4 p-3" style={{
-          background: 'rgba(6,12,26,0.6)',
-          color: 'var(--gold-500)',
-          borderRadius: '2px',
-          border: '1px solid rgba(240,192,64,0.18)',
-        }}>
-          $ npx commitshow@latest extract
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 mb-2">
-        <label
-          htmlFor="token-blob"
-          className="font-mono text-[10px] tracking-widest"
-          style={{ color: 'var(--text-label)' }}
-        >
-          PASTE BLOB
-        </label>
+      {/* Step 2 · paste */}
+      <div className="flex items-center gap-2 mb-1">
+        <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+          STEP 2 · PASTE THE BLOB
+        </span>
         <button
           type="button"
           onClick={handlePasteFromClipboard}
@@ -196,17 +206,15 @@ export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Prop
             borderRadius: '2px',
             cursor:       'pointer',
           }}
-          aria-label="Paste from clipboard"
         >
           paste from clipboard
         </button>
       </div>
       <textarea
-        id="token-blob"
         value={blob}
         onChange={e => setBlob(e.target.value)}
         placeholder="cs_v1:eyJ2IjoxLCJzb3VyY2UiOiJjbGF1ZGVfY29kZSIsLi4u"
-        rows={4}
+        rows={3}
         spellCheck={false}
         className="w-full font-mono text-[11px] p-3 mb-4"
         style={{
@@ -220,35 +228,59 @@ export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Prop
         }}
       />
 
-      {decoded && decoded.ok === false && (
+      {decoded?.ok === false && (
         <p className="font-mono text-[11px] mb-4" style={{ color: 'rgba(248,120,113,0.85)' }}>
           // {decoded.reason}
         </p>
       )}
 
+      {/* Preview · headline efficiency, totals secondary */}
       {decoded?.ok && (
-        <div className="mb-4 p-3" style={{ background: 'rgba(255,255,255,0.025)', borderRadius: '2px' }}>
-          <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
-            PREVIEW · {decoded.sessionCount} session{decoded.sessionCount === 1 ? '' : 's'}
+        <div className="mb-4 p-4" style={{
+          background:   'rgba(255,255,255,0.025)',
+          borderRadius: '2px',
+          borderLeft:   '2px solid var(--gold-500)',
+        }}>
+          <div className="font-mono text-[10px] tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+            YOUR LEADERBOARD ENTRY · PREVIEW
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-xs">
+
+          {projectedEfficiency !== null ? (
+            <div className="flex items-baseline gap-3 mb-3">
+              <span className="font-display font-black text-4xl tabular-nums" style={{ color: '#3FA874' }}>
+                {projectedEfficiency}
+              </span>
+              <span className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+                pts per 1M tokens · efficiency score
+              </span>
+            </div>
+          ) : (
+            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+              Audit score not available yet · efficiency lands once your project is scored.
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-xs mb-2">
             <PreviewStat label="input"        value={formatNumber(decoded.totals.input)} />
             <PreviewStat label="output"       value={formatNumber(decoded.totals.output)} />
             <PreviewStat label="cache write"  value={formatNumber(decoded.totals.cacheCreate)} />
             <PreviewStat label="cache read"   value={formatNumber(decoded.totals.cacheRead)} />
           </div>
-          <div className="font-mono text-xs mt-2 flex items-baseline justify-between">
-            <span style={{ color: 'var(--text-muted)' }}>total</span>
-            <span style={{ color: 'var(--gold-500)' }} className="font-bold tabular-nums">
-              {formatNumber(decoded.totals.total)}
-            </span>
+          <div className="font-mono text-[10px] flex items-baseline justify-between" style={{ color: 'var(--text-muted)' }}>
+            <span>{decoded.sessionCount} session{decoded.sessionCount === 1 ? '' : 's'} · {formatNumber(decoded.totals.total)} total tokens</span>
+            {decoded.payload.github_url && <span className="truncate ml-2">{decoded.payload.github_url}</span>}
           </div>
-          {decoded.payload.github_url && (
-            <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
-              repo: {decoded.payload.github_url}
-            </div>
-          )}
         </div>
+      )}
+
+      {/* Consent · explicit before the button */}
+      {decoded?.ok && !success && (
+        <p className="font-mono text-[11px] mb-3" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          By publishing, your token totals + efficiency score become public on{' '}
+          <Link to="/leaderboard/tokens" style={{ color: 'var(--text-secondary)' }}>
+            commit.show/leaderboard/tokens
+          </Link>. Prompt content stays on your machine — only counters are sent.
+        </p>
       )}
 
       {error && (
@@ -258,31 +290,54 @@ export function TokenReceiptForm({ projectId, onSuccess, compact = false }: Prop
       )}
 
       {success ? (
-        <div className="font-mono text-xs p-3" style={{
-          background:    'rgba(63,168,116,0.08)',
-          color:         '#3FA874',
-          borderRadius:  '2px',
-          border:        '1px solid rgba(63,168,116,0.35)',
+        <div className="p-4" style={{
+          background:   'rgba(63,168,116,0.1)',
+          border:       '1px solid rgba(63,168,116,0.45)',
+          borderRadius: '2px',
         }}>
-          ✓ Saved · {success.inserted} session{success.inserted === 1 ? '' : 's'} ·
-          {' '}{formatNumber(success.total_tokens)} tokens · ~${success.total_cost_usd.toFixed(2)}
+          <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+            <span className="font-display font-bold" style={{ color: '#3FA874' }}>
+              ✓ You're on the leaderboard
+            </span>
+            <Link
+              to="/leaderboard/tokens"
+              className="font-mono text-xs tracking-wide"
+              style={{
+                color:        '#3FA874',
+                textDecoration: 'none',
+                borderBottom: '1px dashed rgba(63,168,116,0.5)',
+                paddingBottom: 1,
+              }}
+            >
+              See your position →
+            </Link>
+          </div>
+          <p className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {success.inserted} session{success.inserted === 1 ? '' : 's'} · {formatNumber(success.total_tokens)} tokens
+            {success.efficiency !== null && ` · ${success.efficiency} pts/M efficiency`}
+            {success.total_cost_usd > 0 && ` · ~$${success.total_cost_usd.toFixed(2)} estimated cost`}
+          </p>
         </div>
       ) : (
         <button
           type="button"
           onClick={handleSubmit}
           disabled={!previewOk || submitting}
-          className="font-mono text-xs tracking-wide px-4 py-2"
+          className="w-full font-mono text-xs tracking-wide px-4 py-3"
           style={{
             background:   !previewOk || submitting ? 'rgba(240,192,64,0.25)' : 'var(--gold-500)',
             color:        !previewOk || submitting ? 'var(--text-muted)'    : 'var(--navy-900)',
             border:       'none',
             borderRadius: '2px',
             cursor:       !previewOk || submitting ? 'not-allowed' : 'pointer',
-            fontWeight:   600,
+            fontWeight:   700,
           }}
         >
-          {submitting ? 'Saving…' : 'Save receipt →'}
+          {submitting
+            ? 'Publishing…'
+            : previewOk
+              ? 'Publish to leaderboard →'
+              : 'Paste your blob to preview your entry'}
         </button>
       )}
     </div>
