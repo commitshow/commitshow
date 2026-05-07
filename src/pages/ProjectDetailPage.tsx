@@ -769,8 +769,11 @@ export function ProjectDetailPage() {
               </div>
             )}
 
+            {/* GraduationStanding moved to end of ANALYSIS section ·
+                'this score → which Encore tier' is the conclusion of
+                score analysis, not an overview fact. Tier 1 page-tighten
+                pass · 2026-05-07. */}
             <div className="grid gap-5">
-              <GraduationStanding projectId={project.id} viewerMode={isOwner ? 'owner' : 'visitor'} />
               {/* Last timeline point reflects the live ladder total
                   (engagement-driven). Earlier points stay as audit-time
                   snapshots — you can't rewrite history. delta is recomputed
@@ -871,6 +874,15 @@ export function ProjectDetailPage() {
             ) : (
               <EmptyBox label="No analysis yet — awaiting first round." />
             )}
+
+            {/* Encore Standing · the 'so where does this score land?'
+                conclusion. Lives at the END of ANALYSIS so the user has
+                already seen what's wrong + what's right + the score
+                breakdown before this card tells them how close they are
+                to the Encore line. */}
+            <div className="mt-6">
+              <GraduationStanding projectId={project.id} viewerMode={isOwner ? 'owner' : 'visitor'} />
+            </div>
           </section>
 
           {/* ACTIVITY */}
