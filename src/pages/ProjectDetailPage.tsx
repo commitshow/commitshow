@@ -20,6 +20,7 @@ import { AnalysisResultCard } from '../components/AnalysisResultCard'
 import { NotFoundPage } from './NotFoundPage'
 import { TokenReceiptForm } from '../components/TokenReceiptForm'
 import { TokenEfficiencyPanel } from '../components/TokenEfficiencyPanel'
+import { OwnerNextStepBanner } from '../components/OwnerNextStepBanner'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -682,6 +683,24 @@ export function ProjectDetailPage() {
           totalDays={seasonProgress?.totalDays ?? 28}
           phaseLabel={seasonProgress?.phaseLabel ?? ''}
         />
+
+        {/* ── Owner coach · 'Next step' fix-prompt CTA, lifted out of the
+              ANALYSIS section so the most actionable surface lands above
+              the fold instead of after a scroll-past. Renders only when
+              isOwner + has concerns + not yet dismissed. */}
+        {isOwner && snapshotResult?.rich?.scout_brief && (
+          <OwnerNextStepBanner
+            projectName={project.project_name}
+            githubUrl={project.github_url}
+            scoreTotal={project.score_total ?? null}
+            scoreAuto={project.score_auto ?? null}
+            scoreForecast={project.score_forecast ?? null}
+            scoreCommunity={project.score_community ?? null}
+            tldr={snapshotResult.rich.tldr ?? null}
+            strengths={snapshotResult.rich.scout_brief.strengths ?? []}
+            weaknesses={snapshotResult.rich.scout_brief.weaknesses ?? []}
+          />
+        )}
 
         {/* ── Comments preview · standalone box right under the score area ──
               YouTube-mobile pattern applied to ALL viewports: collapsed by

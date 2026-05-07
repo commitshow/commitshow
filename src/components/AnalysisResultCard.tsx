@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { analyzeProject, CooldownError, type AnalysisResult, type AxisColor, type FindingAccent, type ExpertVerdict, type ExpertVerdictLabel, type ExpertRole, type ScoutBriefBullet, type ScoreBreakdownItem } from '../lib/analysis'
+import { buildFixPrompt } from '../lib/fixPrompt'
 import { AnalysisProgressModal } from './AnalysisProgressModal'
 import type { ScoutTier } from '../lib/supabase'
 import { RoleIcon } from './iconMaps'
@@ -944,107 +945,30 @@ function ScoutBriefSection({
   const visibleWeaknesses = hasFullAccess ? allWeaknesses : allWeaknesses.slice(0, SCOUT_VISIBLE_WEAKNESSES)
   const hiddenCount = Math.max(0, allWeaknesses.length - visibleWeaknesses.length)
   const [copied, setCopied] = useState(false)
-  // First-audition spoon-feed: a coach banner sits above the brief and
-  // gives owners a single obvious next step (copy → paste → re-audit).
-  // Dismissed once globally — returning users have already learned the loop.
-  // localStorage flag flips on explicit dismiss OR after first successful copy.
-  const [coachDismissed, setCoachDismissed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true
-    try { return window.localStorage.getItem('coach.fixPrompt.dismissed') === '1' }
-    catch { return false }
-  })
-  const dismissCoach = () => {
-    setCoachDismissed(true)
-    try { window.localStorage.setItem('coach.fixPrompt.dismissed', '1') } catch {}
-  }
-  const showCoach = isOwner && visibleWeaknesses.length > 0 && !coachDismissed
+  // The page-level OwnerNextStepBanner (mounted above ProjectComments)
+  // owns the localStorage 'coach.fixPrompt.dismissed' flag. The inline
+  // Copy fix prompt button below stays available for repeat use after
+  // the coach is dismissed.
 
   const handleCopyPrompt = async () => {
-    const target = projectName && githubUrl
-      ? `${projectName} (${githubUrl})`
-      : (projectName || githubUrl || 'this project')
-    const slug = (() => {
-      if (!githubUrl) return null
-      const m = githubUrl.match(/github\.com\/([^/\s]+)\/([^/\s?#]+?)(?:\.git)?\/?$/i)
-      return m ? `${m[1]}/${m[2].replace(/\.git$/, '')}` : null
-    })()
-    const lines: string[] = []
-
-    lines.push('# commit.show audit · fix request')
-    lines.push('')
-    lines.push(`**Project**: ${target}`)
-    if (scoreTotal !== null) {
-      const breakdown: string[] = []
-      if (scoreAuto      !== null) breakdown.push(`audit ${scoreAuto}/50`)
-      if (scoreForecast  !== null) breakdown.push(`scout ${scoreForecast}/30`)
-      if (scoreCommunity !== null) breakdown.push(`community ${scoreCommunity}/20`)
-      const tail = breakdown.length > 0 ? ` (${breakdown.join(' · ')})` : ''
-      lines.push(`**Current score**: ${scoreTotal}/100${tail}`)
-    }
-    if (tldr) {
-      const trimmed = tldr.length > 280 ? tldr.slice(0, 277) + '…' : tldr
-      lines.push(`**Engine TL;DR**: ${trimmed}`)
-    }
-    lines.push('')
-
-    lines.push('## Concerns to address (priority order — security and correctness first)')
-    lines.push('')
-    visibleWeaknesses.forEach((b, i) => {
-      lines.push(`${i + 1}. [${b.axis}] ${b.bullet}`)
+    const prompt = buildFixPrompt({
+      projectName,
+      githubUrl,
+      scoreTotal,
+      scoreAuto,
+      scoreForecast,
+      scoreCommunity,
+      tldr,
+      strengths,
+      weaknesses: visibleWeaknesses,
     })
-    lines.push('')
-
-    if (strengths.length > 0) {
-      lines.push("## Strengths to preserve (don't break these — they're carrying the score)")
-      lines.push('')
-      strengths.slice(0, 5).forEach((s) => {
-        lines.push(`- [${s.axis}] ${s.bullet}`)
-      })
-      lines.push('')
-    }
-
-    lines.push('## Step 0 — pull the evidence pack before editing')
-    lines.push('')
-    lines.push('Each concern has more detail than the bullet above. Run this FIRST so you')
-    lines.push("know which files / which patterns the audit actually keyed on — guessing")
-    lines.push('without it usually means re-doing the work after re-audit:')
-    lines.push('')
-    lines.push('```')
-    lines.push('npx commitshow audit'
-      + (slug ? ` ${slug}` : '')
-      + ' --json')
-    lines.push('```')
-    lines.push('')
-    lines.push('Look at `snapshot.rich_analysis` (`scout_brief`, `vibe_concerns`, axis breakdown). Each concern category typically carries a `samples` / `sample_files` / `evidence_files` list with the exact paths and patterns the detector matched.')
-    lines.push('')
-
-    lines.push('## Rules of engagement')
-    lines.push('')
-    lines.push('- Smallest minimal patch per concern. No refactors, no new dependencies, no behavior changes outside the flagged scope.')
-    lines.push('- Stop and ask before doing anything that conflicts with the strengths above (e.g. don\'t replace a working pattern just to reach a metric).')
-    lines.push('- **Stop and ask before any destructive history rewrite.** If a concern requires `git filter-repo` / `git filter-branch` / force-pushing to scrub committed secrets, surface the exact commands and the impact (collaborators must re-clone, CI tokens may need rotation) and wait for confirmation. Do not run them autonomously.')
-    lines.push('- Apply concerns in order. Skip and explain if a concern is genuinely not actionable in this repo.')
-    lines.push('- After every 1-2 concerns, re-run `npx commitshow audit'
-      + (slug ? ` ${slug}` : '')
-      + '` to verify the fix actually landed before moving on. Cheaper than batching 5 fixes and discovering 2 didn\'t register.')
-    lines.push('')
-
-    lines.push('## When you\'re done')
-    lines.push('')
-    lines.push('1. Run `npx commitshow audit'
-      + (slug ? ` ${slug}` : '')
-      + '` to re-score.')
-    lines.push('2. Report the new total + which concerns dropped + any new ones the audit surfaced.')
-    lines.push('3. If the score didn\'t move, look at `.commitshow/audit.md` (written by the CLI) for the new evidence and decide the next iteration.')
-
-    const prompt = lines.join('\n')
     try {
       await navigator.clipboard.writeText(prompt)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-      // Implicit dismissal: once they've copied, the coach has done its job
-      // and the regular header button stays available for next time.
-      dismissCoach()
+      // Mirror dismissal · if the page-level coach is still showing,
+      // copying via this header button counts as 'I got it' too.
+      try { window.localStorage.setItem('coach.fixPrompt.dismissed', '1') } catch {}
     } catch (e) {
       console.error('[copy fix prompt] failed', e)
     }
@@ -1052,58 +976,10 @@ function ScoutBriefSection({
 
   return (
     <div>
-      {showCoach && (
-        <div
-          className="mb-5 p-4 md:p-5"
-          style={{
-            background: 'linear-gradient(180deg, rgba(240,192,64,0.08) 0%, rgba(240,192,64,0.03) 100%)',
-            border: '1px solid rgba(240,192,64,0.32)',
-            borderRadius: '2px',
-          }}
-        >
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--gold-500)' }}>
-              // NEXT STEP · 30 SEC
-            </div>
-            <button
-              type="button"
-              onClick={dismissCoach}
-              className="font-mono text-[10px] tracking-wide"
-              style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-              aria-label="Hide this guide"
-            >
-              hide ×
-            </button>
-          </div>
-          <p className="font-display font-bold text-base md:text-lg leading-snug mb-1" style={{ color: 'var(--cream)' }}>
-            Score landed. Now ship the fixes.
-          </p>
-          <p className="text-xs md:text-sm font-light mb-4" style={{ color: 'rgba(248,245,238,0.7)', lineHeight: 1.6 }}>
-            Copy the fix prompt, paste it into Cursor / Claude Code / your AI tool of choice. It already lists the {visibleWeaknesses.length} concern{visibleWeaknesses.length === 1 ? '' : 's'} below with rules of engagement. Re-audit once patches land.
-          </p>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleCopyPrompt}
-              className="font-mono text-xs tracking-wide px-4 py-2"
-              style={{
-                background:   copied ? 'rgba(63,168,116,0.18)' : 'var(--gold-500)',
-                color:        copied ? '#3FA874' : 'var(--navy-900)',
-                border:       copied ? '1px solid rgba(63,168,116,0.45)' : 'none',
-                borderRadius: '2px',
-                cursor:       'pointer',
-                fontWeight:   700,
-              }}
-              aria-label="Copy fix prompt for AI tool"
-            >
-              {copied ? '✓ Copied · paste in your AI tool' : 'Copy fix prompt →'}
-            </button>
-            <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              then ⌘V in Cursor
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Coach card moved out · OwnerNextStepBanner now renders above
+          ProjectComments on ProjectDetailPage. Header-level Copy fix
+          prompt button (below) stays as the always-available repeat
+          tool inside the analysis section. */}
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
           // SCOUT BRIEF · {strengths.length}+{allWeaknesses.length}
