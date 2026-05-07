@@ -885,9 +885,17 @@ export function ProjectDetailPage() {
             </div>
           </section>
 
-          {/* ACTIVITY */}
-          <section id="activity" className="scroll-mt-28">
-            <SectionHeader label="ACTIVITY" hint="Forecasts and craft-award applauds on this project." />
+          {/* ACTIVITY · collapsed by default · summary row shows counts,
+              click to expand. Forecasts and applauds are nice context
+              but not the headline — keeping them folded shortens the
+              page for the 99% of visitors who don't need to read each
+              row. (Tier 2 page-tighten · 2026-05-07.) */}
+          <CollapsibleSection
+            id="activity"
+            label="ACTIVITY"
+            hint="Forecasts and applauds on this project."
+            summary={`${forecasts.length} forecast${forecasts.length === 1 ? '' : 's'} · ${applauds.length} applaud${applauds.length === 1 ? '' : 's'}`}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <ActivityList title="FORECASTS" emptyLabel="No forecasts cast yet." accent="var(--gold-500)">
                 {forecasts.map(f => (
@@ -913,37 +921,37 @@ export function ProjectDetailPage() {
                 ))}
               </ActivityList>
             </div>
-          </section>
+          </CollapsibleSection>
 
           {/* TOKEN USAGE · public · only renders when receipt exists */}
           <section className="scroll-mt-28">
             <TokenEfficiencyPanel projectId={project.id} isOwner={isOwner} />
           </section>
 
-          {/* BACKSTAGE · public · locked until graduation per CLAUDE.md §12 */}
-          <section id="backstage" className="scroll-mt-28">
-            <SectionHeader
-              label="BACKSTAGE"
-              hint="Failures · decisions · delegation · the data nobody else captures. Sealed until graduation."
-            />
+          {/* BACKSTAGE · public · locked until Encore. Default-collapsed
+              so the locked-state stub doesn't take 250px of column for
+              the 80% of projects that haven't crossed yet. */}
+          <CollapsibleSection
+            id="backstage"
+            label="BACKSTAGE"
+            hint="Failures · decisions · delegation · the data nobody else captures."
+            summary={(project.score_total ?? 0) >= 84
+              ? '✓ Unlocked · Phase 2 brief visible'
+              : 'Sealed until Encore'}
+          >
             <BackstagePanel project={project} />
-          </section>
+          </CollapsibleSection>
 
-          {/* BRIEF · owner only */}
+          {/* BRIEF · owner only · 3 tools as tabs (Brief edit · README badge · Token receipt) */}
           {isOwner && (
             <section id="brief" className="scroll-mt-28">
-              <SectionHeader label="PRIVATE BRIEF" hint="Only you can see this — editor + integrity score." />
-              <OwnerBriefPanel projectId={project.id} />
-              <div className="mt-6">
-                <BadgeSnippet projectId={project.id} projectName={project.project_name} githubUrl={project.github_url} />
-              </div>
-              <div className="mt-6">
-                <TokenReceiptForm
-                  projectId={project.id}
-                  projectScore={project.score_total}
-                  projectGithubUrl={project.github_url}
-                />
-              </div>
+              <SectionHeader label="PRIVATE BRIEF" hint="Only you can see this — three creator tools, one tab at a time." />
+              <OwnerToolsTabs
+                projectId={project.id}
+                projectName={project.project_name}
+                githubUrl={project.github_url}
+                projectScore={project.score_total}
+              />
             </section>
           )}
         </div>
@@ -1153,6 +1161,113 @@ function SectionHeader({ label, hint }: { label: string; hint?: string }) {
         <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
           {hint}
         </div>
+      )}
+    </div>
+  )
+}
+
+// CollapsibleSection · default-collapsed wrapper for non-headline
+// surfaces (Activity feed · Backstage Phase 2 · etc). Shows label +
+// hint + a one-line summary closed; click to expand and see children.
+function CollapsibleSection({
+  id, label, hint, summary, defaultOpen = false, children,
+}: {
+  id?:          string
+  label:        string
+  hint?:        string
+  summary?:     string
+  defaultOpen?: boolean
+  children:     React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section id={id} className="scroll-mt-28">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full text-left mb-4"
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+      >
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+              // {label}
+            </div>
+            {hint && (
+              <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                {hint}
+              </div>
+            )}
+          </div>
+          <span className="font-mono text-[11px] flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+            {summary && <span>{summary}</span>}
+            <span style={{ color: 'var(--gold-500)' }}>{open ? '▲' : '▼'}</span>
+          </span>
+        </div>
+      </button>
+      {open && children}
+    </section>
+  )
+}
+
+// OwnerToolsTabs · 3 owner-only tools (Brief edit · README badge ·
+// Token receipt) folded into a single tab bar so the page doesn't
+// stack 3 heavy cards on top of each other. One tool visible at a
+// time; sticky tab bar lets the owner switch between them.
+function OwnerToolsTabs({
+  projectId, projectName, githubUrl, projectScore,
+}: {
+  projectId:    string
+  projectName:  string
+  githubUrl:    string | null
+  projectScore: number | null
+}) {
+  type Tab = 'brief' | 'badge' | 'tokens'
+  const [tab, setTab] = useState<Tab>('brief')
+
+  const tabs: Array<{ id: Tab; label: string; sub: string }> = [
+    { id: 'brief',  label: 'Brief',         sub: 'edit your build brief' },
+    { id: 'badge',  label: 'README badge',  sub: 'show the score on GitHub' },
+    { id: 'tokens', label: 'Token receipt', sub: 'join the token leaderboard' },
+  ]
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1 mb-4">
+        {tabs.map(t => {
+          const active = tab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className="font-mono text-[11px] tracking-wide px-3 py-2 transition-colors"
+              style={{
+                background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
+                color:        active ? 'var(--gold-500)'      : 'var(--text-secondary)',
+                border:       `1px solid ${active ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.1)'}`,
+                borderRadius: '2px',
+                cursor:       'pointer',
+                fontWeight:   active ? 600 : 400,
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+      {tab === 'brief' && (
+        <OwnerBriefPanel projectId={projectId} />
+      )}
+      {tab === 'badge' && (
+        <BadgeSnippet projectId={projectId} projectName={projectName} githubUrl={githubUrl} />
+      )}
+      {tab === 'tokens' && (
+        <TokenReceiptForm
+          projectId={projectId}
+          projectScore={projectScore}
+          projectGithubUrl={githubUrl}
+        />
       )}
     </div>
   )
