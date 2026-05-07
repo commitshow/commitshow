@@ -18,6 +18,8 @@ import type { AnalysisResult } from '../lib/analysis'
 import { analyzeProject, CooldownError } from '../lib/analysis'
 import { AnalysisResultCard } from '../components/AnalysisResultCard'
 import { NotFoundPage } from './NotFoundPage'
+import { TokenReceiptForm } from '../components/TokenReceiptForm'
+import { TokenEfficiencyPanel } from '../components/TokenEfficiencyPanel'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -882,6 +884,11 @@ export function ProjectDetailPage() {
             </div>
           </section>
 
+          {/* TOKEN USAGE · public · only renders when receipt exists */}
+          <section className="scroll-mt-28">
+            <TokenEfficiencyPanel projectId={project.id} isOwner={isOwner} />
+          </section>
+
           {/* BACKSTAGE · public · locked until graduation per CLAUDE.md §12 */}
           <section id="backstage" className="scroll-mt-28">
             <SectionHeader
@@ -898,6 +905,9 @@ export function ProjectDetailPage() {
               <OwnerBriefPanel projectId={project.id} />
               <div className="mt-6">
                 <BadgeSnippet projectId={project.id} projectName={project.project_name} />
+              </div>
+              <div className="mt-6">
+                <TokenReceiptForm projectId={project.id} />
               </div>
             </section>
           )}

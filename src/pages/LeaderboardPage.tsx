@@ -10,7 +10,7 @@
 // One dot = one project. Hover to reveal name + score; click → detail page.
 
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase, type Project } from '../lib/supabase'
 
 type ProjectDotRaw = Pick<Project, 'id' | 'project_name' | 'score_auto' | 'score_forecast' | 'score_total' | 'status'>
@@ -285,6 +285,25 @@ export function LeaderboardPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Cross-link · the token leaderboard sits next to this map.
+            Same headline (who's standing where) but the axis is token spend
+            instead of audit-vs-scout. Surfaced as a peer link, not a tab,
+            so the URL state stays clean. */}
+        <div className="mt-3 flex items-center gap-2 font-mono text-[11px]">
+          <span style={{ color: 'var(--text-muted)' }}>see also</span>
+          <Link
+            to="/leaderboard/tokens"
+            style={{
+              color: 'var(--gold-500)',
+              textDecoration: 'none',
+              borderBottom: '1px dashed rgba(240,192,64,0.5)',
+              paddingBottom: 1,
+            }}
+          >
+            token-maxxers · with receipts
+          </Link>
         </div>
 
         {/* Quadrant breakdown · league pulse strip */}

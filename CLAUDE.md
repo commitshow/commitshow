@@ -2245,8 +2245,8 @@ Follow-up · 작은 정리
 ---
 
 *이 파일은 프로젝트가 진행될수록 업데이트한다.*
-*마지막 업데이트: 2026-05-07 · trajectory 카드 풀스택 (kind=trajectory SVG/PNG · auto-tweet 4 trajectory 템플릿 · encore production INSERT pg_net trigger · projects middleware ?og=trajectory swap) + ThisWeekHighlight bookend RPC 전환 · LeaderboardPage 4-quadrant 카운트 strip · "AI" 잔존 audit (위반 0건 확인) · SeizyC backup workflow scope 해소*
-*이전: 2026-05-07 §18-B.4 auto-tweet 파이프라인 + §18-C GitHub acquisition 트랙*
+*마지막 업데이트: 2026-05-07 · 토큰 사용량/효율 풀스택 V1 (audit_token_usage 테이블 · analyze-project Claude 응답 usage 캡처 · usage-ingest Edge Function · commitshow extract CLI subcommand · TokenReceiptForm UI · TokenEfficiencyPanel · /leaderboard/tokens · "Verified Claude Code" 만 V1 · vendor lock 인 Cursor/Lovable/Bolt 는 V1.5+) + Soft 404 SEO fix (NotFoundPage + sitemap canonicalization) + NEW AUDITS lane cream*
+*이전: 2026-05-07 trajectory 카드 풀스택 + ThisWeekHighlight bookend + LeaderboardPage quadrant strip*
 *이전 마지막 업데이트: 2026-05-06 · §16 / §20.2 backlog audit · 백로그가 실제 코드 상태와 어긋나있던 것 정리*
 *이전 마지막 업데이트: 2026-04-24 · **commit.show PRD v2** (통합 기획서 2026-04-19 + Creator Community 2026-04-23 기반 재정비 + §15 Intent-first/Trending UX)*
 

@@ -40,6 +40,7 @@ const CreatorDetailPage       = lazy(() => import('./pages/CreatorDetailPage').t
 const CommunityFeedPage       = lazy(() => import('./pages/CommunityFeedPage').then(m => ({ default: m.CommunityFeedPage })))
 const ProjectSlugRedirect     = lazy(() => import('./pages/ProjectSlugRedirect').then(m => ({ default: m.ProjectSlugRedirect })))
 const NotFoundPage            = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
+const TokenLeaderboardPage    = lazy(() => import('./pages/TokenLeaderboardPage').then(m => ({ default: m.TokenLeaderboardPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/library/:id"      element={<LibraryDetailPage />} />
           <Route path="/scouts"           element={<ScoutsPage />} />
           <Route path="/leaderboard"      element={<LeaderboardPage />} />
+          <Route path="/leaderboard/tokens" element={<TokenLeaderboardPage />} />
           {/* /products is canonical (2026-05-05 rebrand · was /ladder).
               Old /ladder URL preserved as redirect for links in the
               wild · keeps tweets, blog posts, AI agent memory working. */}

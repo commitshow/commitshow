@@ -2565,7 +2565,19 @@ interface ScoutBrief {
   weaknesses: Array<{ axis: string; bullet: string }>  // exactly 5, ≤120 chars · first 3 public to all scouts
 }
 
+interface EngineUsage {
+  input_tokens:        number
+  output_tokens:       number
+  cache_create_tokens: number
+  cache_read_tokens:   number
+  model_version:       string
+}
+
 interface RichAnalysis {
+  // Internal-only · stripped before persisting to analysis_snapshots ·
+  // forwarded into audit_token_usage by the caller for cost tracking.
+  _engine_usage?: EngineUsage | null
+
   tldr: string
   headline: string
   role_title: { previous: string; current: string; reasoning: string }
@@ -3255,7 +3267,27 @@ OUTPUT SHAPE
         error: { type: 'claude_returned_no_data', message: 'Claude returned no tool_use block' },
       } as RichAnalysis
     }
-    return { ...RICH_ANALYSIS_FALLBACK, ...block.input } as RichAnalysis
+    // Stash usage on the rich analysis so the caller (analyze-project main
+    // handler) can persist it to audit_token_usage with source='audit_engine'.
+    // Cost monitoring backbone — this is OUR cost per audit, not the user's
+    // tool spend. The leaderboard ignores audit_engine rows.
+    const usage = data.usage as {
+      input_tokens?:                number
+      output_tokens?:               number
+      cache_creation_input_tokens?: number
+      cache_read_input_tokens?:     number
+    } | undefined
+    return {
+      ...RICH_ANALYSIS_FALLBACK,
+      ...block.input,
+      _engine_usage: usage ? {
+        input_tokens:        usage.input_tokens                ?? 0,
+        output_tokens:       usage.output_tokens               ?? 0,
+        cache_create_tokens: usage.cache_creation_input_tokens ?? 0,
+        cache_read_tokens:   usage.cache_read_input_tokens     ?? 0,
+        model_version:       'claude-sonnet-4-6',
+      } : null,
+    } as RichAnalysis
   } catch (e) {
     console.error('Claude fetch failed', e)
     return {
@@ -4127,6 +4159,10 @@ Deno.serve(async (req) => {
   }
   const scoreTotalDelta = parent ? scoreTotal - (parent.score_total ?? 0) : null
 
+  // Strip _engine_usage out of the rich_analysis we persist · the column
+  // is meant for the public analysis payload, not internal cost data.
+  const { _engine_usage: engineUsage, ...claudeForSnapshot } = (claude ?? {}) as Record<string, unknown> & { _engine_usage?: EngineUsage }
+
   const { data: snapshot, error: snapErr } = await admin.from('analysis_snapshots').insert([{
     project_id:         projectId,
     trigger_type:       triggerType,
@@ -4140,7 +4176,7 @@ Deno.serve(async (req) => {
     github_signals:     gh.signals,
     // Mix in the completeness signals so the snapshot is self-contained:
     // future reruns / UI ledgers can reference exactly what was checked.
-    rich_analysis:      { ...claude, completeness_signals: completeness },
+    rich_analysis:      { ...claudeForSnapshot, completeness_signals: completeness },
     parent_snapshot_id: parent?.id ?? null,
     delta_from_parent:  Object.keys(deltaFromParent).length ? deltaFromParent : null,
     score_total_delta:  scoreTotalDelta,
@@ -4149,6 +4185,48 @@ Deno.serve(async (req) => {
     model_version:      'claude-sonnet-4-6',
   }]).select('id').single()
   if (snapErr) console.error('snapshot insert failed', snapErr)
+
+  // ── audit_token_usage · capture OUR Claude SDK call cost per snapshot ──
+  // source='audit_engine' rows are admin-only cost monitoring · they do NOT
+  // count toward the user-facing token leaderboard. Pricing pinned to
+  // Sonnet 4.6 today · stored as a cost_usd snapshot so historical pricing
+  // changes don't retroactively rewrite reported costs.
+  if (snapshot?.id && engineUsage) {
+    const inputTok        = engineUsage.input_tokens        ?? 0
+    const outputTok       = engineUsage.output_tokens       ?? 0
+    const cacheCreateTok  = engineUsage.cache_create_tokens ?? 0
+    const cacheReadTok    = engineUsage.cache_read_tokens   ?? 0
+    // USD per 1M tokens · Anthropic Sonnet 4.6 · 2026-05 pricing.
+    const PRICE_INPUT  = 3.00
+    const PRICE_OUTPUT = 15.00
+    const PRICE_CACHE_CREATE = 3.75
+    const PRICE_CACHE_READ   = 0.30
+    const costUsd =
+      (inputTok       / 1_000_000) * PRICE_INPUT        +
+      (outputTok      / 1_000_000) * PRICE_OUTPUT       +
+      (cacheCreateTok / 1_000_000) * PRICE_CACHE_CREATE +
+      (cacheReadTok   / 1_000_000) * PRICE_CACHE_READ
+
+    const { error: usageErr } = await admin.from('audit_token_usage').insert({
+      project_id:          projectId,
+      snapshot_id:         snapshot.id,
+      source:              'audit_engine',
+      verified:            true,
+      input_tokens:        inputTok,
+      output_tokens:       outputTok,
+      cache_create_tokens: cacheCreateTok,
+      cache_read_tokens:   cacheReadTok,
+      cost_usd:            Number(costUsd.toFixed(4)),
+      model_version:       engineUsage.model_version ?? 'claude-sonnet-4-6',
+      first_seen_at:       new Date().toISOString(),
+      last_seen_at:        new Date().toISOString(),
+      tool_version:        'analyze-project',
+      metadata:            { trigger_type: triggerType },
+    })
+    if (usageErr && usageErr.code !== '23505') {  // 23505 = uniqueness · expected on retry
+      console.error('audit_token_usage insert failed', usageErr)
+    }
+  }
 
   // ── @commitshow auto-tweet · fire-and-forget background call ──
   // Triggers when a fresh snapshot lands. The auto-tweet Edge Function
