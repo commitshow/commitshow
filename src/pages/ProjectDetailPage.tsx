@@ -21,8 +21,8 @@ import { NotFoundPage } from './NotFoundPage'
 import { TokenReceiptForm } from '../components/TokenReceiptForm'
 import { TokenEfficiencyPanel } from '../components/TokenEfficiencyPanel'
 import { OwnerNextStepBanner } from '../components/OwnerNextStepBanner'
-import { MarketPositionCard } from '../components/MarketPositionCard'
 import { MarketPositionForm } from '../components/MarketPositionForm'
+import { AboutProjectSection } from '../components/AboutProjectSection'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -686,6 +686,16 @@ export function ProjectDetailPage() {
           phaseLabel={seasonProgress?.phaseLabel ?? ''}
         />
 
+        {/* ── About this project · casual narrative card right under
+              the score banner. Aggregates Phase 1 brief + Market
+              Position + tools into a Product-Hunt-style 'what is this'
+              block so a fresh visitor can read the project IS in 10
+              seconds without scrolling into the audit. Hides itself
+              when no signals exist. */}
+        <div className="mt-4">
+          <AboutProjectSection projectId={project.id} projectName={project.project_name} />
+        </div>
+
         {/* ── Owner coach · 'Next step' fix-prompt CTA, lifted out of the
               ANALYSIS section so the most actionable surface lands above
               the fold instead of after a scroll-past. Renders only when
@@ -737,11 +747,11 @@ export function ProjectDetailPage() {
           <section id="overview" className="scroll-mt-28">
             <SectionHeader label="OVERVIEW" />
 
-            {/* Market position · one-liner / business model / stage ·
-                set during the post-audit Market Position review step.
-                Hides entirely when all 3 are NULL (old projects · or
-                creator skipped the step). */}
-            <MarketPositionCard projectId={project.id} />
+            {/* MarketPositionCard removed from here 2026-05-08 · the
+                AboutProjectSection above the section nav now carries
+                the one-liner / model / stage chips alongside the rest
+                of the casual narrative. OVERVIEW becomes pure
+                description + screenshots. */}
 
             {/* Description pullquote — the hero text now lives here, styled up */}
             {project.description && (
