@@ -1,18 +1,32 @@
 // /tokens · person-level token leaderboard (primary surface).
 //
 // Two tabs:
-//   1. Verified · backed by `commitshow extract` (Claude Code) · trusted
-//   2. Efficiency · score-per-1M-tokens leaderboard · the "token-maxxing
-//      vs token-efficient" contrast — same data, different sort.
+//   1. Most spent · raw token totals across all of a member's projects
+//   2. Best efficiency · score-per-1M-tokens · the "token-maxxing vs
+//      token-efficient" contrast.
 //
-// Self-reported tier is gated to V1.5+ · we only ship verified data
-// from the Claude Code path until the form/CLI flow has matured.
+// Both tabs accept a category filter (saas / library / tool / game /
+// ai_agent / other / all) so projects of comparable complexity rank
+// against each other. A static landing page no longer outranks a SaaS
+// just because its denominator is smaller — each category brings its
+// own token floor (token_floor_for_category RPC). 2026-05-07 fix.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 type Tab = 'top' | 'efficiency'
+type Category = 'all' | 'saas' | 'tool' | 'ai_agent' | 'game' | 'library' | 'other'
+
+const CATEGORY_TABS: Array<{ id: Category; label: string }> = [
+  { id: 'all',      label: 'All' },
+  { id: 'saas',     label: 'SaaS' },
+  { id: 'tool',     label: 'Tool' },
+  { id: 'ai_agent', label: 'AI Agent' },
+  { id: 'game',     label: 'Game' },
+  { id: 'library',  label: 'Library' },
+  { id: 'other',    label: 'Other' },
+]
 
 interface TopRow {
   member_id:      string
@@ -31,13 +45,14 @@ interface TopRow {
 }
 
 interface EffRow {
-  project_id:       string
-  project_name:     string
-  score:            number
-  total_tokens:     number
-  efficiency_score: number
-  member_id:        string | null
-  display_name:     string | null
+  project_id:        string
+  project_name:      string
+  business_category: string | null
+  score:             number
+  total_tokens:      number
+  efficiency_score:  number
+  member_id:         string | null
+  display_name:      string | null
 }
 
 function fmtNumber(n: number): string {
@@ -52,35 +67,44 @@ function fmtUsd(n: number): string {
 }
 
 export function TokenLeaderboardPage() {
-  const [tab, setTab] = useState<Tab>('top')
-  const [topRows, setTopRows] = useState<TopRow[] | null>(null)
-  const [effRows, setEffRows] = useState<EffRow[] | null>(null)
+  const [tab, setTab]       = useState<Tab>('top')
+  const [category, setCat]  = useState<Category>('all')
+
+  // Per (tab, category) cache · re-fetch only when key changes.
+  const [cache, setCache] = useState<Record<string, TopRow[] | EffRow[]>>({})
+  const cacheKey = useMemo(() => `${tab}:${category}`, [tab, category])
+  const rows     = cache[cacheKey] as undefined | (TopRow[] | EffRow[])
 
   useEffect(() => {
+    if (rows !== undefined) return
     let alive = true
     ;(async () => {
-      if (tab === 'top' && topRows === null) {
+      const p_category = category === 'all' ? null : category
+      if (tab === 'top') {
         const { data, error } = await supabase.rpc('top_token_consumers', {
-          p_source: 'claude_code',
-          p_limit:  20,
+          p_source:   'claude_code',
+          p_category,
+          p_limit:    20,
         })
         if (!alive) return
-        if (error) { console.error('top_token_consumers', error); setTopRows([]) }
-        else setTopRows((data ?? []) as TopRow[])
-      }
-      if (tab === 'efficiency' && effRows === null) {
+        if (error) { console.error('top_token_consumers', error); setCache(c => ({ ...c, [cacheKey]: [] })) }
+        else setCache(c => ({ ...c, [cacheKey]: (data ?? []) as TopRow[] }))
+      } else {
         const { data, error } = await supabase.rpc('top_token_efficiency', {
-          p_source:     'claude_code',
-          p_min_tokens: 100000,
-          p_limit:      20,
+          p_source:   'claude_code',
+          p_category,
+          p_limit:    20,
         })
         if (!alive) return
-        if (error) { console.error('top_token_efficiency', error); setEffRows([]) }
-        else setEffRows((data ?? []) as EffRow[])
+        if (error) { console.error('top_token_efficiency', error); setCache(c => ({ ...c, [cacheKey]: [] })) }
+        else setCache(c => ({ ...c, [cacheKey]: (data ?? []) as EffRow[] }))
       }
     })()
     return () => { alive = false }
-  }, [tab])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cacheKey, tab, category, rows])
+
+  const topRows = tab === 'top'        ? (rows as TopRow[] | undefined ?? null) : null
+  const effRows = tab === 'efficiency' ? (rows as EffRow[] | undefined ?? null) : null
 
   return (
     <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen">
@@ -105,8 +129,8 @@ export function TokenLeaderboardPage() {
           </p>
         </header>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-2 mb-6">
+        {/* Sort tabs · Most spent vs Best efficiency */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <TabButton active={tab === 'top'}        onClick={() => setTab('top')}>
             Most spent
           </TabButton>
@@ -114,6 +138,46 @@ export function TokenLeaderboardPage() {
             Best efficiency
           </TabButton>
         </div>
+
+        {/* Category bracket · keeps comparable complexity together.
+            Per-category token floor handled server-side in
+            token_floor_for_category RPC (saas/ai_agent 500K · game
+            300K · tool/library/other 200K). Static landing pages no
+            longer outrank multi-service SaaS just because their
+            denominator is smaller. */}
+        <div className="flex items-center gap-1.5 mb-6 flex-wrap">
+          <span className="font-mono text-[10px] tracking-widest mr-1" style={{ color: 'var(--text-muted)' }}>
+            CATEGORY
+          </span>
+          {CATEGORY_TABS.map(c => {
+            const active = category === c.id
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCat(c.id)}
+                className="font-mono text-[11px] tracking-wide px-2.5 py-1"
+                style={{
+                  background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
+                  color:        active ? 'var(--gold-500)'      : 'var(--text-secondary)',
+                  border:       `1px solid ${active ? 'rgba(240,192,64,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                  borderRadius: '2px',
+                  cursor:       'pointer',
+                  fontWeight:   active ? 600 : 400,
+                }}
+              >
+                {c.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {tab === 'efficiency' && (
+          <p className="font-mono text-[10px] mb-4" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Token floor for this bracket · {category === 'saas' || category === 'ai_agent' ? '500K' : category === 'game' ? '300K' : '200K'} tokens.
+            Projects below the floor don't enter the efficiency leaderboard so a trivial-but-tiny build can't outrank a real one on raw ratio.
+          </p>
+        )}
 
         {/* Content */}
         {tab === 'top' ? (
@@ -242,6 +306,7 @@ function EfficiencyList({ rows }: { rows: EffRow[] | null }) {
               </div>
               <div className="font-mono text-[10px] tabular-nums" style={{ color: 'var(--text-muted)' }}>
                 {r.display_name ?? 'anon'} · score {r.score}/100 · {fmtNumber(r.total_tokens)} tokens
+                {r.business_category && ` · ${r.business_category}`}
               </div>
             </div>
             <span className="font-mono text-xs hidden sm:inline" style={{ color: 'var(--text-secondary)' }}>
