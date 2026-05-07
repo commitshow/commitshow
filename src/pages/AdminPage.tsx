@@ -122,7 +122,7 @@ export function AdminPage() {
 
   const [token, setToken] = useState<string>(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
   const [tokenInput, setTokenInput] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'policy' | 'emails' | 'tools'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'policy' | 'emails' | 'flags' | 'tools'>('overview')
 
   const [userStats, setUserStats]   = useState<UserStats   | null>(null)
   const [auditStats, setAuditStats] = useState<AuditStats  | null>(null)
@@ -783,6 +783,7 @@ export function AdminPage() {
             ['cli',      'CLI 사용'],
             ['policy',   '정책'],
             ['emails',   '이메일'],
+            ['flags',    '설정'],
             ['tools',    '도구'],
           ] as const).map(([k, label]) => (
             <button
@@ -814,6 +815,7 @@ export function AdminPage() {
         {tab === 'cli'      && <CliTab usage={cliUsage} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
         {tab === 'policy'   && <PolicyTab />}
         {tab === 'emails'   && <EmailTemplatesPanel />}
+        {tab === 'flags'    && <FeatureFlagsTab />}
         {tab === 'tools'    && (
           <ToolsTab
             token={token}
@@ -1358,6 +1360,114 @@ function PolicyTab() {
           향후 admin 토글이 필요해지면 같은 app_settings 테이블에 키 추가.
         </p>
         <div className="font-mono text-2xl" style={{ color: 'rgba(255,255,255,0.7)' }}>${(feeCents / 100).toFixed(0)}</div>
+      </section>
+    </div>
+  )
+}
+
+// Feature-flag toggle panel · backs app_feature_flags table.
+// Currently houses tokens_public (Tokens primary-nav visibility) but
+// any future boolean soft-launches drop into the same list automatically.
+function FeatureFlagsTab() {
+  interface Row {
+    key:         string
+    enabled:     boolean
+    description: string | null
+    updated_at:  string | null
+  }
+  const [rows, setRows] = useState<Row[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    setError(null)
+    const { data, error } = await supabase
+      .from('app_feature_flags')
+      .select('key, enabled, description, updated_at')
+      .order('key', { ascending: true })
+    if (error) { setError(error.message); return }
+    setRows(data as Row[])
+  }
+  useEffect(() => { void load() }, [])
+
+  const toggle = async (key: string, next: boolean) => {
+    setBusy(key); setError(null)
+    const { error } = await supabase
+      .from('app_feature_flags')
+      .update({ enabled: next })
+      .eq('key', key)
+    if (error) {
+      setError(`${key}: ${error.message}`)
+    } else {
+      // Bust the module-level cache so Nav picks up the change live.
+      const { refreshFeatureFlags } = await import('../lib/featureFlags')
+      await refreshFeatureFlags()
+      await load()
+    }
+    setBusy(null)
+  }
+
+  return (
+    <div className="space-y-4">
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <h2 className="font-display font-bold text-lg mb-1" style={{ color: 'var(--cream)' }}>
+          기능 플래그
+        </h2>
+        <p className="font-mono text-[11px] mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          공개 여부를 즉시 토글 · admin 은 항상 모든 surface 를 보고, 비-admin 은 enabled=true 일 때만 봄.
+        </p>
+
+        {error && (
+          <div className="mb-3 p-2 font-mono text-xs" style={{ background: 'rgba(200,16,46,0.1)', border: '1px solid rgba(200,16,46,0.3)', color: 'var(--scarlet)' }}>
+            {error}
+          </div>
+        )}
+
+        {rows === null ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+        ) : rows.length === 0 ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>플래그 없음.</div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map(r => (
+              <div
+                key={r.key}
+                className="flex items-center justify-between gap-3 p-3"
+                style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px' }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono text-xs" style={{ color: 'var(--gold-500)' }}>{r.key}</div>
+                  {r.description && (
+                    <div className="font-mono text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                      {r.description}
+                    </div>
+                  )}
+                  {r.updated_at && (
+                    <div className="font-mono text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      변경 {new Date(r.updated_at).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={busy === r.key}
+                  onClick={() => toggle(r.key, !r.enabled)}
+                  className="font-mono text-xs tracking-wide px-3 py-2 whitespace-nowrap"
+                  style={{
+                    background:   r.enabled ? 'rgba(63,168,116,0.15)' : 'rgba(255,255,255,0.05)',
+                    color:        r.enabled ? '#3FA874' : 'rgba(255,255,255,0.7)',
+                    border:       `1px solid ${r.enabled ? 'rgba(63,168,116,0.45)' : 'rgba(255,255,255,0.15)'}`,
+                    borderRadius: '2px',
+                    cursor:       busy === r.key ? 'wait' : 'pointer',
+                    opacity:      busy === r.key ? 0.6 : 1,
+                  }}
+                >
+                  {busy === r.key ? '…' : r.enabled ? '✓ ON' : 'OFF'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   )

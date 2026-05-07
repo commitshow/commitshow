@@ -6,6 +6,7 @@ import { IconForecast, IconMenu, IconClose } from './icons'
 import { NotificationBell } from './NotificationBell'
 import { SideNav } from './SideNav'
 import { SCOUT_MONTHLY_VOTES, supabase, type ScoutTier } from '../lib/supabase'
+import { useFeatureFlag } from '../lib/featureFlags'
 
 const TIER_COLOR: Record<string, string> = {
   Bronze: '#CD7F32', Silver: '#C0C0C0', Gold: '#F0C040', Platinum: '#E5E4E2',
@@ -40,11 +41,16 @@ function daysUntilNextReset(): number {
 // 6 primary links · §Token-maxxing leaderboard added 2026-05-07.
 // Tokens sits next to Scouts as the peer leaderboard (Scouts ranks
 // judges by activity points · Tokens ranks creators by efficiency).
-const PRIMARY_LINKS: Array<{ to: string; label: string }> = [
+//
+// Tokens link is gated until the admin flips `tokens_public` in
+// app_feature_flags · admins always see it (preview path), everyone
+// else only after the toggle. The /tokens page itself stays reachable
+// by direct URL so admin can share preview links with select users.
+const PRIMARY_LINKS_BASE: Array<{ to: string; label: string; flag?: string }> = [
   { to: '/products',  label: 'Products'  },
   { to: '/creators',  label: 'Creators'  },
   { to: '/scouts',    label: 'Scouts'    },
-  { to: '/tokens',    label: 'Tokens'    },
+  { to: '/tokens',    label: 'Tokens',    flag: 'tokens_public' },
   { to: '/community', label: 'Community' },
   { to: '/library',   label: 'Library'   },
 ]
@@ -59,6 +65,18 @@ export function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false)    // mobile slide-down panel
   const menuRef = useRef<HTMLDivElement>(null)
   const { user, member, signOut } = useAuth()
+  const tokensPublic = useFeatureFlag('tokens_public', false)
+  const isAdmin = !!member?.is_admin
+
+  // Filter the base list against feature flags · admin always sees
+  // every link (preview path), non-admins see only links whose flag
+  // is undefined (default-on) or `enabled = true`.
+  const PRIMARY_LINKS = PRIMARY_LINKS_BASE.filter(link => {
+    if (!link.flag) return true
+    if (isAdmin)   return true
+    if (link.flag === 'tokens_public') return tokensPublic
+    return false
+  })
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40)
