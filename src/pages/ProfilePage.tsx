@@ -316,7 +316,7 @@ export function ProfilePage() {
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3 mb-3">
             <div>
-              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY AUDITS</div>
+              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY PRODUCTS</div>
               <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 Every product you've auditioned · click to open its dashboard
               </div>
