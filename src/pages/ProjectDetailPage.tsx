@@ -21,6 +21,8 @@ import { NotFoundPage } from './NotFoundPage'
 import { TokenReceiptForm } from '../components/TokenReceiptForm'
 import { TokenEfficiencyPanel } from '../components/TokenEfficiencyPanel'
 import { OwnerNextStepBanner } from '../components/OwnerNextStepBanner'
+import { MarketPositionCard } from '../components/MarketPositionCard'
+import { MarketPositionForm } from '../components/MarketPositionForm'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -735,6 +737,12 @@ export function ProjectDetailPage() {
           <section id="overview" className="scroll-mt-28">
             <SectionHeader label="OVERVIEW" />
 
+            {/* Market position · one-liner / business model / stage ·
+                set during the post-audit Market Position review step.
+                Hides entirely when all 3 are NULL (old projects · or
+                creator skipped the step). */}
+            <MarketPositionCard projectId={project.id} />
+
             {/* Description pullquote — the hero text now lives here, styled up */}
             {project.description && (
               <DescriptionPullquote
@@ -1222,11 +1230,12 @@ function OwnerToolsTabs({
   githubUrl:    string | null
   projectScore: number | null
 }) {
-  type Tab = 'brief' | 'badge' | 'tokens'
+  type Tab = 'brief' | 'market' | 'badge' | 'tokens'
   const [tab, setTab] = useState<Tab>('brief')
 
   const tabs: Array<{ id: Tab; label: string; sub: string }> = [
     { id: 'brief',  label: 'Brief',         sub: 'edit your build brief' },
+    { id: 'market', label: 'Market',        sub: 'one-liner · model · stage' },
     { id: 'badge',  label: 'README badge',  sub: 'show the score on GitHub' },
     { id: 'tokens', label: 'Token receipt', sub: 'join the token leaderboard' },
   ]
@@ -1258,6 +1267,15 @@ function OwnerToolsTabs({
       </div>
       {tab === 'brief' && (
         <OwnerBriefPanel projectId={projectId} />
+      )}
+      {tab === 'market' && (
+        <MarketPositionForm
+          projectId={projectId}
+          // Standalone edit · no audit context here, prefill comes from
+          // current build_briefs row inside the form via useEffect.
+          prefill={{}}
+          onConfirmed={() => { /* stay on tab · success state handled inline */ }}
+        />
       )}
       {tab === 'badge' && (
         <BadgeSnippet projectId={projectId} projectName={projectName} githubUrl={githubUrl} />

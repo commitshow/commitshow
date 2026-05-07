@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { AuthModal } from './AuthModal'
 import { AnalysisResultCard } from './AnalysisResultCard'
+import { MarketPositionForm, buildPrefill } from './MarketPositionForm'
 import { BriefExtraction } from './BriefExtraction'
 import { ProjectImagesPicker } from './ProjectImagesPicker'
 import type { ProjectImage } from '../lib/supabase'
@@ -21,7 +22,13 @@ import {
 import { resolvePreviewClaim } from '../lib/projectQueries'
 import { PaymentResultModal } from './PaymentResultModal'
 
-type Step = 1 | 2 | 3 | 4
+// Steps:
+//   1 · basic info (name / URL / screenshots)
+//   2 · Phase 1 brief (problem · features · target · tools)
+//   3 · audit running (loader)
+//   4 · Market position review · pre-filled from audit, user confirms
+//   5 · result view (AnalysisResultCard)
+type Step = 1 | 2 | 3 | 4 | 5
 
 interface FormData {
   name: string; email: string; github: string; url: string; desc: string
@@ -369,7 +376,8 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       setStep(2); return
     }
 
-    // Step 4 — settle
+    // Step 4 — settle audit · then route to Market Position review (step 4)
+    // before showing the final result (step 5).
     setEdgeProgress(100)
     setLoaderIndex(3)
     await new Promise(r => setTimeout(r, 400))
@@ -709,7 +717,23 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       />
 
       {/* ── STEP 4: RESULT (rich multi-axis analysis) ── */}
-      {step === 4 && result && (
+      {step === 4 && result && lastProjectId && (
+        <MarketPositionForm
+          projectId={lastProjectId}
+          prefill={buildPrefill(
+            result,
+            brief?.core_intent.problem ?? null,
+            // score_total >= 60 + tech_layers count as a proxy for 'live
+            // URL probably reachable' since AnalysisResult doesn't carry
+            // the boolean directly · only used for the stage heuristic.
+            (result.score_total ?? 0) >= 60,
+          )}
+          onConfirmed={() => setStep(5)}
+          onSkip={() => setStep(5)}
+        />
+      )}
+
+      {step === 5 && result && (
         <AnalysisResultCard
           result={result}
           projectId={lastProjectId ?? undefined}
