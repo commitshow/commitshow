@@ -84,6 +84,7 @@ const FALLBACK_DEMO: AuditDemo = {
     'Lighthouse perf 56 on docs site',
     'Zero observability libs detected',
   ],
+  source:      'platform',
 }
 
 // Build the per-cycle line sequence from a live demo. The ASCII `bar`

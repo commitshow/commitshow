@@ -40,6 +40,7 @@ const CreatorDetailPage       = lazy(() => import('./pages/CreatorDetailPage').t
 const CommunityFeedPage       = lazy(() => import('./pages/CommunityFeedPage').then(m => ({ default: m.CommunityFeedPage })))
 const ProjectSlugRedirect     = lazy(() => import('./pages/ProjectSlugRedirect').then(m => ({ default: m.ProjectSlugRedirect })))
 const NotFoundPage            = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
+const MyProductsPage          = lazy(() => import('./pages/MyProductsPage').then(m => ({ default: m.MyProductsPage })))
 const TokenLeaderboardPage    = lazy(() => import('./pages/TokenLeaderboardPage').then(m => ({ default: m.TokenLeaderboardPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/project/:slug"    element={<ProjectSlugRedirect />} />
           <Route path="/submit"           element={<SubmitPage />} />
           <Route path="/me"               element={<ProfilePage />} />
+          <Route path="/me/products"      element={<MyProductsPage />} />
           <Route path="/library"          element={<LibraryPage />} />
           <Route path="/library/:id"      element={<LibraryDetailPage />} />
           <Route path="/scouts"           element={<ScoutsPage />} />

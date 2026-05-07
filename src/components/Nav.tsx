@@ -635,7 +635,7 @@ function MyProductsCallout({ onSelect }: { onSelect: () => void }) {
 
   return (
     <NavLink
-      to="/me"
+      to="/me/products"
       onClick={onSelect}
       className="block px-3 py-2 mb-1 transition-colors"
       style={{

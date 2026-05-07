@@ -31,6 +31,12 @@ export interface AuditDemo {
   auditPts:    number                // raw 0-45 audit pillar
   strengths:   string[]              // up to 3
   concerns:    string[]              // up to 2
+  // 'platform' = creator submitted via web (status != 'preview') ·
+  // 'walk_on'  = anonymous CLI audit (status = 'preview').
+  // Hero pool ranks platform above walk-on so the highest-status
+  // surface always seeds the rotation, with walk-ons filling out the
+  // tail. The Hero terminal can also tag each demo with a small chip.
+  source:      'platform' | 'walk_on'
 }
 
 interface RawSnapshot {
@@ -113,8 +119,19 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
     seenProjects.add(raw.project_id)
     latestPerProject.push(raw)
   }
-  // Stage B: re-sort by current score_total descending — top-13 leaderboard.
-  latestPerProject.sort((a, b) => (b.score_total ?? 0) - (a.score_total ?? 0))
+  // Stage B · ranking: platform-auditioned projects (status != 'preview')
+  // come FIRST regardless of score, then walk-on (CLI · status='preview')
+  // fill the tail. Inside each bucket sort by score_total desc. This
+  // ensures the hero rotation always seeds with the highest-status
+  // surfaces — a member's auditioned product beats an anonymous CLI
+  // audit for the marquee slot, even if the CLI score happens to be
+  // higher this week. Walk-ons still appear, just behind.
+  latestPerProject.sort((a, b) => {
+    const aPreview = a.projects?.status === 'preview' ? 1 : 0
+    const bPreview = b.projects?.status === 'preview' ? 1 : 0
+    if (aPreview !== bPreview) return aPreview - bPreview
+    return (b.score_total ?? 0) - (a.score_total ?? 0)
+  })
 
   const demos: AuditDemo[] = []
   for (const raw of latestPerProject) {
@@ -140,6 +157,7 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
       auditPts:    raw.score_auto,
       strengths,
       concerns,
+      source:      proj.status === 'preview' ? 'walk_on' : 'platform',
     })
     if (demos.length >= 13) break
   }

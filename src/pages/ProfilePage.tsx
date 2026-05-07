@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase, PUBLIC_PROJECT_COLUMNS, type Project, type MDLibraryItem, type MemberStats, type ScoutTier } from '../lib/supabase'
 import { AvatarPicker } from '../components/AvatarPicker'
@@ -312,41 +312,58 @@ export function ProfilePage() {
         {/* ── Graduation explainer ── */}
         <GraduationExplainer currentGrade={grade} graduatedCount={stats?.graduated_count ?? 0} />
 
-        {/* ── My Audits ── */}
+        {/* ── My Products · summary card · full grid moved to /me/products ── */}
         <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3 mb-3">
+          <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
             <div>
               <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>// MY PRODUCTS</div>
               <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                Every product you've auditioned · click to open its dashboard
+                {loading ? '…' : `${applications.length} product${applications.length === 1 ? '' : 's'} auditioned`}
               </div>
             </div>
-            <NavLink to="/submit" className="font-mono text-xs font-medium tracking-wide px-3 py-2 text-center whitespace-nowrap"
-              style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}>
-              AUDITION A NEW PROJECT →
+            <NavLink
+              to="/me/products"
+              className="font-mono text-xs font-medium tracking-wide px-3 py-2 text-center whitespace-nowrap"
+              style={{ background: 'transparent', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.4)', borderRadius: '2px', textDecoration: 'none' }}
+            >
+              Open portfolio →
             </NavLink>
           </div>
-          {loading ? (
-            <div className="card-navy p-8 font-mono text-xs text-center" style={{ color: 'var(--text-muted)', borderRadius: '2px' }}>
-              Loading your audits…
+          {!loading && applications.length === 0 && (
+            <div className="card-navy p-8 text-center" style={{ borderRadius: '2px' }}>
+              <div className="font-display text-lg font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No auditions yet</div>
+              <NavLink
+                to="/submit"
+                className="inline-block font-mono text-xs tracking-wide px-4 py-2"
+                style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}
+              >
+                AUDITION YOUR FIRST PRODUCT →
+              </NavLink>
             </div>
-          ) : applications.length === 0 ? (
-            <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
-              <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No auditions yet</div>
-              <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
-                Audition your first product to open the dashboard.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {applications.map(p => (
-                <ApplicationRow
-                  key={p.id}
-                  project={p}
-                  onDeleted={() => setApplications(prev => prev.filter(x => x.id !== p.id))}
-                />
-              ))}
-            </div>
+          )}
+          {!loading && applications.length > 0 && (
+            <Link
+              to="/me/products"
+              className="block card-navy p-4 transition-colors"
+              style={{
+                background:     'rgba(255,255,255,0.02)',
+                border:         '1px solid rgba(255,255,255,0.06)',
+                borderRadius:   '2px',
+                textDecoration: 'none',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.4)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)')}
+            >
+              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                <div className="font-mono text-xs" style={{ color: 'var(--cream)' }}>
+                  {applications.slice(0, 3).map(p => p.project_name).join(' · ')}
+                  {applications.length > 3 ? ` · +${applications.length - 3} more` : ''}
+                </div>
+                <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  Open portfolio →
+                </span>
+              </div>
+            </Link>
           )}
         </div>
 
@@ -695,7 +712,7 @@ function GraduationExplainer({ currentGrade, graduatedCount }: { currentGrade: s
 }
 
 // ── Application row ───────────────────────────────────────────
-function ApplicationRow({ project: p, onDeleted }: { project: Project; onDeleted: () => void }) {
+export function ApplicationRow({ project: p, onDeleted }: { project: Project; onDeleted: () => void }) {
   const navigate = useNavigate()
   // Confirmation lives in a real modal — the previous inline two-step
   // (DELETE → CONFIRM) was easy to fat-finger through on mobile because
