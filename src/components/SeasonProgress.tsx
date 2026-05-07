@@ -69,13 +69,12 @@ export function SeasonProgressBar({ variant = 'banner' }: SeasonProgressBarProps
           border: '1px solid rgba(240,192,64,0.15)',
           borderRadius: '2px',
         }} />
-        {/* filled segment */}
+        {/* filled segment · glow removed 2026-05-07 per CEO feedback */}
         <div className="absolute inset-y-0 left-0" style={{
           width: `${progress.progressPct}%`,
           background: 'linear-gradient(90deg, #1E3A8A 0%, #4338CA 20%, #C026D3 45%, #F0C040 75%, #FFD96B 100%)',
           transition: 'width 500ms cubic-bezier(0.22, 1, 0.36, 1)',
           borderRadius: '2px',
-          boxShadow: '0 0 8px rgba(240,192,64,0.35)',
         }} />
       </div>
 

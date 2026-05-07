@@ -103,6 +103,11 @@ function sequenceForDemo(d: AuditDemo): Line[] {
   const captionPost  = concernCount > 0
     ? ` · ${d.band} · ${concernCount} to fix`
     : ` · ${d.band}`
+  // 'walk-on' = anonymous CLI audit (status='preview') · 'audition'
+  // = creator submitted via web (status != 'preview'). The hero
+  // rotation now mixes both per recentAudits.ts split-bucket fetch ·
+  // caption tag must follow the demo's actual source, not be hardcoded.
+  const captionMid = d.source === 'platform' ? 'audition' : 'walk-on'
   return [
     { kind: 'prompt', text: `npx commitshow@latest audit github.com/${d.slug}` },
     { kind: 'spacer' },
@@ -114,7 +119,7 @@ function sequenceForDemo(d: AuditDemo): Line[] {
     { kind: 'note',   text: `It's a snapshot, not a verdict. Code changes; so does this number.` },
     { kind: 'spacer' },
     { kind: 'big',    score: String(d.score) },
-    { kind: 'caption', pre: '/ 100 · ', mid: 'walk-on', mid_color: 'var(--gold-500)', post: captionPost },
+    { kind: 'caption', pre: '/ 100 · ', mid: captionMid, mid_color: 'var(--gold-500)', post: captionPost },
     { kind: 'spacer' },
     { kind: 'bar',       label: 'Audit', value: `${d.auditPts}/45`, bar, color: '#00D4AA' },
     { kind: 'lockedBar', label: 'Scout', value: '—/30' },
