@@ -42,7 +42,7 @@ export function FeaturedLanes() {
       <Lane
         label="NEW AUDITS"
         hint="Just on the ladder · scores fresh"
-        tone="#6B7280"
+        tone="var(--cream)"
         loading={rookie.loading}
         empty="Nothing new this week."
       >
