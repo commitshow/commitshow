@@ -10,7 +10,7 @@
 // Privacy contract · the blob carries token NUMBERS only (input/output/
 // cache + session UUIDs + first/last timestamps + cwd). Prompt content
 // stays on the user's machine. Submitting publishes the totals to the
-// public leaderboard at /leaderboard/tokens — that's the explicit consent
+// public leaderboard at /tokens — that's the explicit consent
 // step, called out before the user hits the button.
 
 import { useEffect, useMemo, useState } from 'react'
@@ -219,7 +219,7 @@ export function TokenReceiptForm({ projectId, projectScore, projectGithubUrl, on
   const previewOk = decoded?.ok === true
 
   // Projected efficiency · score per 1M tokens. Same formula the
-  // /leaderboard/tokens efficiency tab uses, so the preview matches the
+  // /tokens efficiency tab uses, so the preview matches the
   // ranking the user is about to enter.
   const projectedEfficiency: number | null = useMemo(() => {
     if (!decoded?.ok) return null
@@ -290,8 +290,8 @@ export function TokenReceiptForm({ projectId, projectScore, projectGithubUrl, on
       <p className="font-light text-sm mt-1 mb-5" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
         Drop your Claude Code receipt → your build's efficiency score (points per 1M tokens)
         lands on the public leaderboard at{' '}
-        <Link to="/leaderboard/tokens" style={{ color: 'var(--gold-500)' }}>
-          /leaderboard/tokens
+        <Link to="/tokens" style={{ color: 'var(--gold-500)' }}>
+          /tokens
         </Link>.
       </p>
 
@@ -447,8 +447,8 @@ export function TokenReceiptForm({ projectId, projectScore, projectGithubUrl, on
       {decoded?.ok && !success && (
         <p className="font-mono text-[11px] mb-3" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
           By publishing, your token totals + efficiency score become public on{' '}
-          <Link to="/leaderboard/tokens" style={{ color: 'var(--text-secondary)' }}>
-            commit.show/leaderboard/tokens
+          <Link to="/tokens" style={{ color: 'var(--text-secondary)' }}>
+            commit.show/tokens
           </Link>. Prompt content stays on your machine — only counters are sent.
         </p>
       )}
@@ -470,7 +470,7 @@ export function TokenReceiptForm({ projectId, projectScore, projectGithubUrl, on
               ✓ You're on the leaderboard
             </span>
             <Link
-              to="/leaderboard/tokens"
+              to="/tokens"
               className="font-mono text-xs tracking-wide"
               style={{
                 color:        '#3FA874',

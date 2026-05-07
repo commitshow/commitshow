@@ -6,3 +6,10 @@
 # Send those requests to the 12 KB static poster instead — same first
 # frame, instant download, no stutter — until those caches age out.
 /hero-bg.min.webp  /hero-poster.webp  301
+
+# 2026-05-07 URL canonicalization · token leaderboard moved to primary
+# /tokens surface · audit×scout 2D scatter renamed /map to match its
+# visual nature. SPA Navigate routes also catch in-app navigation;
+# these 301s handle external inbound traffic + search crawlers.
+/leaderboard/tokens  /tokens  301
+/leaderboard         /map     301

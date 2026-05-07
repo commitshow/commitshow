@@ -273,7 +273,7 @@ export function LadderPage() {
             <span className="flex items-center gap-2">
               <span aria-hidden="true" style={{ color: 'var(--text-faint)' }}>·</span>
               <NavLink
-                to="/leaderboard"
+                to="/map"
                 className="font-mono text-[11px] tracking-wide"
                 style={({ isActive }) => ({
                   textDecoration: 'none',

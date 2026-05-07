@@ -37,10 +37,14 @@ function daysUntilNextReset(): number {
 //    "what's shipped → who judges → where talk happens → reusable craft"
 //  - /products is the canonical route; /ladder kept as a redirect for
 //    external links + tweet history.
+// 6 primary links · §Token-maxxing leaderboard added 2026-05-07.
+// Tokens sits next to Scouts as the peer leaderboard (Scouts ranks
+// judges by activity points · Tokens ranks creators by efficiency).
 const PRIMARY_LINKS: Array<{ to: string; label: string }> = [
   { to: '/products',  label: 'Products'  },
   { to: '/creators',  label: 'Creators'  },
   { to: '/scouts',    label: 'Scouts'    },
+  { to: '/tokens',    label: 'Tokens'    },
   { to: '/community', label: 'Community' },
   { to: '/library',   label: 'Library'   },
 ]

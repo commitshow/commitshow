@@ -1,4 +1,4 @@
-// /leaderboard/tokens · person-level token leaderboard.
+// /tokens · person-level token leaderboard (primary surface).
 //
 // Two tabs:
 //   1. Verified · backed by `commitshow extract` (Claude Code) · trusted
@@ -87,8 +87,8 @@ export function TokenLeaderboardPage() {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <header className="mb-6">
-          <Link to="/leaderboard" className="font-mono text-xs tracking-wide" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>
-            ← BACK TO LEADERBOARD MAP
+          <Link to="/map" className="font-mono text-xs tracking-wide" style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>
+            ← BACK TO AUDIT × SCOUT MAP
           </Link>
           <div className="font-mono text-xs tracking-widest mt-3 mb-2" style={{ color: 'var(--gold-500)' }}>
             // TOKEN LEADERBOARD · CLAUDE CODE

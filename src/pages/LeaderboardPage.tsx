@@ -294,7 +294,7 @@ export function LeaderboardPage() {
         <div className="mt-3 flex items-center gap-2 font-mono text-[11px]">
           <span style={{ color: 'var(--text-muted)' }}>see also</span>
           <Link
-            to="/leaderboard/tokens"
+            to="/tokens"
             style={{
               color: 'var(--gold-500)',
               textDecoration: 'none',

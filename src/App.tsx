@@ -78,8 +78,14 @@ export default function App() {
           <Route path="/library"          element={<LibraryPage />} />
           <Route path="/library/:id"      element={<LibraryDetailPage />} />
           <Route path="/scouts"           element={<ScoutsPage />} />
-          <Route path="/leaderboard"      element={<LeaderboardPage />} />
-          <Route path="/leaderboard/tokens" element={<TokenLeaderboardPage />} />
+          {/* Canonical · /map = Products' 2D Audit×Scout scatter sub-view ·
+              /tokens = the primary token leaderboard surface. Old
+              /leaderboard URLs kept as in-app redirects for any cached
+              links · Pages _redirects also serves 301 for SEO. */}
+          <Route path="/map"                element={<LeaderboardPage />} />
+          <Route path="/tokens"             element={<TokenLeaderboardPage />} />
+          <Route path="/leaderboard"        element={<Navigate to="/map" replace />} />
+          <Route path="/leaderboard/tokens" element={<Navigate to="/tokens" replace />} />
           {/* /products is canonical (2026-05-05 rebrand · was /ladder).
               Old /ladder URL preserved as redirect for links in the
               wild · keeps tweets, blog posts, AI agent memory working. */}

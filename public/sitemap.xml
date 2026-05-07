@@ -16,14 +16,14 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://commit.show/leaderboard</loc>
+    <loc>https://commit.show/map</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://commit.show/leaderboard/tokens</loc>
+    <loc>https://commit.show/tokens</loc>
     <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://commit.show/scouts</loc>
