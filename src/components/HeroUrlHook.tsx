@@ -440,20 +440,36 @@ interface ResultCardProps {
 
 function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps) {
   const snap = result.latest_snapshot
-  const total = snap?.score_total ?? result.project.score_total ?? 0
   const rich  = snap?.rich_analysis ?? {}
-  // Canonical bullet path · scout_brief.strengths / .weaknesses (not the top-level
-  // strengths/concerns I assumed earlier — that broke result rendering since the
-  // engine writes everything under scout_brief).
+  // Canonical bullet path · scout_brief.strengths / .weaknesses.
   const strengths = (rich.scout_brief?.strengths ?? []).slice(0, 3)
   const concerns  = (rich.scout_brief?.weaknesses ?? []).slice(0, 2)
   const routes    = rich.routes_health
 
+  // URL Polish Score · §15-E.3 separate scale.
+  // The full /50 audit pillar can't be the denominator for URL-only audits
+  // because most slots (tests · CI · LICENSE · Brief · Tech · Maturity) are
+  // STRUCTURALLY UNATTAINABLE without a repo. Reporting "anthropic.com 26 / 100"
+  // sounds awful when it actually means "URL signals are strong, repo signals
+  // unseen". Calibrate against bot-fight-realistic achievable signals:
+  //   · Lighthouse 20  — always fillable (PageSpeed = Google's infra)
+  //   · Completeness 2 — meta tags · recovered via Tier B even when bot-walled
+  //   · Responsive 2   — derived from LH perf
+  //   · (Live URL Health 5 often 0 due to bot fight — excluded so well-polished
+  //      SaaS aren't penalized for having bot protection)
+  // Total: 24. Sites with reachable homepage probe naturally hit the >100
+  // ceiling and clamp · this is intentional · we don't dock for over-delivery.
+  const URL_LANE_MAX = 24
+  const autoPts = snap?.score_auto ?? result.project.score_auto ?? 0
+  const polishScore = Math.max(0, Math.min(100, Math.round((autoPts / URL_LANE_MAX) * 100)))
+
   const band =
-    total >= 85 ? 'Encore band'         :
-    total >= 70 ? 'Strong'              :
-    total >= 50 ? 'Mid'                 :
-                  'Needs work'
+    polishScore >= 90 ? 'Top-tier polish' :
+    polishScore >= 75 ? 'Strong'          :
+    polishScore >= 60 ? 'Solid'           :
+    polishScore >= 45 ? 'Mid'             :
+    polishScore >= 30 ? 'Below par'       :
+                        'Needs work'
 
   return (
     <div
@@ -475,11 +491,14 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
           </div>
         </div>
         <div className="ml-auto text-right">
-          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--text-muted)' }}>SCORE</div>
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--text-muted)' }}>POLISH</div>
           <div className="font-display font-black" style={{ color: 'var(--gold-500)', fontSize: '2.5rem', lineHeight: 1 }}>
-            {Math.round(total)}<span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}> / 100</span>
+            {polishScore}<span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}> / 100</span>
           </div>
           <div className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{band}</div>
+          <div className="font-mono text-[10px] tracking-widest mt-1" style={{ color: 'var(--text-muted)' }}>
+            URL signals only
+          </div>
         </div>
       </div>
 
@@ -569,7 +588,11 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
         </button>
       </div>
       <p className="mt-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
-        Walk-on result · creator unclaimed · not on the public ladder. Sign in to claim, share, or upgrade with a repo for the full 50-point audit.
+        Walk-on result · creator unclaimed · not on the public ladder. Polish Score
+        is the URL-lane scale — it weighs Lighthouse + meta + routing only and
+        ignores repo signals (tests · CI · LICENSE · Brief · Tech) the engine can't
+        see without a repo. Sign in to claim, share, or upgrade with a repo for
+        the full audit on the public ladder.
       </p>
     </div>
   )
