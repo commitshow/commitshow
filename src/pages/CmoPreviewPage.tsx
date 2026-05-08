@@ -138,7 +138,17 @@ type WorkspaceRow = {
   id:          number
   insights_md: string
   roadmap_md:  string
+  memory_md:   string
   updated_at:  string
+}
+
+type ChatRow = {
+  id:         string
+  role:       'user' | 'assistant'
+  target_doc: 'insights' | 'roadmap'
+  content:    string
+  summary:    string | null
+  created_at: string
 }
 
 type TemplateRow = {
@@ -187,12 +197,18 @@ export function CmoPreviewPage() {
     if (!member?.is_admin) { navigate('/'); return }
   }, [user, member, loading, navigate])
 
+  const [chatHistory, setChatHistory] = useState<ChatRow[]>([])
+
   const loadAll = useCallback(async () => {
     setLoadErr(null)
-    const [wsRes, tplRes, draftRes] = await Promise.all([
+    const [wsRes, tplRes, draftRes, chatRes] = await Promise.all([
       supabase.from('cmo_workspace').select('*').eq('id', 1).maybeSingle(),
       supabase.from('cmo_templates').select('*').order('audience').order('id'),
       supabase.from('cmo_drafts').select('*').order('created_at', { ascending: false }).limit(10),
+      supabase.from('cmo_chat_messages')
+        .select('id, role, target_doc, content, summary, created_at')
+        .order('created_at', { ascending: false })
+        .limit(20),
     ])
     if (wsRes.error)    { setLoadErr(`workspace: ${wsRes.error.message}`);    return }
     if (tplRes.error)   { setLoadErr(`templates: ${tplRes.error.message}`);   return }
@@ -200,6 +216,7 @@ export function CmoPreviewPage() {
     setWorkspace(wsRes.data as WorkspaceRow | null)
     setTemplates(tplRes.data as TemplateRow[])
     setDrafts(draftRes.data as DraftRow[])
+    if (!chatRes.error) setChatHistory((chatRes.data ?? []) as ChatRow[])
   }, [])
 
   useEffect(() => { if (member?.is_admin) void loadAll() }, [member?.is_admin, loadAll])
@@ -283,6 +300,75 @@ export function CmoPreviewPage() {
             </>
           )}
         </section>
+
+        {/* ── M's persistent notebook + recent thread ──────────────────────
+              Memory_md is M's working notebook · loaded into every system
+              prompt. Read-only here · M updates it himself based on
+              conversation. Thread panel surfaces last 20 turns so the
+              CEO can see what M has been thinking about. */}
+        {workspace && (
+          <section style={{ marginBottom: 48, display: 'grid', gap: 24, gridTemplateColumns: '1fr 1fr' }}>
+            <div style={{ background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.22)', borderRadius: '4px', padding: 20 }}>
+              <div className="flex items-baseline justify-between gap-2 mb-2">
+                <div>
+                  <div className="font-mono text-[10px] tracking-widest" style={{ color: '#A78BFA' }}>// M 의 메모</div>
+                  <h2 className="font-display text-lg mt-1" style={{ color: 'var(--cream)' }}>Persistent notebook</h2>
+                </div>
+                <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {workspace.memory_md ? `${workspace.memory_md.length} chars` : 'empty'}
+                </span>
+              </div>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                M 이 매 대화에서 자동 참조하는 영구 노트. CEO 가 직접 편집하지 않아도 됨 — M 이 결정·패턴을 알아서 적어둠.
+              </p>
+              <pre className="font-mono text-[11px] p-3 whitespace-pre-wrap"
+                   style={{ background: 'rgba(6,12,26,0.5)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px', color: 'rgba(255,255,255,0.85)', maxHeight: 360, overflow: 'auto', lineHeight: 1.5 }}>
+                {workspace.memory_md || '(empty · 첫 대화 후 M 이 채울 예정)'}
+              </pre>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px', padding: 20 }}>
+              <div className="flex items-baseline justify-between gap-2 mb-2">
+                <div>
+                  <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--gold-500)' }}>// THREAD</div>
+                  <h2 className="font-display text-lg mt-1" style={{ color: 'var(--cream)' }}>Recent conversation</h2>
+                </div>
+                <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  last {chatHistory.length} turns
+                </span>
+              </div>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                M 이 다음 응답에 참조하는 직전 12 턴 + 더. 인사이트/로드맵 둘 다 같은 thread.
+              </p>
+              <div className="font-mono text-[11px] p-3"
+                   style={{ background: 'rgba(6,12,26,0.5)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px', maxHeight: 360, overflow: 'auto' }}>
+                {chatHistory.length === 0 ? (
+                  <span style={{ color: 'rgba(255,255,255,0.3)' }}>(no turns yet)</span>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {chatHistory.map(t => (
+                      <li key={t.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                          <span style={{ color: t.role === 'user' ? 'var(--gold-500)' : '#A78BFA' }}>
+                            {t.role === 'user' ? 'CEO' : 'M'}
+                          </span>
+                          <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                            [{t.target_doc}] · {new Date(t.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+                          {t.role === 'assistant'
+                            ? (t.summary || t.content.slice(0, 240) + (t.content.length > 240 ? '…' : ''))
+                            : t.content.slice(0, 320) + (t.content.length > 320 ? '…' : '')}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ── 1. Freeform tweet generator ────────────────────────────────── */}
         <section style={{ marginBottom: 48, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(240,192,64,0.18)', borderRadius: '4px', padding: 24 }}>

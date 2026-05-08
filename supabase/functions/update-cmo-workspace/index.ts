@@ -1,12 +1,15 @@
 // update-cmo-workspace — Claude rewrites the insights or roadmap markdown
 // based on a chat message. Admin-only. Used by /admin/cmo "CMO's Room".
 //
-// Input: { field: 'insights' | 'roadmap', message: string, current_md: string }
-// Output: { updated_md: string, summary: string }
+// 2026-05-08 memory upgrade:
+//   · cmo_chat_messages · last 12 turns prepended to the request so M
+//     remembers the conversation, not just the current one-shot.
+//   · cmo_workspace.memory_md · M's persistent notebook; included in
+//     every system prompt; M can rewrite it via 'updated_memory_md'
+//     in the JSON response (alongside updated_md / summary).
 //
-// Behavior: Claude receives the current markdown + the user's instruction
-// ("make the roadmap more aggressive" · "add a note that we hit 200 followers")
-// and returns the FULL revised markdown. We don't try to do diffs.
+// Input:  { field: 'insights' | 'roadmap', message: string, current_md: string }
+// Output: { updated_md, summary, memory_updated?, usage? }
 
 // deno-lint-ignore-file no-explicit-any
 // @ts-nocheck
@@ -46,11 +49,27 @@ Voice rules (apply to Korean prose):
 - "Audition" (Creator 행위) · "Audit" (엔진 행위) · "Rookie Circle" (NOT "낙제 / 실패 / 탈락").
 - Concise. CEO 가 1분 안에 스캔할 수 있게.
 
+YOUR MEMORY (persistent · always visible to you):
+You maintain a working notebook (memory_md). It carries learnings across
+conversations — campaigns in flight, patterns that worked / didn't, CEO
+priorities, decisions made. Use it to LEAD strategy, not just react to
+the current message. When the conversation gives you something worth
+remembering for next time, update memory_md.
+
+Rules for memory_md:
+- Korean prose · same voice rules as docs.
+- Append-friendly · add new learning under existing sections, archive stale
+  bullets to '## 정리됨' rather than deleting.
+- Stay under ~3000 chars · trim oldest 'archived' entries first.
+- Don't restate what's already in CMO.md (static voice rules) or in
+  insights_md/roadmap_md (concrete output) · this is YOUR notebook.
+
 Output format: ONLY a JSON object, no preamble or markdown fences.
 
 {
   "updated_md": "the FULL revised markdown · IN KOREAN",
-  "summary": "one sentence describing what you changed · ALSO IN KOREAN"
+  "summary": "one sentence describing what you changed · ALSO IN KOREAN",
+  "updated_memory_md": "OPTIONAL · the FULL revised memory_md if you want to update your notebook this turn · IN KOREAN · omit or set null when the message doesn't warrant a memory update"
 }
 `
 
@@ -93,8 +112,41 @@ Deno.serve(async (req) => {
   if (!message) return json({ error: 'message required' }, 400)
   if (message.length > 2000) return json({ error: 'message too long (max 2000 chars)' }, 400)
 
-  const systemPrompt = SYSTEM_PROMPT_BASE + fieldSpecificContext(field)
-  const userMessage  = `Current ${field} doc:\n\n${currentMd || '(empty)'}\n\n---\n\nCEO request:\n${message}`
+  // Pull persistent notebook + last N turns to give M continuity.
+  // 12-turn window is a heuristic · enough context to follow a thread,
+  // small enough to stay well under the 4000-token output budget.
+  const HISTORY_LIMIT = 12
+  const [{ data: workspace }, { data: history }] = await Promise.all([
+    admin.from('cmo_workspace').select('memory_md').eq('id', 1).maybeSingle(),
+    admin.from('cmo_chat_messages')
+      .select('role, content, target_doc, created_at')
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_LIMIT),
+  ])
+  const memoryMd: string = (workspace?.memory_md as string | undefined) ?? ''
+  // history came in DESC for the limit · flip back to ASC for prompt order.
+  const priorTurns = ((history ?? []) as Array<{ role: 'user' | 'assistant'; content: string; target_doc: string }>)
+    .slice()
+    .reverse()
+
+  const systemPrompt =
+    SYSTEM_PROMPT_BASE
+    + fieldSpecificContext(field)
+    + (memoryMd
+      ? `\n\nYOUR PERSISTENT NOTEBOOK (memory_md · always loaded):\n\n${memoryMd}\n`
+      : `\n\nYOUR PERSISTENT NOTEBOOK is empty. Start filling it as decisions and patterns surface.`)
+
+  // Convert prior turns into Claude's messages[] format. We intentionally
+  // include both insights and roadmap turns so M sees the FULL strategic
+  // thread, not just the doc currently being edited. Each user turn keeps
+  // its target_doc tag in the prefix so M can tell context apart.
+  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = priorTurns.map(t => ({
+    role:    t.role,
+    content: t.role === 'user' ? `[${t.target_doc}] ${t.content}` : t.content,
+  }))
+  // Current turn comes last.
+  const userMessage  = `Current ${field} doc:\n\n${currentMd || '(empty)'}\n\n---\n\nCEO request (this turn · target=${field}):\n${message}`
+  messages.push({ role: 'user', content: userMessage })
 
   let claudeRes: Response
   try {
@@ -109,7 +161,7 @@ Deno.serve(async (req) => {
         model: MODEL,
         max_tokens: 4000,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        messages,
       }),
     })
   } catch (e) {
@@ -127,21 +179,52 @@ Deno.serve(async (req) => {
   const end   = text.lastIndexOf('}')
   if (start < 0 || end < 0) return json({ error: 'Claude returned non-JSON', raw: text.slice(0, 800) }, 502)
 
-  let parsed: { updated_md?: string; summary?: string }
+  let parsed: { updated_md?: string; summary?: string; updated_memory_md?: string | null }
   try { parsed = JSON.parse(text.slice(start, end + 1)) }
   catch (e) { return json({ error: 'Failed to parse Claude JSON', detail: (e as Error)?.message, raw: text.slice(0, 800) }, 502) }
   if (typeof parsed.updated_md !== 'string') return json({ error: 'Claude response missing updated_md', raw: text.slice(0, 800) }, 502)
 
-  // Persist the updated md.
-  const updateField = field === 'insights' ? { insights_md: parsed.updated_md } : { roadmap_md: parsed.updated_md }
+  // Persist the updated md (and optionally the memory notebook in the
+  // same UPDATE so a transient failure doesn't half-write).
+  const updateField: Record<string, unknown> = field === 'insights'
+    ? { insights_md: parsed.updated_md }
+    : { roadmap_md:  parsed.updated_md }
+  let memoryUpdated = false
+  if (typeof parsed.updated_memory_md === 'string' && parsed.updated_memory_md.trim().length > 0) {
+    // Cap at ~6KB · the prompt asks for ~3KB but allow some headroom.
+    const cap = 6000
+    const next = parsed.updated_memory_md.length > cap
+      ? parsed.updated_memory_md.slice(0, cap)
+      : parsed.updated_memory_md
+    updateField.memory_md = next
+    memoryUpdated = true
+  }
   const { error: upErr } = await admin
     .from('cmo_workspace')
     .update({ ...updateField, updated_by: userId })
     .eq('id', 1)
+
+  // Log both turns into chat history regardless of persist outcome ·
+  // M's context for next turn shouldn't be lost just because the doc
+  // write failed (and surface the error to the caller anyway).
+  await admin.from('cmo_chat_messages').insert([
+    { role: 'user',      target_doc: field, content: message,                member_id: userId },
+    { role: 'assistant', target_doc: field, content: parsed.updated_md ?? '', summary: parsed.summary ?? null, member_id: userId },
+  ])
+
   if (upErr) {
-    // Surface but still return the result so user sees the proposed update.
-    return json({ updated_md: parsed.updated_md, summary: parsed.summary ?? '', persist_error: upErr.message })
+    return json({
+      updated_md:     parsed.updated_md,
+      summary:        parsed.summary ?? '',
+      memory_updated: memoryUpdated,
+      persist_error:  upErr.message,
+    })
   }
 
-  return json({ updated_md: parsed.updated_md, summary: parsed.summary ?? '', usage: claudeJson?.usage ?? null })
+  return json({
+    updated_md:     parsed.updated_md,
+    summary:        parsed.summary ?? '',
+    memory_updated: memoryUpdated,
+    usage:          claudeJson?.usage ?? null,
+  })
 })
