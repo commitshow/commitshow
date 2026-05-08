@@ -1,13 +1,18 @@
 // MakerIntroBanner · prompts the project creator to publish a launch
 // post as the first comment. Auto-drafts the body from build_briefs +
 // project name; owner edits inline and clicks Publish, which inserts
-// it as a regular comment. After publish (or if a creator comment
-// already exists) the banner stops rendering.
+// it as a comment with kind='maker_intro' to mark it as canonical.
+// After publish (or after explicit dismiss) the banner stops rendering
+// for this project — but unrelated comments the creator may have left
+// in earlier threads no longer block the prompt.
 //
 // 2026-05-08 · matches Product-Hunt's pattern: every successful
 // launch starts with a 'Hey 👋' comment from the maker · drives
 // immediate discussion. Auto-draft removes the writer's-block step ·
-// owner just confirms / tweaks / publishes.
+// owner just confirms / tweaks / publishes. Earlier check 'has any
+// owner comment?' was too broad — owners who replied to questions
+// before publishing the launch post never saw the banner. Now the
+// gate is specifically 'has a maker_intro comment?' (one-time-only).
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -36,7 +41,7 @@ const DISMISS_KEY_PREFIX = 'maker_intro_dismissed:'
 export function MakerIntroBanner({ projectId, projectName, ownerMemberId, onPublished }: Props) {
   const [brief, setBrief]               = useState<BriefRow | null>(null)
   const [loading, setLoading]           = useState(true)
-  const [hasOwnerComment, setHasOwner]  = useState<boolean | null>(null)
+  const [hasMakerIntro, setHasIntro]    = useState<boolean | null>(null)
   const [text, setText]                 = useState<string>('')
   const [editing, setEditing]           = useState(false)
   const [publishing, setPublishing]     = useState(false)
@@ -47,11 +52,15 @@ export function MakerIntroBanner({ projectId, projectName, ownerMemberId, onPubl
     catch { return false }
   })
 
-  // Pull brief + check whether the creator already commented.
+  // Pull brief + check whether a maker_intro comment already exists.
+  // 2026-05-08: gate on kind='maker_intro' specifically, not 'any
+  // owner comment'. Earlier behavior hid the banner for owners who'd
+  // already replied to other threads (e.g. maa creator with 2 prior
+  // comments) — they never saw the launch-post draft.
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [brief, ownerComm] = await Promise.all([
+      const [brief, intro] = await Promise.all([
         supabase
           .from('build_briefs')
           .select('problem, features, target_user, ai_tools, one_liner, business_model, stage')
@@ -61,11 +70,12 @@ export function MakerIntroBanner({ projectId, projectName, ownerMemberId, onPubl
           .from('comments')
           .select('id', { count: 'exact', head: true })
           .eq('project_id', projectId)
-          .eq('member_id', ownerMemberId),
+          .eq('member_id', ownerMemberId)
+          .eq('kind',      'maker_intro'),
       ])
       if (!alive) return
       setBrief((brief.data ?? null) as BriefRow | null)
-      setHasOwner((ownerComm.count ?? 0) > 0)
+      setHasIntro((intro.count ?? 0) > 0)
       setLoading(false)
     })().catch(err => { console.error('[MakerIntroBanner]', err); setLoading(false) })
     return () => { alive = false }
@@ -104,17 +114,22 @@ export function MakerIntroBanner({ projectId, projectName, ownerMemberId, onPubl
         project_id: projectId,
         member_id:  ownerMemberId,
         text:       text.trim(),
+        // 'maker_intro' kind marks this comment as the canonical launch
+        // post · MakerIntroBanner uses it to gate the banner visibility
+        // (one-time only, even if the creator has other comments).
+        kind:       'maker_intro',
       })
     setPublishing(false)
     if (error) { setError(error.message); return }
-    setHasOwner(true)
+    setHasIntro(true)
     dismiss()
     onPublished?.()
   }
 
   if (loading) return null
-  // Hide once we know there's already a creator comment.
-  if (hasOwnerComment) return null
+  // Hide once a maker_intro comment specifically exists · unrelated
+  // creator comments don't gate the banner anymore.
+  if (hasMakerIntro) return null
   if (dismissed) return null
   // Need at least some signal to draft from · otherwise the comment
   // would be a generic 'Hey 👋' with no body.
