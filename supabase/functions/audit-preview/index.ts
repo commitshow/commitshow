@@ -127,6 +127,54 @@ async function inferLiveUrlFromGithub(slug: string): Promise<string | null> {
   }
 }
 
+// Pre-flight repo accessibility probe. Returns one of:
+//   · { ok: true }                  → repo is public · proceed with audit
+//   · { ok: false, reason: ... }    → bail early with a friendly error
+//
+// 404 from anonymous GitHub API can mean private OR truly missing OR
+// soft-deleted · GitHub deliberately can't distinguish them without
+// auth. We surface both as 'private_or_missing' so the CLI / web can
+// show one clear message instead of a misleading score=4 'ghost repo'
+// snapshot. Network errors and 5xx are treated as transient · we let
+// the audit proceed (analyze-project has its own retries).
+async function checkRepoAccessible(slug: string): Promise<
+  | { ok: true }
+  | { ok: false; reason: 'private_or_missing'; status: 404 }
+  | { ok: false; reason: 'rate_limited'; status: 403 }
+> {
+  const token = Deno.env.get('GITHUB_TOKEN')
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 4000)
+    const r = await fetch(`https://api.github.com/repos/${slug}`, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'commit.show-audit-preview/1',
+        Accept: 'application/vnd.github+json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: ctrl.signal,
+    })
+    clearTimeout(timer)
+    if (r.status === 404) return { ok: false, reason: 'private_or_missing', status: 404 }
+    // 403 with rate-limit headers · still let the audit proceed (analyze-
+    // project will hit the same wall and downgrade gracefully) but flag
+    // for the caller. Don't bail on transient 403 alone.
+    if (r.status === 403) {
+      const remaining = r.headers.get('x-ratelimit-remaining')
+      if (remaining === '0') return { ok: false, reason: 'rate_limited', status: 403 }
+    }
+    // Treat anything else (200, 301, 5xx, network) as 'proceed' — analyze-
+    // project owns the deeper validation. Pre-flight only catches the
+    // obvious dead-on-arrival case.
+    return { ok: true }
+  } catch {
+    // Network error / timeout · let the audit run anyway · its own
+    // GitHub fetch will hit the same path and handle gracefully.
+    return { ok: true }
+  }
+}
+
 function ipKey(req: Request): string {
   const ip =
     req.headers.get('cf-connecting-ip') ??
@@ -364,6 +412,29 @@ Deno.serve(async (req) => {
 
   const canon = canonicalGithub(body.github_url)
   if (!canon) return json({ error: 'Not a GitHub URL', input: body.github_url }, 400)
+
+  // Pre-flight accessibility probe · catches 404 (private OR missing
+  // OR soft-deleted) before we burn rate-limit budget or pollute the
+  // DB with a score=4 'ghost repo' snapshot. The CLI renderer + web
+  // /audit page handle the error envelope with a clear "we can't see
+  // this repo" message + remediation hints (private repos · typo ·
+  // deleted). 2026-05-08 · prevents the silent-fail UX where users
+  // see a 4/100 and assume their project actually scored that.
+  const probe = await checkRepoAccessible(canon.slug)
+  if (!probe.ok && probe.reason === 'private_or_missing') {
+    return json({
+      error:        'github_inaccessible',
+      reason:       'private_or_missing',
+      slug:         canon.slug,
+      github_url:   canon.canonical,
+      message:      "We can't see this repo. It might be private, the URL might have a typo, or the repo was deleted. We only audit public GitHub repositories.",
+      hints: [
+        'Public repos only · private audit is on the V1.5 roadmap',
+        'Check the URL for typos (case-sensitive owner/repo)',
+        'If this is your repo, make it public temporarily and re-run',
+      ],
+    }, 404)
+  }
 
   // Look up existing project + last snapshot to decide cache hit before we
   // spend any rate-limit budget on URL/global caps.
