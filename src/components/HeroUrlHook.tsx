@@ -51,7 +51,20 @@ const STEP_LABELS = [
   'Audit findings',
 ]
 const ENGINE_STEP_INDEX = STEP_LABELS.length - 1     // 3 = "Audit findings"
-const ENGINE_FILL_TARGET_MS = 80_000                  // perceived 80s to ~95% · matches Claude call wall
+const ENGINE_FILL_TARGET_MS = 70_000                  // primary fill 0 → 90% over 70s
+const ENGINE_TAIL_FILL_MS   = 60_000                  // tail creep 90 → 99% over next 60s · keeps motion alive
+// Rotating reassurance copy · cycled every CYCLE_MS so the user sees the
+// engine "working through stages" instead of one frozen line. Each phase
+// loosely matches what analyze-project / Claude is actually doing.
+const ENGINE_REASSURE_LINES = [
+  'Cross-checking 14 vibe-coding failure frames…',
+  'Comparing against the reference set (supabase · cal.com · vercel)…',
+  'Tampering detection pass · brief vs code · pasted vs committed…',
+  'Routing the strengths-vs-concerns ledger…',
+  'Engine is still thinking · this is the heaviest call of the audit…',
+  'Last stretch · final score is being reasoned out…',
+]
+const REASSURE_CYCLE_MS = 14_000
 
 export function HeroUrlHook() {
   const [url,    setUrl]    = useState('')
@@ -59,38 +72,66 @@ export function HeroUrlHook() {
   const [error,  setError]  = useState<string | null>(null)
   const [result, setResult] = useState<SiteAuditResult | null>(null)
   const [step,   setStep]   = useState(0)
-  const [enginePct, setEnginePct] = useState(0)        // 0-95% during the engine step · 100% on snapshot land
+  const [enginePct, setEnginePct] = useState(0)        // 0-99% during engine step · 100% when snapshot lands
+  const [engineElapsedSec, setEngineElapsedSec] = useState(0)
+  const [reassureIdx, setReassureIdx] = useState(0)
   const [authOpen, setAuthOpen] = useState(false)
   const pollTimer = useRef<number | null>(null)
   const stepTimer = useRef<number | null>(null)
   const engineTimer = useRef<number | null>(null)
+  const reassureTimer = useRef<number | null>(null)
   const engineStartMs = useRef<number>(0)
   const navigate = useNavigate()
 
   // Cleanup on unmount
   useEffect(() => () => {
-    if (pollTimer.current)   window.clearTimeout(pollTimer.current)
-    if (stepTimer.current)   window.clearInterval(stepTimer.current)
-    if (engineTimer.current) window.clearInterval(engineTimer.current)
+    if (pollTimer.current)     window.clearTimeout(pollTimer.current)
+    if (stepTimer.current)     window.clearInterval(stepTimer.current)
+    if (engineTimer.current)   window.clearInterval(engineTimer.current)
+    if (reassureTimer.current) window.clearInterval(reassureTimer.current)
   }, [])
 
+  // Two-phase progress · always-moving so it never looks frozen:
+  //   Phase 1 (0-70s): easeOutCubic 0% → 90% (fast start · taper)
+  //   Phase 2 (70s+):  linear creep 90% → 99% over ENGINE_TAIL_FILL_MS
+  // Plus elapsed-seconds counter + rotating reassurance subtitle every 14s.
+  // Even if the snapshot takes 2+ minutes (Claude slow path), the bar
+  // continues moving the whole time and the copy rotates so user sees life.
   function startEngineProgress() {
-    // Indeterminate-feel progress · easeOut toward 95% over 80s. Capped so
-    // we don't pretend completion before the snapshot actually lands.
     if (typeof window === 'undefined') return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setEnginePct(95)
+      return
+    }
     engineStartMs.current = performance.now()
-    if (engineTimer.current) window.clearInterval(engineTimer.current)
+    setReassureIdx(0)
+    setEngineElapsedSec(0)
+    if (engineTimer.current)   window.clearInterval(engineTimer.current)
+    if (reassureTimer.current) window.clearInterval(reassureTimer.current)
+
     engineTimer.current = window.setInterval(() => {
       const elapsed = performance.now() - engineStartMs.current
-      const t = Math.min(1, elapsed / ENGINE_FILL_TARGET_MS)
-      // easeOutCubic: snappy start, slow tail · 0 → 0.95
-      const eased = 1 - Math.pow(1 - t, 3)
-      setEnginePct(Math.min(95, eased * 95))
+      setEngineElapsedSec(Math.floor(elapsed / 1000))
+      let pct: number
+      if (elapsed <= ENGINE_FILL_TARGET_MS) {
+        const t = elapsed / ENGINE_FILL_TARGET_MS
+        pct = (1 - Math.pow(1 - t, 3)) * 90      // easeOutCubic to 90%
+      } else {
+        const tailT = Math.min(1, (elapsed - ENGINE_FILL_TARGET_MS) / ENGINE_TAIL_FILL_MS)
+        pct = 90 + tailT * 9                       // linear creep 90 → 99
+      }
+      setEnginePct(Math.min(99, pct))
     }, 200)
+
+    reassureTimer.current = window.setInterval(() => {
+      // Cycle through reassurance lines · later cycles freeze on the last
+      // line ("last stretch") so we don't loop back to "starting up" copy.
+      setReassureIdx(i => Math.min(ENGINE_REASSURE_LINES.length - 1, i + 1))
+    }, REASSURE_CYCLE_MS)
   }
   function stopEngineProgress(finalPct: number) {
-    if (engineTimer.current) { window.clearInterval(engineTimer.current); engineTimer.current = null }
+    if (engineTimer.current)   { window.clearInterval(engineTimer.current);   engineTimer.current = null }
+    if (reassureTimer.current) { window.clearInterval(reassureTimer.current); reassureTimer.current = null }
     setEnginePct(finalPct)
   }
 
@@ -232,14 +273,17 @@ export function HeroUrlHook() {
   }
 
   function reset() {
-    if (pollTimer.current)   { window.clearTimeout(pollTimer.current);   pollTimer.current = null }
-    if (stepTimer.current)   { window.clearInterval(stepTimer.current);  stepTimer.current = null }
-    if (engineTimer.current) { window.clearInterval(engineTimer.current); engineTimer.current = null }
+    if (pollTimer.current)     { window.clearTimeout(pollTimer.current);    pollTimer.current = null }
+    if (stepTimer.current)     { window.clearInterval(stepTimer.current);   stepTimer.current = null }
+    if (engineTimer.current)   { window.clearInterval(engineTimer.current); engineTimer.current = null }
+    if (reassureTimer.current) { window.clearInterval(reassureTimer.current); reassureTimer.current = null }
     setPhase('idle')
     setError(null)
     setResult(null)
     setStep(0)
     setEnginePct(0)
+    setEngineElapsedSec(0)
+    setReassureIdx(0)
   }
 
   return (
@@ -338,16 +382,16 @@ export function HeroUrlHook() {
                       </span>
                       {label}
                       {isEngineActive && (
-                        <span className="ml-auto font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
-                          ~60s
+                        <span className="ml-auto font-mono text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                          {engineElapsedSec}s
                         </span>
                       )}
                     </div>
-                    {/* Engine step gets a thin progress bar — caps at 95% until
-                        the snapshot lands, then jumps to 100% as we transition
-                        to the result card. */}
+                    {/* Engine step · two-phase progress (0-70s easeOut to 90%
+                        · 70s+ linear creep to 99%) + shimmer overlay so the
+                        bar reads as alive even on the slow Claude path. */}
                     {isEngineActive && (
-                      <div className="ml-7 mt-2" style={{
+                      <div className="ml-7 mt-2 relative" style={{
                         height: 3,
                         background: 'rgba(248,245,238,0.08)',
                         borderRadius: 2,
@@ -358,16 +402,20 @@ export function HeroUrlHook() {
                           width: `${enginePct}%`,
                           background: 'var(--gold-500)',
                           transition: 'width 0.4s linear',
-                        }} />
+                          position: 'relative',
+                        }}>
+                          {/* Shimmer · ~1.6s sweep · pure CSS keyframe */}
+                          <span className="hero-engine-shimmer" />
+                        </div>
                       </div>
                     )}
                   </li>
                 )
               })}
             </ul>
-            <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+            <p className="font-mono text-xs" style={{ color: 'var(--text-muted)', minHeight: '1.2em' }}>
               {step >= ENGINE_STEP_INDEX
-                ? "Engine reasoning over the evidence. Stay with us — this is the part that's actually thinking."
+                ? ENGINE_REASSURE_LINES[reassureIdx]
                 : '~30 seconds for the surface probes · then the engine takes over'}
             </p>
           </div>

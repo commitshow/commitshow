@@ -240,6 +240,31 @@ body::before {
 }
 .pulse-dot { animation: pulse-dot 2s infinite; }
 
+/* ── Hero engine progress shimmer ──
+   Continuous sweep across the audit-finding progress bar so it reads as
+   alive even when the bar is creeping the last few percent slowly during
+   a long Claude call. */
+.hero-engine-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  animation: hero-engine-shimmer 1.6s linear infinite;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+@keyframes hero-engine-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(200%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-engine-shimmer { animation: none; opacity: 0; }
+}
+
 /* ── Input ── */
 input, textarea, select {
   background: var(--navy-800);
