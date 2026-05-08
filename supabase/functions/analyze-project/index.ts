@@ -3872,11 +3872,26 @@ Deno.serve(async (req) => {
   // weights shift: LH ↓, Production Maturity ↑, Source Hygiene ↑,
   // Live URL Health ↓, NEW Backend Signals slot (RLS / webhook /
   // indexes / rate-limit / secrets in vibe_concerns).
-  const isSaasForm   = gh.signals.is_saas && health.ok && !isNativeApp
+  // §15-E bot-block fallback — sites with aggressive bot protection
+  // (Cloudflare bot fight · Akamai · DataDome) return 403 to our
+  // `liveHealth` probe, but Lighthouse (Google's infra) and our
+  // sitemap-derived multi-route probe usually still get through. claude.ai
+  // is the canonical case: liveHealth 403 → fell to library slots → 0/52
+  // even though Lighthouse a11y 97 + 6/6 routes reachable were both
+  // evidence the site is real. Treat ANY of three positive signals as
+  // proof the site is reachable for slot purposes:
+  //   1. liveHealth.ok       — happy path · most projects
+  //   2. routesHealth.reachable >= 1 — sitemap routes returned 2xx
+  //   3. lh.performance > 0  — PageSpeed actually scored the page
+  // Live URL Health POINTS still depend on health.ok (we don't pretend
+  // the homepage is up when it isn't); only slot eligibility broadens.
+  const lighthouseSucceeded = lh.performance > 0 || lh.accessibility > 0 || lh.bestPractices > 0 || lh.seo > 0
+  const siteEffectivelyReachable = health.ok || routesHealth.reachable >= 1 || lighthouseSucceeded
+  const isSaasForm   = gh.signals.is_saas && siteEffectivelyReachable && !isNativeApp
   // useWebSlots true if web app OR SaaS (both want LH/Live signals,
   // just rescaled differently). Library/CLI/scaffold/native_app
   // without is_saas stay on non-web slots.
-  const useWebSlots  = (isAppForm && health.ok && !isNativeApp) || isSaasForm
+  const useWebSlots  = (isAppForm && siteEffectivelyReachable && !isNativeApp) || isSaasForm
 
   const stackHints = [
     brief?.features ?? '',
