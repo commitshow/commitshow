@@ -122,7 +122,7 @@ export function AdminPage() {
 
   const [token, setToken] = useState<string>(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
   const [tokenInput, setTokenInput] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'policy' | 'emails' | 'flags' | 'tools'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'aeo' | 'policy' | 'emails' | 'flags' | 'tools'>('overview')
 
   const [userStats, setUserStats]   = useState<UserStats   | null>(null)
   const [auditStats, setAuditStats] = useState<AuditStats  | null>(null)
@@ -781,6 +781,7 @@ export function AdminPage() {
             ['users',    '사용자'],
             ['audits',   'Audit'],
             ['cli',      'CLI 사용'],
+            ['aeo',      'AEO'],
             ['policy',   '정책'],
             ['emails',   '이메일'],
             ['flags',    '설정'],
@@ -813,6 +814,7 @@ export function AdminPage() {
         {tab === 'users'    && <UsersTab stats={userStats} list={userList} currentUserId={user.id} onToggleAdmin={handleToggleAdmin} grantBusyId={grantBusyId} grantOut={grantOut} hasToken={!!token} />}
         {tab === 'audits'   && <AuditsTab stats={auditStats} recent={recent} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
         {tab === 'cli'      && <CliTab usage={cliUsage} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
+        {tab === 'aeo'      && <AeoTab />}
         {tab === 'policy'   && <PolicyTab />}
         {tab === 'emails'   && <EmailTemplatesPanel />}
         {tab === 'flags'    && <FeatureFlagsTab />}
@@ -1360,6 +1362,197 @@ function PolicyTab() {
           향후 admin 토글이 필요해지면 같은 app_settings 테이블에 키 추가.
         </p>
         <div className="font-mono text-2xl" style={{ color: 'rgba(255,255,255,0.7)' }}>${(feeCents / 100).toFixed(0)}</div>
+      </section>
+    </div>
+  )
+}
+
+// AEO (Answer Engine Optimization) tab · surfaces AI crawler hits
+// captured by the root Pages middleware. Three views:
+//   1. Crawler mix (last 7d) · % share per UA kind
+//   2. Top crawled paths (last 7d)
+//   3. Daily counts table (last 14d) · stacked breakdown
+function AeoTab() {
+  interface MixRow  { ua_kind: string; hits: number; share_pct: number }
+  interface PathRow { path: string; hits: number; crawlers: number; last_hit: string }
+  interface DailyRow { day: string; ua_kind: string; hits: number }
+
+  const [mix, setMix]     = useState<MixRow[] | null>(null)
+  const [paths, setPaths] = useState<PathRow[] | null>(null)
+  const [daily, setDaily] = useState<DailyRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const [mixRes, pathRes, dailyRes] = await Promise.all([
+        supabase.rpc('ai_crawler_mix',          { p_days: 7 }),
+        supabase.rpc('ai_crawler_top_paths',    { p_days: 7, p_limit: 20 }),
+        supabase.rpc('ai_crawler_daily_counts', { p_days: 14 }),
+      ])
+      if (!alive) return
+      const firstErr = mixRes.error || pathRes.error || dailyRes.error
+      if (firstErr) setError(firstErr.message)
+      setMix((mixRes.data ?? []) as MixRow[])
+      setPaths((pathRes.data ?? []) as PathRow[])
+      setDaily((dailyRes.data ?? []) as DailyRow[])
+    })()
+    return () => { alive = false }
+  }, [])
+
+  // Pivot daily into [day -> { ua_kind: hits }] for the table.
+  const dailyPivot = (() => {
+    if (!daily) return null
+    const days   = Array.from(new Set(daily.map(d => d.day))).sort().reverse()
+    const kinds  = Array.from(new Set(daily.map(d => d.ua_kind)))
+      .sort((a, b) => {
+        const aTotal = daily.filter(d => d.ua_kind === a).reduce((sum, d) => sum + d.hits, 0)
+        const bTotal = daily.filter(d => d.ua_kind === b).reduce((sum, d) => sum + d.hits, 0)
+        return bTotal - aTotal
+      })
+    return { days, kinds, lookup: (day: string, kind: string) => daily.find(d => d.day === day && d.ua_kind === kind)?.hits ?? 0 }
+  })()
+
+  const totalHits = mix ? mix.reduce((sum, r) => sum + r.hits, 0) : 0
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <h2 className="font-display font-bold text-lg mb-1" style={{ color: 'var(--cream)' }}>
+          AEO · AI 크롤러 분석
+        </h2>
+        <p className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          Pages middleware 가 매 요청 UA 검사 → 알려진 AI bot 매치 시 ai_crawler_hits 에 기록. 사용자 응답 latency 영향 0 (waitUntil fire-and-forget).
+        </p>
+        {error && (
+          <div className="mt-3 p-2 font-mono text-xs" style={{ background: 'rgba(200,16,46,0.1)', border: '1px solid rgba(200,16,46,0.3)', color: 'var(--scarlet)' }}>
+            {error}
+          </div>
+        )}
+      </section>
+
+      {/* Crawler mix · last 7d */}
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="font-display font-bold text-base" style={{ color: 'var(--cream)' }}>지난 7일 크롤러 mix</h3>
+          <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            total {totalHits.toLocaleString()} hits
+          </span>
+        </div>
+        {mix === null ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+        ) : mix.length === 0 ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            아직 AI crawler hit 기록 없음. middleware 배포 직후엔 데이터 누적까지 1-2일 걸림.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {mix.map(row => (
+              <div key={row.ua_kind} className="flex items-center gap-3">
+                <span className="font-mono text-xs" style={{ color: 'var(--gold-500)', width: 160 }}>
+                  {row.ua_kind}
+                </span>
+                <div className="flex-1 h-3" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}>
+                  <div style={{
+                    width:        `${row.share_pct}%`,
+                    height:       '100%',
+                    background:   'var(--gold-500)',
+                    borderRadius: '2px',
+                  }} />
+                </div>
+                <span className="font-mono text-xs tabular-nums" style={{ color: 'var(--cream)', width: 64, textAlign: 'right' }}>
+                  {row.hits.toLocaleString()}
+                </span>
+                <span className="font-mono text-xs tabular-nums" style={{ color: 'rgba(255,255,255,0.5)', width: 56, textAlign: 'right' }}>
+                  {Number(row.share_pct).toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Top paths · last 7d */}
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>가장 많이 크롤된 경로 (7d)</h3>
+        {paths === null ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+        ) : paths.length === 0 ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>없음.</div>
+        ) : (
+          <div className="space-y-1">
+            {paths.map((p, i) => (
+              <div key={p.path + i} className="grid items-baseline gap-3 py-1 font-mono text-[11px]"
+                style={{ gridTemplateColumns: 'auto 1fr auto auto auto' }}>
+                <span style={{ color: 'rgba(255,255,255,0.4)', width: 28 }}>{i + 1}.</span>
+                <span style={{ color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.path}
+                </span>
+                <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  {p.crawlers} bot
+                </span>
+                <span className="tabular-nums" style={{ color: 'var(--gold-500)', width: 64, textAlign: 'right' }}>
+                  {p.hits.toLocaleString()} hits
+                </span>
+                <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.4)', width: 96, textAlign: 'right' }}>
+                  {new Date(p.last_hit).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Daily counts · last 14d */}
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>일별 크롤러 활동 (14d)</h3>
+        {dailyPivot === null ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+        ) : dailyPivot.days.length === 0 ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>없음.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="font-mono text-[11px]" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <th style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--gold-500)' }}>day</th>
+                  {dailyPivot.kinds.map(k => (
+                    <th key={k} style={{ textAlign: 'right', padding: '6px 8px', color: 'rgba(255,255,255,0.7)' }}>
+                      {k}
+                    </th>
+                  ))}
+                  <th style={{ textAlign: 'right', padding: '6px 8px', color: 'var(--gold-500)' }}>total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyPivot.days.map(d => {
+                  const total = dailyPivot.kinds.reduce((s, k) => s + dailyPivot.lookup(d, k), 0)
+                  return (
+                    <tr key={d} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '6px 8px', color: 'rgba(255,255,255,0.85)' }}>{d}</td>
+                      {dailyPivot.kinds.map(k => {
+                        const v = dailyPivot.lookup(d, k)
+                        return (
+                          <td key={k} style={{
+                            padding:   '6px 8px',
+                            textAlign: 'right',
+                            color:     v > 0 ? 'var(--cream)' : 'rgba(255,255,255,0.2)',
+                          }} className="tabular-nums">
+                            {v > 0 ? v : '–'}
+                          </td>
+                        )
+                      })}
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--gold-500)' }} className="tabular-nums">
+                        {total}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   )
