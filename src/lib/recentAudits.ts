@@ -28,12 +28,13 @@ export interface AuditDemo {
   auditPts:    number                // raw 0-45 audit pillar
   strengths:   string[]              // up to 3
   concerns:    string[]              // up to 2
-  // 'platform' = creator submitted via web (status != 'preview') ·
-  // 'walk_on'  = anonymous CLI audit (status = 'preview').
-  // Hero pool ranks platform above walk-on so the highest-status
-  // surface always seeds the rotation, with walk-ons filling out the
-  // tail. The Hero terminal can also tag each demo with a small chip.
-  source:      'platform' | 'walk_on'
+  // 'platform'      = creator submitted via web (status != 'preview') ·
+  // 'walk_on'       = anonymous CLI audit (status = 'preview' AND github_url IS NOT NULL) ·
+  // 'url_fast_lane' = anonymous URL-only audit (status = 'preview' AND github_url IS NULL · §15-E).
+  // Hero pool order: platform → walk_on → url_fast_lane so highest-status
+  // surface always seeds the rotation. Each variant gets its own caption
+  // chip + prompt line so viewers see the three entry surfaces side by side.
+  source:      'platform' | 'walk_on' | 'url_fast_lane'
 }
 
 interface RawSnapshot {
@@ -50,6 +51,7 @@ interface RawSnapshot {
   projects: {
     project_name: string
     github_url:   string | null
+    live_url:     string | null
     status:       string
   } | null
 }
@@ -79,6 +81,14 @@ function slugFromGithub(url: string | null): string | null {
   return `${m[1]}/${m[2]}`
 }
 
+// Pulls the bare host out of a live URL · used as the "slug" for url_fast_lane
+// rows so the Hero terminal can render `npx commitshow audit yoursite.com`.
+function hostFromLiveUrl(url: string | null): string | null {
+  if (!url) return null
+  try { return new URL(url).host.toLowerCase().replace(/^www\./, '') }
+  catch { return null }
+}
+
 function shortenBullet(s: string, max = 56): string {
   if (s.length <= max) return s
   return s.slice(0, max - 1).replace(/\s+\S*$/, '') + '…'
@@ -93,7 +103,7 @@ const RAW_FETCH      = 120   // each query · room for dedupe and bullet-quality
 // Build a normalized AuditDemo array from raw snapshot rows · same
 // filters (project_name length, slug, ≥2 strengths, ≥1 concern), same
 // dedupe (latest snapshot per project), capped at PER_BUCKET_TOP.
-function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on'): AuditDemo[] {
+function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on' | 'url_fast_lane'): AuditDemo[] {
   // Dedupe by project_id keeping FIRST encountered = LATEST snapshot
   // (rows arrive ordered by created_at DESC). Without this an old
   // pre-calibration snapshot can outrank today's canonical score.
@@ -113,7 +123,13 @@ function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on')
     if (!proj) continue
     if (!proj.project_name || proj.project_name.length > 24) continue
 
-    const slug = slugFromGithub(proj.github_url)
+    // Slug source depends on bucket · github slug for repo lanes,
+    // bare host for the URL fast lane. Both feed the same `slug` field
+    // so consumers stay simple — HeroTerminal switches the prompt line
+    // based on `source` instead of guessing from the slug shape.
+    const slug = source === 'url_fast_lane'
+      ? hostFromLiveUrl(proj.live_url)
+      : slugFromGithub(proj.github_url)
     if (!slug) continue
 
     const sBrief = raw.rich_analysis?.scout_brief
@@ -143,15 +159,21 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
     return memoCache.demos
   }
 
-  // Two parallel queries · platform-auditioned (status != 'preview')
-  // and CLI walk-on (status = 'preview'). Each returns up to 10 demos
-  // after dedupe + quality filters. Concat puts platform first so the
-  // marquee slot always seeds from a real member submission.
+  // Three parallel queries (§15-E 3-stream Hero):
+  //   1. platform      · status != 'preview'                              (member full audit)
+  //   2. walk_on       · status = 'preview' AND github_url IS NOT NULL    (CLI repo audit)
+  //   3. url_fast_lane · status = 'preview' AND github_url IS NULL        (URL-only audit)
+  //
+  // Each capped at PER_BUCKET_TOP after dedupe + bullet-quality filters.
+  // Concat order = display priority: platform first, walk_on next,
+  // url_fast_lane tail. The Hero rotation reveals all three over the
+  // 14-stage cycle so viewers see "real members" → "CLI walk-ons" →
+  // "URL fast lane" in sequence.
   const baseSelect = `
     project_id, created_at, score_total, score_auto, rich_analysis,
-    projects!inner(project_name, github_url, status)
+    projects!inner(project_name, github_url, live_url, status)
   `
-  const [platformRes, walkonRes] = await Promise.all([
+  const [platformRes, walkonRes, urlLaneRes] = await Promise.all([
     supabase
       .from('analysis_snapshots')
       .select(baseSelect)
@@ -164,17 +186,28 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
       .select(baseSelect)
       .gte('score_total', SCORE_FLOOR)
       .eq('projects.status', 'preview')
+      .not('projects.github_url', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(RAW_FETCH),
+    supabase
+      .from('analysis_snapshots')
+      .select(baseSelect)
+      .gte('score_total', SCORE_FLOOR)
+      .eq('projects.status', 'preview')
+      .is('projects.github_url', null)
       .order('created_at', { ascending: false })
       .limit(RAW_FETCH),
   ])
 
   const platformRows = (platformRes.data ?? []) as unknown as RawSnapshot[]
   const walkonRows   = (walkonRes.data   ?? []) as unknown as RawSnapshot[]
+  const urlLaneRows  = (urlLaneRes.data  ?? []) as unknown as RawSnapshot[]
 
   const platformDemos = buildDemoBucket(platformRows, 'platform')
   const walkonDemos   = buildDemoBucket(walkonRows,   'walk_on')
+  const urlLaneDemos  = buildDemoBucket(urlLaneRows,  'url_fast_lane')
 
-  const demos = [...platformDemos, ...walkonDemos]
+  const demos = [...platformDemos, ...walkonDemos, ...urlLaneDemos]
   memoCache = { ts: Date.now(), demos }
   return demos
 }

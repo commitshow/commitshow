@@ -22,8 +22,12 @@ import { supabase } from '../lib/supabase'
 import { AuthModal } from './AuthModal'
 
 interface SnapshotRich {
-  strengths?: Array<{ axis?: string; bullet?: string }>
-  concerns?:  Array<{ axis?: string; bullet?: string }>
+  // Canonical scout_brief shape · matches recentAudits.ts and the Edge
+  // Function output (strengths / weaknesses, not strengths / concerns).
+  scout_brief?: {
+    strengths?:  Array<{ axis?: string | null; bullet?: string }>
+    weaknesses?: Array<{ axis?: string | null; bullet?: string }>
+  }
   routes_health?: { probed: number; reachable: number; broken: number; reachable_rate: number; broken_paths?: string[] }
 }
 
@@ -37,12 +41,17 @@ interface SiteAuditResult {
 
 type Phase = 'idle' | 'running' | 'ready' | 'error'
 
+// 3 quick probes (~5.5s) + the long-running engine reasoning step. Engine
+// step uses an indeterminate progress bar capped at 95% so the wait feels
+// purposeful — analyze-project's Claude call alone is 60-90s.
 const STEP_LABELS = [
   'Lighthouse mobile',
   'Live URL probe',
   'Multi-route check',
   'Audit findings',
 ]
+const ENGINE_STEP_INDEX = STEP_LABELS.length - 1     // 3 = "Audit findings"
+const ENGINE_FILL_TARGET_MS = 80_000                  // perceived 80s to ~95% · matches Claude call wall
 
 export function HeroUrlHook() {
   const [url,    setUrl]    = useState('')
@@ -50,16 +59,40 @@ export function HeroUrlHook() {
   const [error,  setError]  = useState<string | null>(null)
   const [result, setResult] = useState<SiteAuditResult | null>(null)
   const [step,   setStep]   = useState(0)
+  const [enginePct, setEnginePct] = useState(0)        // 0-95% during the engine step · 100% on snapshot land
   const [authOpen, setAuthOpen] = useState(false)
   const pollTimer = useRef<number | null>(null)
   const stepTimer = useRef<number | null>(null)
+  const engineTimer = useRef<number | null>(null)
+  const engineStartMs = useRef<number>(0)
   const navigate = useNavigate()
 
   // Cleanup on unmount
   useEffect(() => () => {
-    if (pollTimer.current) window.clearTimeout(pollTimer.current)
-    if (stepTimer.current) window.clearInterval(stepTimer.current)
+    if (pollTimer.current)   window.clearTimeout(pollTimer.current)
+    if (stepTimer.current)   window.clearInterval(stepTimer.current)
+    if (engineTimer.current) window.clearInterval(engineTimer.current)
   }, [])
+
+  function startEngineProgress() {
+    // Indeterminate-feel progress · easeOut toward 95% over 80s. Capped so
+    // we don't pretend completion before the snapshot actually lands.
+    if (typeof window === 'undefined') return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    engineStartMs.current = performance.now()
+    if (engineTimer.current) window.clearInterval(engineTimer.current)
+    engineTimer.current = window.setInterval(() => {
+      const elapsed = performance.now() - engineStartMs.current
+      const t = Math.min(1, elapsed / ENGINE_FILL_TARGET_MS)
+      // easeOutCubic: snappy start, slow tail · 0 → 0.95
+      const eased = 1 - Math.pow(1 - t, 3)
+      setEnginePct(Math.min(95, eased * 95))
+    }, 200)
+  }
+  function stopEngineProgress(finalPct: number) {
+    if (engineTimer.current) { window.clearInterval(engineTimer.current); engineTimer.current = null }
+    setEnginePct(finalPct)
+  }
 
   function normalizeInput(raw: string): string | null {
     const trimmed = raw.trim()
@@ -85,21 +118,25 @@ export function HeroUrlHook() {
     setResult(null)
     setPhase('running')
     setStep(0)
+    setEnginePct(0)
 
-    // Animate the step trail · ~2.2s per step gives an 8-9s perceived run
+    // 3 quick probes (~1.8s each = 5.4s total) → settle on engine step ·
+    // engine step shows the long indeterminate bar while we poll for the
+    // analyze-project snapshot (~60-90s total).
     if (typeof window !== 'undefined' &&
         !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       let s = 0
       stepTimer.current = window.setInterval(() => {
         s += 1
-        setStep(Math.min(s, STEP_LABELS.length - 1))
-        if (s >= STEP_LABELS.length - 1 && stepTimer.current) {
-          window.clearInterval(stepTimer.current)
-          stepTimer.current = null
+        setStep(Math.min(s, ENGINE_STEP_INDEX))
+        if (s >= ENGINE_STEP_INDEX) {
+          if (stepTimer.current) { window.clearInterval(stepTimer.current); stepTimer.current = null }
+          startEngineProgress()
         }
-      }, 2200)
+      }, 1800)
     } else {
-      setStep(STEP_LABELS.length - 1)
+      setStep(ENGINE_STEP_INDEX)
+      startEngineProgress()
     }
 
     try {
@@ -188,18 +225,21 @@ export function HeroUrlHook() {
 
   function finishWithResult(envelope: SiteAuditResult) {
     if (stepTimer.current) { window.clearInterval(stepTimer.current); stepTimer.current = null }
+    stopEngineProgress(100)
     setStep(STEP_LABELS.length)
     setResult(envelope)
     setPhase('ready')
   }
 
   function reset() {
-    if (pollTimer.current) { window.clearTimeout(pollTimer.current); pollTimer.current = null }
-    if (stepTimer.current) { window.clearInterval(stepTimer.current); stepTimer.current = null }
+    if (pollTimer.current)   { window.clearTimeout(pollTimer.current);   pollTimer.current = null }
+    if (stepTimer.current)   { window.clearInterval(stepTimer.current);  stepTimer.current = null }
+    if (engineTimer.current) { window.clearInterval(engineTimer.current); engineTimer.current = null }
     setPhase('idle')
     setError(null)
     setResult(null)
     setStep(0)
+    setEnginePct(0)
   }
 
   return (
@@ -215,12 +255,12 @@ export function HeroUrlHook() {
           // FAST LANE · NO REPO REQUIRED
         </div>
         <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-3 leading-tight" style={{ color: 'var(--cream)' }}>
-          Paste any URL<br />See what the engine catches
+          Paste a URL<br />See what's broken
         </h2>
-        <p className="font-light max-w-2xl mb-8" style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.6 }}>
-          30-second partial audit on any deployed site — Lighthouse, multi-route routing,
-          live URL health, meta hygiene. Closed-source SaaS welcome. Repo lane gives the full
-          50-point report.
+        <p className="font-light max-w-2xl mb-8" style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', lineHeight: 1.55 }}>
+          Drop your URL — we'll surface what's wrong with your project in under a minute.
+          Like what you see? Audition the project for a sharper audit and a spot on the
+          public ladder.
         </p>
 
         {phase === 'idle' && (
@@ -271,7 +311,9 @@ export function HeroUrlHook() {
 
         {phase === 'idle' && (
           <p className="mt-4 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
-            Anonymous · 5 audits/day per IP · Cap ~32 / 50 (URL signals only). Repo lane unlocks the full 50.
+            Free · up to 5 audits per day from one IP. URL-only audits hit a natural ceiling
+            because the engine can't see your tests, CI, or repo signals. Audition with your
+            repo to push past it.
           </p>
         )}
 
@@ -283,22 +325,50 @@ export function HeroUrlHook() {
             <ul className="space-y-2.5 mb-4">
               {STEP_LABELS.map((label, i) => {
                 const state = i < step ? 'done' : i === step ? 'active' : 'pending'
+                const isEngineActive = i === ENGINE_STEP_INDEX && state === 'active'
                 return (
-                  <li key={label} className="flex items-center gap-3 font-mono text-sm" style={{
-                    color: state === 'done'    ? 'var(--cream)'
-                         : state === 'active'  ? 'var(--gold-500)'
-                         :                       'var(--text-muted)',
-                  }}>
-                    <span style={{ width: 14, display: 'inline-block', textAlign: 'center' }}>
-                      {state === 'done' ? '✓' : state === 'active' ? <span className="pulse-dot" style={{ width: 6, height: 6, display: 'inline-block', background: 'var(--gold-500)', borderRadius: '50%' }} /> : '·'}
-                    </span>
-                    {label}
+                  <li key={label}>
+                    <div className="flex items-center gap-3 font-mono text-sm" style={{
+                      color: state === 'done'    ? 'var(--cream)'
+                           : state === 'active'  ? 'var(--gold-500)'
+                           :                       'var(--text-muted)',
+                    }}>
+                      <span style={{ width: 14, display: 'inline-block', textAlign: 'center' }}>
+                        {state === 'done' ? '✓' : state === 'active' ? <span className="pulse-dot" style={{ width: 6, height: 6, display: 'inline-block', background: 'var(--gold-500)', borderRadius: '50%' }} /> : '·'}
+                      </span>
+                      {label}
+                      {isEngineActive && (
+                        <span className="ml-auto font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+                          ~60s
+                        </span>
+                      )}
+                    </div>
+                    {/* Engine step gets a thin progress bar — caps at 95% until
+                        the snapshot lands, then jumps to 100% as we transition
+                        to the result card. */}
+                    {isEngineActive && (
+                      <div className="ml-7 mt-2" style={{
+                        height: 3,
+                        background: 'rgba(248,245,238,0.08)',
+                        borderRadius: 2,
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${enginePct}%`,
+                          background: 'var(--gold-500)',
+                          transition: 'width 0.4s linear',
+                        }} />
+                      </div>
+                    )}
                   </li>
                 )
               })}
             </ul>
             <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
-              ~30 seconds · running on Edge nodes
+              {step >= ENGINE_STEP_INDEX
+                ? "Engine reasoning over the evidence. Stay with us — this is the part that's actually thinking."
+                : '~30 seconds for the surface probes · then the engine takes over'}
             </p>
           </div>
         )}
@@ -369,10 +439,12 @@ interface ResultCardProps {
 function ResultCard({ result, onClaim, onTryAnother }: ResultCardProps) {
   const snap = result.latest_snapshot
   const total = snap?.score_total ?? result.project.score_total ?? 0
-  const auto  = snap?.score_auto  ?? result.project.score_auto  ?? 0
   const rich  = snap?.rich_analysis ?? {}
-  const strengths = (rich.strengths ?? []).slice(0, 3)
-  const concerns  = (rich.concerns ?? []).slice(0, 2)
+  // Canonical bullet path · scout_brief.strengths / .weaknesses (not the top-level
+  // strengths/concerns I assumed earlier — that broke result rendering since the
+  // engine writes everything under scout_brief).
+  const strengths = (rich.scout_brief?.strengths ?? []).slice(0, 3)
+  const concerns  = (rich.scout_brief?.weaknesses ?? []).slice(0, 2)
   const routes    = rich.routes_health
 
   const band =
@@ -394,7 +466,7 @@ function ResultCard({ result, onClaim, onTryAnother }: ResultCardProps) {
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 mb-6">
         <div>
           <div className="font-mono text-xs tracking-widest mb-1" style={{ color: 'var(--gold-500)' }}>
-            URL AUDIT · partial cap 32 / 50
+            URL AUDIT · partial · repo signals not seen
           </div>
           <div className="font-display font-black text-2xl sm:text-3xl truncate" style={{ color: 'var(--cream)' }}>
             {result.project.project_name}

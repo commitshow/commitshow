@@ -103,13 +103,20 @@ function sequenceForDemo(d: AuditDemo): Line[] {
   const captionPost  = concernCount > 0
     ? ` · ${d.band} · ${concernCount} to fix`
     : ` · ${d.band}`
-  // 'walk-on' = anonymous CLI audit (status='preview') · 'audition'
-  // = creator submitted via web (status != 'preview'). The hero
-  // rotation now mixes both per recentAudits.ts split-bucket fetch ·
-  // caption tag must follow the demo's actual source, not be hardcoded.
-  const captionMid = d.source === 'platform' ? 'audition' : 'walk-on'
+  // 3-stream caption (§15-E):
+  //   'platform'      → 'audition'  (member full audit · status != 'preview')
+  //   'walk_on'       → 'walk-on'   (CLI repo audit · github_url + status='preview')
+  //   'url_fast_lane' → 'url-audit' (URL-only · github_url IS NULL · partial cap)
+  // The prompt line also varies — repo lanes show the github slug, URL lane
+  // shows the bare host so the audience sees both entry shapes side by side.
+  const captionMid = d.source === 'platform'      ? 'audition'
+                   : d.source === 'url_fast_lane' ? 'url-audit'
+                   :                                'walk-on'
+  const promptLine = d.source === 'url_fast_lane'
+    ? `npx commitshow@latest audit ${d.slug}`
+    : `npx commitshow@latest audit github.com/${d.slug}`
   return [
-    { kind: 'prompt', text: `npx commitshow@latest audit github.com/${d.slug}` },
+    { kind: 'prompt', text: promptLine },
     { kind: 'spacer' },
     // Canonical brand copy · same line that closes the AnalysisResultCard
     // hero score (AnalysisResultCard.tsx:299). Replaces the earlier
