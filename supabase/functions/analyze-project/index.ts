@@ -2028,6 +2028,196 @@ async function liveHealth(url: string) {
   }
 }
 
+// ── Multi-route probe (§15-E.2 · Tier A) ──────────────────────
+// homepage 200 만 보던 Live URL Health 슬롯이 form_factor='app' 의
+// 진짜 "사용자가 클릭하는 라우트들" 상태를 못 본다는 한계 → sitemap.xml
+// 또는 homepage <a> 에서 같은 origin internal route 6개를 추가 probe.
+// /pricing 이 500, /signup 이 404 같은 실패를 잡아낸다 (vibe coding
+// 흔한 패턴 — homepage 만 잘 만들고 나머지 placeholder).
+//
+// Cost: 6 × HEAD/GET (4s timeout each) = ~3-5s wall · 인프라 0.
+// Playwright (Tier B) 없이도 라우팅 살아있나는 검증 가능.
+
+interface RouteHealthItem {
+  path: string
+  status: number
+  ttfb_ms: number
+  ok: boolean
+}
+interface RoutesHealth {
+  probed:             number
+  reachable:          number
+  broken:             number
+  reachable_rate:     number   // 0-1 · 슬롯 fold-in 용
+  items:              RouteHealthItem[]
+  broken_paths:       string[]   // Claude evidence prompt surface
+  sitemap_present:    boolean
+  sitemap_url_count:  number
+}
+
+const PRIORITY_ROUTE_PATHS = [
+  '/pricing', '/signup', '/sign-up', '/login', '/sign-in',
+  '/docs', '/documentation', '/about', '/blog', '/features',
+  '/contact', '/dashboard', '/app',
+]
+
+async function probeOneRoute(url: string): Promise<RouteHealthItem> {
+  const t0 = performance.now()
+  const path = (() => { try { return new URL(url).pathname || '/' } catch { return url } })()
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 4000)
+    // Some hosts 405 on HEAD (e.g. Vercel SSR routes) — GET is the safer
+    // probe. Body discarded; we only need status + timing.
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: BROWSER_PROBE_HEADERS,
+    })
+    clearTimeout(timer)
+    try { res.body?.cancel() } catch { /* ignore */ }
+    return {
+      path,
+      status: res.status,
+      ttfb_ms: Math.round(performance.now() - t0),
+      ok: res.ok,
+    }
+  } catch {
+    return { path, status: 0, ttfb_ms: Math.round(performance.now() - t0), ok: false }
+  }
+}
+
+async function discoverRoutes(baseUrl: string): Promise<{ routes: string[]; sitemap_present: boolean; sitemap_url_count: number }> {
+  let origin: string
+  try { origin = new URL(baseUrl).origin }
+  catch { return { routes: [], sitemap_present: false, sitemap_url_count: 0 } }
+
+  const found = new Set<string>()
+  let sitemap_present = false
+  let sitemap_url_count = 0
+
+  // 1) sitemap.xml 우선 — owner-declared source of truth
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 4000)
+    const res = await fetch(`${origin}/sitemap.xml`, {
+      method: 'GET', signal: ctrl.signal, redirect: 'follow',
+      headers: BROWSER_PROBE_HEADERS,
+    })
+    clearTimeout(timer)
+    if (res.ok) {
+      const xml = (await res.text()).slice(0, 200_000)
+      sitemap_present = true
+      // 빠른 정규식 추출 — XML parser 끌어들이면 Edge runtime 무거움.
+      const matches = xml.match(/<loc>([^<]+)<\/loc>/g) || []
+      sitemap_url_count = matches.length
+      for (const m of matches.slice(0, 40)) {
+        const u = m.replace(/<\/?loc>/g, '').trim()
+        try {
+          const parsed = new URL(u)
+          if (parsed.origin === origin && parsed.pathname !== '/') {
+            found.add(parsed.pathname)
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore — fall back to <a href> below */ }
+
+  // 2) homepage <a href> · sitemap 없거나 부족하면 보강
+  if (found.size < 6) {
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 5000)
+      const res = await fetch(origin, {
+        method: 'GET', signal: ctrl.signal, redirect: 'follow',
+        headers: BROWSER_PROBE_HEADERS,
+      })
+      clearTimeout(timer)
+      if (res.ok) {
+        // 64KB · head + 첫 화면 영역의 nav 만 잡으면 충분
+        const reader = res.body?.getReader()
+        let html = ''
+        if (reader) {
+          const dec = new TextDecoder()
+          let total = 0
+          while (total < 65_536) {
+            const { value, done } = await reader.read()
+            if (done) break
+            html += dec.decode(value, { stream: true })
+            total += value.byteLength
+          }
+          try { reader.cancel() } catch { /* ignore */ }
+        } else {
+          html = (await res.text()).slice(0, 65_536)
+        }
+        const hrefMatches = html.match(/href\s*=\s*["']([^"']+)["']/gi) || []
+        for (const raw of hrefMatches) {
+          const m = raw.match(/href\s*=\s*["']([^"']+)["']/i)
+          if (!m) continue
+          const href = m[1]
+          // 같은 origin internal route 만
+          let path: string | null = null
+          try {
+            if (href.startsWith('/') && !href.startsWith('//')) {
+              path = href.split('#')[0].split('?')[0]
+            } else if (href.startsWith(origin)) {
+              path = new URL(href).pathname
+            } else if (/^https?:\/\//i.test(href)) {
+              continue
+            }
+          } catch { continue }
+          if (!path || path === '/' || path.length > 80) continue
+          // 자산 경로 제외
+          if (/\.(css|js|map|json|xml|ico|svg|png|jpe?g|webp|gif|mp4|woff2?|ttf|pdf|txt)(\?|$)/i.test(path)) continue
+          if (path.startsWith('/api/') || path.startsWith('/assets/') || path.startsWith('/_')) continue
+          found.add(path)
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 3) Priority 정렬 — /pricing /signup 같은 핵심 라우트 우선
+  const prioritized: string[] = []
+  for (const p of PRIORITY_ROUTE_PATHS) if (found.has(p)) { prioritized.push(p); found.delete(p) }
+  for (const p of Array.from(found).slice(0, 12)) prioritized.push(p)
+
+  return { routes: prioritized.slice(0, 6), sitemap_present, sitemap_url_count }
+}
+
+async function inspectMultiRoutes(baseUrl: string): Promise<RoutesHealth> {
+  const blank: RoutesHealth = {
+    probed: 0, reachable: 0, broken: 0, reachable_rate: 0,
+    items: [], broken_paths: [],
+    sitemap_present: false, sitemap_url_count: 0,
+  }
+  if (!baseUrl) return blank
+
+  let origin: string
+  try { origin = new URL(baseUrl).origin }
+  catch { return blank }
+
+  const { routes, sitemap_present, sitemap_url_count } = await discoverRoutes(baseUrl)
+  if (routes.length === 0) {
+    return { ...blank, sitemap_present, sitemap_url_count }
+  }
+
+  const items = await Promise.all(routes.map(p => probeOneRoute(`${origin}${p}`)))
+  const reachable = items.filter(i => i.ok).length
+  const broken    = items.length - reachable
+
+  return {
+    probed: items.length,
+    reachable,
+    broken,
+    reachable_rate: items.length ? reachable / items.length : 0,
+    items,
+    broken_paths: items.filter(i => !i.ok).map(i => i.path),
+    sitemap_present,
+    sitemap_url_count,
+  }
+}
+
 // ── Polish & sharing signals ──────────────────────────────────
 // Things Lighthouse doesn't grade but separate finished products from
 // half-shipped prototypes: OG image / Twitter card (social shares),
@@ -2840,6 +3030,16 @@ OUTPUT RULES
        security_headers   — CSP / HSTS / X-Frame / X-Content-Type / Referrer / Permissions
        legal_pages        — /privacy and /terms reachability
        readme_depth_score — README length + Install/Usage section presence
+       routes_health      — multi-route probe (§15-E.2 · Tier A). Probed paths +
+                            broken_paths array. ALREADY priced into
+                            scoring_so_far.auto_50_breakdown.health_pts via the
+                            Live URL Health slot fold-in. Mention broken paths
+                            (e.g. "/pricing → 500 · /signup → 404") as a
+                            CONCERN bullet in scout_brief if reachable_rate < 0.8,
+                            but do NOT add a separate minus chip — the slot
+                            already reflects it. If reachable_rate >= 0.8 with
+                            sitemap_present, it's a STRENGTH-worthy signal
+                            ("multi-route routing intact").
      If you write a chip like "Security headers sparse (1 of 6)" with
      points: -3, that is a RULE VIOLATION. The hard slots above already
      calibrate. Only the explicit deductions in section (2) below are
@@ -3607,7 +3807,7 @@ Deno.serve(async (req) => {
   // mobile-only Lighthouse; responsive slot uses `mobile perf ≥70` as
   // the sole positive signal (mobile/desktop gap comparison removed).
   const lhDesktop: LighthouseScores = { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
-  const [lh, gh, health, completeness, securityHeaders, legalPages] = await Promise.all([
+  const [lh, gh, health, completeness, securityHeaders, legalPages, routesHealth] = await Promise.all([
     project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
     project.github_url ? inspectGitHub(project.github_url, explicitWorkspace) : Promise.resolve({ accessible: false, languages: {}, language_pct: {}, stars: 0, forks: 0, file_count_estimate: 0, last_commit_at: null }),
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
@@ -3627,6 +3827,11 @@ Deno.serve(async (req) => {
     project.live_url ? inspectLegalPages(project.live_url) : Promise.resolve({
       fetched: false, has_privacy: false, has_terms: false,
     }),
+    project.live_url ? inspectMultiRoutes(project.live_url) : Promise.resolve({
+      probed: 0, reachable: 0, broken: 0, reachable_rate: 0,
+      items: [], broken_paths: [],
+      sitemap_present: false, sitemap_url_count: 0,
+    } satisfies RoutesHealth),
   ])
 
   // Score components · v3 form-aware (2026-04-28).
@@ -3692,8 +3897,20 @@ Deno.serve(async (req) => {
 
   // ── Web slots (only meaningful for app form) ──
   const lhScore        = scoreLighthouse(lh)                                   //  0-20 (raw; only used if isAppForm)
-  // Live URL Health · binary 5/0 (v3 calibration restored).
-  const liveHealthPts  = health.ok && health.elapsed_ms < 3000 ? 5 : 0
+  // Live URL Health · binary 5/0 (v3 calibration restored) · §15-E.2 multi-route fold-in:
+  // homepage 200 + SSL + <3000ms 가 base. routes_health 가 있으면 multi-route
+  // reachable_rate 로 추가 modulation — homepage 만 잘 만들고 /pricing /signup
+  // 죽어있는 vibe coding 흔한 패턴을 잡는다. probed===0 (라우트 발견 실패) 면
+  // 기존 binary 그대로 유지 (regression 방지 — 작은 단일-페이지 프로젝트에 불리).
+  const liveHomepageOk = health.ok && health.elapsed_ms < 3000
+  const liveHealthPts  = (() => {
+    if (!liveHomepageOk) return 0
+    if (routesHealth.probed === 0) return 5     // 라우트 추출 실패 → 기존 동작
+    const r = routesHealth.reachable_rate
+    if (r >= 0.8) return 5
+    if (r >= 0.6) return 3
+    return 1                                     // homepage 200 인데 다른 라우트 다 깨진 케이스
+  })()
   const completenessRawPts = scoreCompleteness(completeness)                   //  0-2
 
   // ── Non-web equivalent slots (for library/cli/scaffold/mcp) ──
@@ -3958,6 +4175,7 @@ Deno.serve(async (req) => {
     lighthouse_mobile_desktop_perf_gap: (lh.performance >= 0 && lhDesktop.performance >= 0)
       ? Math.abs(lhDesktop.performance - lh.performance) : null,
     live_url_health: health,
+    routes_health: routesHealth,
     completeness_signals: completeness,
     security_headers: securityHeaders,
     legal_pages: legalPages,
@@ -4176,7 +4394,7 @@ Deno.serve(async (req) => {
     github_signals:     gh.signals,
     // Mix in the completeness signals so the snapshot is self-contained:
     // future reruns / UI ledgers can reference exactly what was checked.
-    rich_analysis:      { ...claudeForSnapshot, completeness_signals: completeness },
+    rich_analysis:      { ...claudeForSnapshot, completeness_signals: completeness, routes_health: routesHealth },
     parent_snapshot_id: parent?.id ?? null,
     delta_from_parent:  Object.keys(deltaFromParent).length ? deltaFromParent : null,
     score_total_delta:  scoreTotalDelta,

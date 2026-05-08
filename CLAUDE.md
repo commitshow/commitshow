@@ -1774,6 +1774,163 @@ band=$(echo "$json" | jq -r .score.band)
 
 ---
 
+## 15-E. URL Fast Lane · 두 lane 분리 진입 (spec 2026-05-09)
+
+### 15-E.0 배경
+
+지금까지 audit 진입은 **GitHub URL 필수** (web /submit) 또는 **CLI walk-on** (`commitshow audit github.com/owner/repo`). 둘 다 **repo 가 있어야** 한다는 전제. 결과적으로 두 가지 사용자가 빠진다:
+
+1. **closed-source SaaS 파운더** — repo 비공개. 우리한테 들어올 길이 없음. 바이브코더 모수의 절반 이상이 closed-source SaaS.
+2. **"이 사이트 audit 해봐" 의 시니어 X 시드** — gstack `/browse` 가 잡고 있는 viral surface. 남의 SaaS URL 붙여넣기 → 결과 share. CLI walk-on 의 site 버전.
+
+### 15-E.1 두 lane 의 명확한 분리
+
+```
+┌─ Fast lane (URL only) ────────────────────────────┐  ┌─ Full lane (Repo + Brief) ──────────────────────┐
+│ entry: 도메인 URL 한 줄                             │  │ entry: GitHub URL + Live URL + Brief Phase 1   │
+│ probe: Lighthouse + Live + multi-route + meta      │  │ probe: 모든 것 (repo 까지)                       │
+│        + (V1.5) Playwright deep probe              │  │                                                 │
+│ ceiling: ~32 / 50 (Audit pillar)                   │  │ ceiling: 50 / 50 + 10 soft = 62                │
+│ status: 'preview' (CLI walk-on 과 동급)              │  │ status: 'active'                                │
+│ creator_id: NULL (anonymous)                        │  │ creator_id: 등록 회원                            │
+│ ladder/HoF: ❌ 등재 안 함                           │  │ ladder/HoF: ✅                                  │
+│ 자동 트윗: ❌ (§18-B.4 게이트 그대로)                │  │ 자동 트윗: ✅ (score ≥ 85)                      │
+│ share card: ✅ "Audited on commit.show" 워터마크     │  │ share card: ✅                                  │
+│ rate limit: preview_rate_limits 재사용              │  │ 24h cooldown · resubmit 무료 · 결제 게이팅       │
+│ 비용: ~$0.005 (Tier A) / ~$0.02 (Tier B)            │  │ 등록비 (INTERNAL.md §1)                          │
+└────────────────────────────────────────────────────┘  └─────────────────────────────────────────────────┘
+```
+
+**Cross-link**: Fast lane 결과 화면 하단에 **"Claim this audition · Upgrade to full audit"** CTA → owner verify 후 Full lane 으로 승격.
+
+### 15-E.2 Tier A · multi-route probe (V1 · 인프라 0)
+
+**Playwright 없이도 가능**. 헤드리스 브라우저 호출 안 함. Edge Function 안 fetch 만으로 처리.
+
+```
+1. fetch homepage HTML → <a href> 파싱 → 같은 origin 의 internal route 추출
+2. 병행으로 sitemap.xml 도 fetch (있으면 더 정확한 source-of-truth)
+3. dedupe + cap 6 routes (homepage 제외) · prioritize: /pricing /signup /login /docs /about /blog
+4. 각 route HEAD or GET (4s timeout each · BROWSER_PROBE_HEADERS)
+5. 결과 형태:
+   routes_health = {
+     probed: 6, reachable: 5, broken: 1,
+     items: [
+       { path: '/pricing',  status: 200, ttfb_ms: 240, ok: true },
+       { path: '/signup',   status: 500, ttfb_ms: 1200, ok: false },
+       …
+     ],
+     sitemap_present: true, sitemap_url_count: 47,
+   }
+```
+
+**Live URL Health 슬롯 (5pt) 의미 격상**:
+- v3: homepage 200 + SSL + <3000ms → 5
+- 신규: homepage 200 + SSL + <3000ms + **multi-route reachable rate ≥ 0.8** → 5; 0.6-0.8 → 3; <0.6 → 1
+- form_factor='app' 일 때만 multi-route 적용 (library/cli 는 routes 개념 N/A)
+
+**Claude evidence prompt 추가**: `routes_health.broken_paths` 가 strengths/concerns 의 evidence 로 surface.
+
+### 15-E.3 Tier B · Playwright deep probe (V1.5+ · "deep audit" 묶음)
+
+**한 묶음 도입**:
+- post-hydration HTML (`__NEXT_DATA__` · `__NUXT__` · h1/h2 hierarchy after JS)
+- 런타임 console error count
+- 네트워크 실패 (4xx/5xx 리소스 카운트)
+- 스크린샷 fold + full → 프로젝트 상세 페이지에 evidence
+
+**점수 fold-in**: Production Maturity 12 안에 새 +2 signals (console_clean +1 · network_clean +1).
+
+**인프라**: Cloudflare Browser Rendering API ($5/1k page · 우리가 이미 Pages 위에 있음 · keep-alive session). 또는 self-hosted Browserless. 결정은 V1.5 timeline.
+
+**비용 게이팅**:
+- Fast lane (anonymous walk-on) = Tier A only (Playwright 발동 X)
+- Full lane = Tier B 항상 발동
+- → owner verified 만 Playwright 비용 부담
+
+### 15-E.4 Abuse defense · "남의 URL 마구 넣기" 처리
+
+**원칙**: CLI walk-on 과 동형 패턴. 별도 신규 디펜스 거의 없음.
+
+| 위협 | 디펜스 |
+|---|---|
+| 남의 SaaS 마구 audit | `status='preview'` · `creator_id IS NULL` · ladder 등재 X · 자동 트윗 X (§18-B.4 게이트) |
+| 비용 폭주 | `preview_rate_limits` 재사용 · IP 20/day · **per-domain 5/day** · global 800/day · 7-day cache |
+| Owner 동의 없는 점수 공개 | share card 워터마크 + `social_share_disabled` 토글 · **+ DNS TXT opt-out** (아래) |
+| 점수 게이밍 / 반복 audit | Tier B Playwright 비용은 owner verify 후만 (Fast lane 은 cheap probe 만) |
+| 도메인 owner 글로벌 거부 | `_commitshow.<domain> TXT "audit=no"` lookup → 발견 시 fetch 시작 전 거부. **gstack 류 대비 차별 채널** |
+
+### 15-E.5 Owner claim flow (V1.5+)
+
+closed-source 도메인 owner 가 자기 walk-on audit 을 정식 등재로 승격하는 경로:
+
+```
+1. Walk-on result 페이지에 "Claim this audition" CTA
+2. 두 verify 옵션:
+   (a) GitHub OAuth + linked repo URL                 — repo 있는 케이스 (default)
+   (b) DNS TXT `_commitshow.<domain>` = <token>      — closed-source SaaS 친화 (V2)
+3. verify 통과 → projects.creator_id 부여 · status='preview' → 'active' · ladder 진입
+4. (옵션) Brief Phase 1 입력 권장 → score_total recalc with Brief Integrity 5pt 추가
+```
+
+### 15-E.6 UI 분리
+
+**Web /submit** 두 진입 카드:
+- **Audition with repo →** (기본 · gold CTA · "Full audit · ladder · graduation track")
+- **Quick audition with URL →** (보조 · 작은 outline 카드 · "Partial audit · share-only · upgrade later")
+
+**CLI** 신규 subcommand:
+- `commitshow audit <github-url>` (기존 · full 또는 walk-on)
+- `commitshow audit <site-url>` (신규 · URL fast lane · "site audit · partial cap")
+- 자동 감지: `github.com` host → repo path · 그 외 → site fast lane
+
+### 15-E.7 Phasing
+
+```
+V1 (지금)
+  ✅ Tier A multi-route probe (Edge Function 추가 · 인프라 0)
+  ☐ /submit 두 카드 분리 + Web URL fast lane 진입
+  ☐ CLI auto-routing (host=github.com → repo · 그 외 → fast lane)
+  ☐ preview_rate_limits 의 per-domain 5/day 키 추가
+  ☐ Live URL Health 슬롯 multi-route reachable rate fold-in
+  ☐ DNS TXT opt-out lookup (cheap · audit 진입점에서 1회)
+  ☐ Hero 3-stream 애니메이션 (CLI walk-on · 회원 full audit · URL fast lane)
+       · URL lane 은 partial 명시 별표/배지로 시각 구분 (cap ~32/50 → ~64 종합)
+
+V1 후반 · Private repo 진입로 (closed-source 친화)
+  ☐ commit.show Auditor GitHub App
+       · scope: metadata:read · contents:read · pull_requests:read 만
+       · user 가 selected repositories 로 audit 받을 repo 만 선택
+       · installation token 1h short-lived · 폐기 후 캐시 X
+       · github.com/apps/commitshow-auditor
+  ☐ commitshow audit --local (CLI local mode)
+       · 본인 머신에서 signals 추출 (file tree · package.json · tests/ · CI · LICENSE · README · lockfile)
+       · 소스코드 자체는 서버 미전송 · JSON 시그널 + Brief 만 POST
+       · Lighthouse · Live URL 만 서버 probe
+       · "내 회사 private 코드 절대 외부 안 나감" 보장 — closed-source SaaS 1순위
+
+V1.5
+  ☐ Tier B Playwright deep probe 모듈 (Cloudflare Browser Rendering)
+  ☐ Owner claim flow (GitHub OAuth path 우선)
+  ☐ ProjectDetail 에 screenshot evidence
+  ☐ Production Maturity 의 console_clean / network_clean +2 signal
+
+V2
+  ☐ DNS TXT verify 기반 closed-source 등재 (repo 없이 정식 ladder)
+  ☐ 인터랙션 probe (auth flow click-through · 부작용 위험으로 보류)
+```
+
+### 15-E.8 GitHub OAuth · PAT 비추 사유 (선택지 거름)
+
+| 거른 옵션 | 사유 |
+|---|---|
+| **GitHub OAuth `repo` scope** | 사용자의 **모든** private repo read 권한 — 우리가 audit 안 한 나머지에도 접근. privacy 망. selected repositories 같은 세분화 없음 |
+| **PAT paste** | 사용자 5단계 설정 (Settings → Developer → Tokens → 권한 선택 → 저장 → 우리 form 에 paste) · token leak 시 광범위 피해 |
+
+→ 둘 다 **GitHub App 의 inferior 버전** · 채택 X.
+
+---
+
 ## 16. 개발 로드맵 (v2)
 
 ### 16.1 완료 (V0 · V0.5)
