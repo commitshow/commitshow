@@ -122,7 +122,7 @@ export function AdminPage() {
 
   const [token, setToken] = useState<string>(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
   const [tokenInput, setTokenInput] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'aeo' | 'policy' | 'emails' | 'flags' | 'tools'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'audits' | 'cli' | 'visitors' | 'aeo' | 'policy' | 'emails' | 'flags' | 'tools'>('overview')
 
   const [userStats, setUserStats]   = useState<UserStats   | null>(null)
   const [auditStats, setAuditStats] = useState<AuditStats  | null>(null)
@@ -781,6 +781,7 @@ export function AdminPage() {
             ['users',    '사용자'],
             ['audits',   'Audit'],
             ['cli',      'CLI 사용'],
+            ['visitors', '방문자'],
             ['aeo',      'AEO'],
             ['policy',   '정책'],
             ['emails',   '이메일'],
@@ -814,6 +815,7 @@ export function AdminPage() {
         {tab === 'users'    && <UsersTab stats={userStats} list={userList} currentUserId={user.id} onToggleAdmin={handleToggleAdmin} grantBusyId={grantBusyId} grantOut={grantOut} hasToken={!!token} />}
         {tab === 'audits'   && <AuditsTab stats={auditStats} recent={recent} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
         {tab === 'cli'      && <CliTab usage={cliUsage} onForceRefresh={(u) => handleForceRefresh(u, { perRow: true })} rowBusy={rowBusy} rowOut={rowOut} hasToken={!!token} />}
+        {tab === 'visitors' && <VisitorsTab />}
         {tab === 'aeo'      && <AeoTab />}
         {tab === 'policy'   && <PolicyTab />}
         {tab === 'emails'   && <EmailTemplatesPanel />}
@@ -1365,6 +1367,267 @@ function PolicyTab() {
       </section>
     </div>
   )
+}
+
+// Visitors (human analytics) tab · surfaces visitor_hits captured by
+// the same root middleware as AEO. Six panels:
+//   1. Daily totals (14d) · pageviews + unique visitors per day
+//   2. Bounce rate summary (7d) · sessions / bounce / avg pages
+//   3. Top pages (7d)
+//   4. Top referrers (7d) · grouped by kind (search/social/direct/...)
+//   5. Top countries (7d)
+//   6. Device + browser mix (7d)
+function VisitorsTab() {
+  interface Daily   { day: string; pageviews: number; unique_visitors: number }
+  interface PageRow { path: string; pageviews: number; unique_visitors: number; last_hit: string }
+  interface RefRow  { referer_host: string; referer_kind: string; pageviews: number; unique_visitors: number }
+  interface CtryRow { country: string; pageviews: number; unique_visitors: number }
+  interface DevRow  { device: string; browser: string; pageviews: number; unique_visitors: number }
+  interface Bounce  { total_sessions: number; bounce_sessions: number; bounce_pct: number; avg_pages: number }
+
+  const [daily,    setDaily]   = useState<Daily[]   | null>(null)
+  const [pages,    setPages]   = useState<PageRow[] | null>(null)
+  const [referers, setRefs]    = useState<RefRow[]  | null>(null)
+  const [countries, setCtry]   = useState<CtryRow[] | null>(null)
+  const [devices,  setDevices] = useState<DevRow[]  | null>(null)
+  const [bounce,   setBounce]  = useState<Bounce    | null>(null)
+  const [error,    setError]   = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const [dailyRes, pageRes, refRes, ctryRes, devRes, bRes] = await Promise.all([
+        supabase.rpc('visitor_daily_counts',   { p_days: 14 }),
+        supabase.rpc('visitor_top_pages',      { p_days: 7, p_limit: 20 }),
+        supabase.rpc('visitor_top_referers',   { p_days: 7, p_limit: 20 }),
+        supabase.rpc('visitor_top_countries',  { p_days: 7, p_limit: 12 }),
+        supabase.rpc('visitor_device_mix',     { p_days: 7 }),
+        supabase.rpc('visitor_bounce_summary', { p_days: 7 }),
+      ])
+      if (!alive) return
+      const firstErr = dailyRes.error || pageRes.error || refRes.error || ctryRes.error || devRes.error || bRes.error
+      if (firstErr) setError(firstErr.message)
+      setDaily((dailyRes.data ?? []) as Daily[])
+      setPages((pageRes.data ?? []) as PageRow[])
+      setRefs((refRes.data ?? []) as RefRow[])
+      setCtry((ctryRes.data ?? []) as CtryRow[])
+      setDevices((devRes.data ?? []) as DevRow[])
+      setBounce(((bRes.data ?? [])[0] ?? null) as Bounce | null)
+    })()
+    return () => { alive = false }
+  }, [])
+
+  const total7d = daily ? daily.slice(0, 7).reduce((s, r) => s + r.pageviews, 0) : 0
+  const uniq7d  = daily ? new Set<number>().size : 0  // sum of uniques per-day overestimates · we just show pageviews total
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <h2 className="font-display font-bold text-lg mb-1" style={{ color: 'var(--cream)' }}>
+          방문자 분석
+        </h2>
+        <p className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          비-bot UA 의 page-load 만 visitor_hits 에 기록 · 정적 자산 / 명백한 bot 제외 · IP djb2 해시 · cookie 없는 일별 unique-visitor 추정.
+        </p>
+        {error && (
+          <div className="mt-3 p-2 font-mono text-xs" style={{ background: 'rgba(200,16,46,0.1)', border: '1px solid rgba(200,16,46,0.3)', color: 'var(--scarlet)' }}>
+            {error}
+          </div>
+        )}
+      </section>
+
+      {/* Headline metrics */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Metric label="페이지뷰 (7d)"     value={total7d.toLocaleString()} />
+        <Metric label="총 세션 (7d)"      value={(bounce?.total_sessions ?? 0).toLocaleString()} />
+        <Metric label="이탈률 (7d)"       value={bounce ? `${Number(bounce.bounce_pct).toFixed(1)}%` : '–'} />
+        <Metric label="평균 페이지/세션"  value={bounce ? Number(bounce.avg_pages).toFixed(2) : '–'} />
+      </section>
+
+      {/* Daily counts */}
+      <section className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+        <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>일별 방문 (14d)</h3>
+        {daily === null ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+        ) : daily.length === 0 ? (
+          <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            아직 방문자 hit 기록 없음. middleware 배포 직후엔 데이터 누적까지 시간이 걸림.
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {daily.map(d => {
+              const max = Math.max(...daily.map(x => x.pageviews), 1)
+              const pct = (d.pageviews / max) * 100
+              return (
+                <div key={d.day} className="grid items-center gap-3 py-1 font-mono text-[11px]"
+                  style={{ gridTemplateColumns: '110px 1fr 80px 80px' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>{d.day}</span>
+                  <div className="h-3" style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: 'var(--gold-500)', borderRadius: '2px' }} />
+                  </div>
+                  <span className="tabular-nums text-right" style={{ color: 'var(--cream)' }}>
+                    {d.pageviews.toLocaleString()}
+                  </span>
+                  <span className="tabular-nums text-right" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {d.unique_visitors.toLocaleString()} uniq
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Top pages + Top referers · 2-col on wide */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+          <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>가장 많이 본 페이지 (7d)</h3>
+          {pages === null ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+          ) : pages.length === 0 ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>없음.</div>
+          ) : (
+            <ul className="space-y-1">
+              {pages.map((p, i) => (
+                <li key={p.path + i} className="grid items-baseline gap-2 font-mono text-[11px]"
+                  style={{ gridTemplateColumns: 'auto 1fr auto auto' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', width: 22 }}>{i + 1}.</span>
+                  <span style={{ color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.path}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                    {p.pageviews.toLocaleString()}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {p.unique_visitors.toLocaleString()} uniq
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+          <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>유입 경로 (7d)</h3>
+          {referers === null ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+          ) : referers.length === 0 ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>없음.</div>
+          ) : (
+            <ul className="space-y-1">
+              {referers.map((r, i) => (
+                <li key={r.referer_host + i} className="grid items-baseline gap-2 font-mono text-[11px]"
+                  style={{ gridTemplateColumns: 'auto 1fr auto auto auto' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', width: 22 }}>{i + 1}.</span>
+                  <span style={{ color: 'var(--cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.referer_host}
+                  </span>
+                  <span className="tabular-nums px-1" style={{ color: refKindColor(r.referer_kind), opacity: 0.85 }}>
+                    {r.referer_kind}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                    {r.pageviews.toLocaleString()}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {r.unique_visitors.toLocaleString()} uniq
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      {/* Countries + Device mix */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+          <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>국가별 (7d)</h3>
+          {countries === null ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+          ) : countries.length === 0 ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>없음.</div>
+          ) : (
+            <ul className="space-y-1">
+              {countries.map((c, i) => (
+                <li key={c.country + i} className="grid items-baseline gap-2 font-mono text-[11px]"
+                  style={{ gridTemplateColumns: 'auto 1fr auto auto' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', width: 22 }}>{i + 1}.</span>
+                  <span style={{ color: 'var(--cream)' }}>
+                    {c.country === '(unknown)' ? '(미상)' : c.country}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                    {c.pageviews.toLocaleString()}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {c.unique_visitors.toLocaleString()} uniq
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="p-5" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+          <h3 className="font-display font-bold text-base mb-3" style={{ color: 'var(--cream)' }}>기기 + 브라우저 (7d)</h3>
+          {devices === null ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>로드 중…</div>
+          ) : devices.length === 0 ? (
+            <div className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>없음.</div>
+          ) : (
+            <ul className="space-y-1">
+              {devices.slice(0, 12).map((d, i) => (
+                <li key={d.device + d.browser + i} className="grid items-baseline gap-2 font-mono text-[11px]"
+                  style={{ gridTemplateColumns: 'auto 80px 1fr auto auto' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', width: 22 }}>{i + 1}.</span>
+                  <span style={{ color: deviceColor(d.device) }}>
+                    {d.device}
+                  </span>
+                  <span style={{ color: 'var(--cream)' }}>
+                    {d.browser}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                    {d.pageviews.toLocaleString()}
+                  </span>
+                  <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {d.unique_visitors.toLocaleString()} uniq
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-3 py-3" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
+      <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {label}
+      </div>
+      <div className="font-display font-bold text-2xl tabular-nums" style={{ color: 'var(--gold-500)' }}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function refKindColor(kind: string): string {
+  if (kind === 'search')   return '#3FA874'
+  if (kind === 'social')   return '#A78BFA'
+  if (kind === 'internal') return '#60A5FA'
+  if (kind === 'direct')   return 'var(--gold-500)'
+  return 'rgba(255,255,255,0.55)'
+}
+
+function deviceColor(d: string): string {
+  if (d === 'mobile') return '#A78BFA'
+  if (d === 'tablet') return '#60A5FA'
+  if (d === 'desktop') return '#3FA874'
+  return 'rgba(255,255,255,0.55)'
 }
 
 // AEO (Answer Engine Optimization) tab · surfaces AI crawler hits

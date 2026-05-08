@@ -1,23 +1,25 @@
-// Root Pages Function middleware · AEO crawler detection.
+// Root Pages Function middleware · AEO crawler + visitor analytics.
 //
-// Runs on EVERY request. Sniffs the User-Agent for known AI crawler
-// signatures (GPTBot · ClaudeBot · PerplexityBot · Applebot · etc) and
-// fires a non-blocking INSERT into ai_crawler_hits via service_role.
-// User-facing latency is unchanged · the DB write happens after the
-// response goes out via ctx.waitUntil.
+// Runs on EVERY request. Sniffs the User-Agent and fires a non-blocking
+// INSERT into one of two tables via service_role:
+//   · AI crawler  → ai_crawler_hits  (GPTBot · ClaudeBot · etc · §AEO)
+//   · Human visit → visitor_hits     (everything else, with filters)
+//
+// User-facing latency is unchanged · DB writes happen after the response
+// goes out via ctx.waitUntil.
+//
+// Filters (visitor side):
+//   · skip static assets (.css/.js/.png/.svg/.webp/.mp4/.ico/.xml/etc)
+//   · skip bot-ish UAs that don't match our AI list (generic crawler/
+//     spider/headless · monitoring bots like uptime/pingdom)
+//   · skip /functions/* admin endpoints (those are server-to-server)
 //
 // Design notes:
-//   · We classify by UA kind (one of a small enum) using cheap regex
-//     matches · unknown UAs aren't logged.
-//   · IP is hashed (djb2) · we only need 'distinct caller' grouping,
-//     never the raw IP.
-//   · Path is normalized (lower-cased · query stripped · capped 200ch).
-//   · Robots.txt / sitemap.xml hits ARE logged · those are part of the
-//     crawler journey we want to measure.
-//   · _middleware.ts at root delegates to specific route middlewares
-//     (functions/projects/_middleware.ts · functions/og/project/_middleware.ts ·
-//     functions/robots.txt.ts) by calling next() · order matters · this
-//     should never short-circuit.
+//   · IP hashed (djb2) · UA / Path / Referer truncated to safe lengths.
+//   · visitor_hash = djb2(ip + day_floor + ua_class) · cookie-free
+//     unique-visitor approximation per day per device.
+//   · referer classified into kind: search / social / direct / internal / other.
+//   · country pulled from CF-IPCountry (Cloudflare auto-injects).
 
 interface Env {
   SUPABASE_URL?:               string
@@ -61,6 +63,49 @@ function classifyUA(ua: string): string | null {
   return null
 }
 
+// Generic non-AI bot patterns · we skip these from visitor analytics
+// without logging them anywhere (uptime monitors / generic crawlers).
+const GENERIC_BOT_RE = /\b(bot|crawler|spider|scraper|headless|phantom|puppeteer|playwright|monitor|uptime|pingdom|webhook)\b/i
+
+// Static-asset path filter · skip from visitor logs (CSS/JS/images
+// would 10x our writes for no analytic value).
+const STATIC_ASSET_RE = /\.(css|js|map|mjs|json|xml|ico|svg|png|jpe?g|webp|gif|mp4|webm|woff2?|ttf|otf|eot|wasm|txt)$/i
+
+// Referer kind classifier · maps host to one of 5 buckets.
+const SEARCH_HOSTS = ['google.', 'bing.', 'duckduckgo.', 'yahoo.', 'naver.', 'baidu.', 'yandex.', 'kagi.']
+const SOCIAL_HOSTS = ['x.com', 'twitter.com', 't.co', 'reddit.com', 'news.ycombinator.com', 'linkedin.com',
+                      'facebook.com', 'fb.me', 'instagram.com', 'mastodon.', 'threads.net', 'bsky.', 'youtube.com',
+                      'discord.', 'github.com', 'gitlab.com', 'producthunt.com', 'medium.com']
+
+function classifyReferer(refererHost: string | null, ownHost: string): { host: string | null; kind: string } {
+  if (!refererHost) return { host: null, kind: 'direct' }
+  const h = refererHost.toLowerCase()
+  if (h === ownHost || h.endsWith('.' + ownHost)) return { host: h, kind: 'internal' }
+  for (const s of SEARCH_HOSTS) if (h.includes(s)) return { host: h, kind: 'search' }
+  for (const s of SOCIAL_HOSTS) if (h.includes(s)) return { host: h, kind: 'social' }
+  return { host: h, kind: 'other' }
+}
+
+// UA → device class. Mobile detection by common tokens; tablet by 'iPad' / Android tablet hints.
+function classifyDevice(ua: string): 'mobile' | 'tablet' | 'desktop' | 'unknown' {
+  if (!ua) return 'unknown'
+  if (/iPad|Tablet|Tab\b/i.test(ua)) return 'tablet'
+  if (/Android(?!.*Mobile)/i.test(ua)) return 'tablet'
+  if (/Mobile|iPhone|iPod|Android|Silk|Kindle/i.test(ua)) return 'mobile'
+  return 'desktop'
+}
+
+function classifyBrowser(ua: string): string {
+  // Order matters · Edge before Chrome (UA contains both) · Chrome before Safari (Chrome includes Safari token).
+  if (/Edg\//i.test(ua))                        return 'edge'
+  if (/OPR\/|Opera/i.test(ua))                  return 'opera'
+  if (/Firefox\//i.test(ua))                    return 'firefox'
+  if (/Chrome\//i.test(ua))                     return 'chrome'
+  if (/Safari\//i.test(ua))                     return 'safari'
+  if (/MSIE|Trident/i.test(ua))                 return 'ie'
+  return 'other'
+}
+
 // djb2 hash · ASCII-safe · 32-bit. Same algorithm we use elsewhere
 // (preview_rate_limits ip_hash) so cross-table joins line up if we
 // ever need them.
@@ -80,10 +125,10 @@ function safeRefererHost(req: Request): string | null {
   catch { return null }
 }
 
-async function logHit(env: Env, req: Request, response: Response, kind: string): Promise<void> {
+async function logCrawlerHit(env: Env, req: Request, response: Response, kind: string): Promise<void> {
   const supabaseUrl = env.SUPABASE_URL
   const serviceKey  = env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !serviceKey) return   // unconfigured · bail silently
+  if (!supabaseUrl || !serviceKey) return
 
   const ua   = req.headers.get('user-agent') ?? ''
   const url  = new URL(req.url)
@@ -99,7 +144,6 @@ async function logHit(env: Env, req: Request, response: Response, kind: string):
   }
 
   try {
-    // Direct PostgREST insert · fastest path · we don't need a client.
     await fetch(`${supabaseUrl}/rest/v1/ai_crawler_hits`, {
       method: 'POST',
       headers: {
@@ -110,9 +154,64 @@ async function logHit(env: Env, req: Request, response: Response, kind: string):
       },
       body: JSON.stringify(row),
     })
-  } catch {
-    // Never let a logging failure surface to the user · already after waitUntil.
+  } catch { /* swallowed · waitUntil */ }
+}
+
+async function logVisitorHit(env: Env, req: Request, response: Response): Promise<void> {
+  const supabaseUrl = env.SUPABASE_URL
+  const serviceKey  = env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceKey) return
+
+  const ua  = req.headers.get('user-agent') ?? ''
+  const url = new URL(req.url)
+  const ip  = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? ''
+
+  const path = url.pathname.toLowerCase()
+  // Skip filters · static assets and admin function endpoints.
+  if (STATIC_ASSET_RE.test(path)) return
+  if (path.startsWith('/functions/')) return
+  if (path === '/robots.txt' || path === '/sitemap.xml') return  // tracked separately as crawler hits when bots fetch them
+  // Skip generic bot UAs we don't classify as AI crawlers.
+  if (!ua || GENERIC_BOT_RE.test(ua)) return
+  // Skip empty UAs (likely bot too).
+  if (ua.length < 16) return
+
+  const ipHash      = ip ? djb2(ip) : null
+  const dayFloorMs  = Math.floor(Date.now() / 86400000)
+  const device      = classifyDevice(ua)
+  const browser     = classifyBrowser(ua)
+  // Cookie-free unique-visitor proxy · stable per (ip + day + device class).
+  const visitorHash = djb2(`${ipHash ?? 'anon'}:${dayFloorMs}:${device}:${browser}`)
+
+  const refHost = safeRefererHost(req)
+  const ownHost = url.host.toLowerCase()
+  const ref     = classifyReferer(refHost, ownHost)
+  const country = req.headers.get('cf-ipcountry') ?? null
+
+  const row = {
+    visitor_hash:  visitorHash,
+    ip_hash:       ipHash ?? '',
+    path:          (url.pathname + (url.search ? '?' + url.searchParams.toString() : '')).slice(0, 200),
+    referer_host:  ref.host,
+    referer_kind:  ref.kind,
+    country:       country && country.length === 2 ? country : null,
+    device,
+    browser,
+    status_code:   response.status,
   }
+
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/visitor_hits`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Prefer':        'return=minimal',
+      },
+      body: JSON.stringify(row),
+    })
+  } catch { /* swallowed · waitUntil */ }
 }
 
 export const onRequest: PagesFunction<Env> = async (ctx) => {
@@ -124,11 +223,11 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     const ua   = ctx.request.headers.get('user-agent') ?? ''
     const kind = classifyUA(ua)
     if (kind) {
-      // Fire-and-forget · the response has already been computed and
-      // streaming back; the DB write happens in the background.
-      // ctx.waitUntil keeps the worker alive long enough for the
-      // PostgREST POST to land but doesn't block the user.
-      ctx.waitUntil(logHit(ctx.env, ctx.request, response, kind))
+      // AI crawler · log to ai_crawler_hits.
+      ctx.waitUntil(logCrawlerHit(ctx.env, ctx.request, response, kind))
+    } else {
+      // Human visitor · log to visitor_hits (filters applied inside).
+      ctx.waitUntil(logVisitorHit(ctx.env, ctx.request, response))
     }
   } catch {
     // Defensive · never throw out of middleware.
