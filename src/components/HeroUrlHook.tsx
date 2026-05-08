@@ -107,7 +107,7 @@ export function HeroUrlHook() {
     } catch { return null }
   }
 
-  async function startAudit(e?: React.FormEvent) {
+  async function startAudit(e?: React.FormEvent, opts: { force?: boolean } = {}) {
     e?.preventDefault()
     const normalized = normalizeInput(url)
     if (!normalized) {
@@ -141,7 +141,7 @@ export function HeroUrlHook() {
 
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('audit-site-preview', {
-        body: { site_url: normalized, source: 'hero-hook' },
+        body: { site_url: normalized, source: 'hero-hook', force: opts.force === true },
       })
 
       if (invokeError) {
@@ -404,6 +404,7 @@ export function HeroUrlHook() {
               }
             }}
             onTryAnother={reset}
+            onRerun={() => startAudit(undefined, { force: true })}
           />
         )}
       </div>
@@ -434,9 +435,10 @@ interface ResultCardProps {
   result:       SiteAuditResult
   onClaim:      () => void
   onTryAnother: () => void
+  onRerun:      () => void
 }
 
-function ResultCard({ result, onClaim, onTryAnother }: ResultCardProps) {
+function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps) {
   const snap = result.latest_snapshot
   const total = snap?.score_total ?? result.project.score_total ?? 0
   const rich  = snap?.rich_analysis ?? {}
@@ -537,6 +539,20 @@ function ResultCard({ result, onClaim, onTryAnother }: ResultCardProps) {
           onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
         >
           Claim this audit · upgrade to full →
+        </button>
+        <button
+          onClick={onRerun}
+          className="px-5 py-3 text-sm font-mono"
+          style={{
+            background: 'transparent',
+            color: 'var(--cream)',
+            border: '1px solid rgba(248,245,238,0.2)',
+            borderRadius: '2px',
+            cursor: 'pointer',
+          }}
+          title="Force a fresh audit · skips the 7-day cache · counts against your daily IP cap"
+        >
+          Re-run audit
         </button>
         <button
           onClick={onTryAnother}

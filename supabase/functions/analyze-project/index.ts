@@ -2186,6 +2186,75 @@ async function discoverRoutes(baseUrl: string): Promise<{ routes: string[]; site
   return { routes: prioritized.slice(0, 6), sitemap_present, sitemap_url_count }
 }
 
+// ── Tier B · Playwright deep probe via deep-probe Edge Function ─────
+// (§15-E.3) Calls the deep-probe Edge Function which invokes Cloudflare
+// Browser Rendering for post-hydration HTML + hydration framework
+// detection + runtime meta tag recovery. Used to defeat bot protection
+// (CF bot fight · Akamai · DataDome) that blocks our static `fetch` and
+// to surface SPA content that's only visible after JS hydrates.
+//
+// V1 cost-control: only runs on URL Fast Lane projects (no github_url) ·
+// repo-lane projects already have rich Tier A signals + repo evidence.
+// Falls through gracefully when CF credentials aren't set on the server.
+
+interface DeepProbeMetaTags {
+  has_og_title:       boolean
+  has_og_image:       boolean
+  has_og_description: boolean
+  has_twitter_card:   boolean
+  has_canonical:      boolean
+  has_meta_desc:      boolean
+  has_h1:             boolean
+  h1_text:            string | null
+}
+interface DeepProbeResult {
+  fetched:                    boolean
+  via:                       'cf-browser-rendering' | 'skipped' | 'failed'
+  html_length:                number
+  post_hydration_text_length: number
+  hydration_framework:        string | null
+  hydration_markers_found:    string[]
+  meta_tags:                  DeepProbeMetaTags
+  proven_reachable:           boolean
+  error:                      string | null
+}
+const DEEP_PROBE_BLANK: DeepProbeResult = {
+  fetched: false, via: 'skipped',
+  html_length: 0, post_hydration_text_length: 0,
+  hydration_framework: null, hydration_markers_found: [],
+  meta_tags: {
+    has_og_title: false, has_og_image: false, has_og_description: false,
+    has_twitter_card: false, has_canonical: false, has_meta_desc: false,
+    has_h1: false, h1_text: null,
+  },
+  proven_reachable: false,
+  error: null,
+}
+
+async function callDeepProbe(url: string): Promise<DeepProbeResult> {
+  if (!url) return DEEP_PROBE_BLANK
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !serviceKey) return DEEP_PROBE_BLANK
+
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 28_000)
+    const res = await fetch(`${supabaseUrl}/functions/v1/deep-probe`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+      body:    JSON.stringify({ url }),
+      signal:  ctrl.signal,
+    })
+    clearTimeout(timer)
+    if (!res.ok) return { ...DEEP_PROBE_BLANK, via: 'failed', error: `http_${res.status}` }
+    const data = await res.json() as DeepProbeResult
+    return data && typeof data === 'object' ? data : DEEP_PROBE_BLANK
+  } catch (e) {
+    return { ...DEEP_PROBE_BLANK, via: 'failed', error: (e instanceof Error ? e.message : String(e)).slice(0, 200) }
+  }
+}
+
 async function inspectMultiRoutes(baseUrl: string): Promise<RoutesHealth> {
   const blank: RoutesHealth = {
     probed: 0, reachable: 0, broken: 0, reachable_rate: 0,
@@ -3041,6 +3110,21 @@ OUTPUT RULES
                             already reflects it. If reachable_rate >= 0.8 with
                             sitemap_present, it's a STRENGTH-worthy signal
                             ("multi-route routing intact").
+       deep_probe         — Tier B (§15-E.3) Playwright via Cloudflare Browser
+                            Rendering · post-hydration HTML + hydration framework
+                            detection + runtime meta tags. Surfaces SPA content
+                            and recovers signals when basic Tier A fetch was
+                            bot-blocked (CF bot fight · Akamai · DataDome).
+                            Fields: hydration_framework (next/nuxt/sveltekit/
+                            remix/react/vue/angular/null) · hydration_markers_found ·
+                            post_hydration_text_length · meta_tags · proven_reachable.
+                            STRICT NO-DEDUCT — slot eligibility already reflects it.
+                            Use as STRENGTH evidence when proven_reachable AND
+                            hydration_framework is a real one ("React app
+                            hydrated cleanly · Next 14 SSR shell"). When
+                            via='skipped' or 'failed', the engine fell back to
+                            Tier A signals — don't penalize for absence; treat
+                            as 'not assessed'.
      If you write a chip like "Security headers sparse (1 of 6)" with
      points: -3, that is a RULE VIOLATION. The hard slots above already
      calibrate. Only the explicit deductions in section (2) below are
@@ -3808,7 +3892,13 @@ Deno.serve(async (req) => {
   // mobile-only Lighthouse; responsive slot uses `mobile perf ≥70` as
   // the sole positive signal (mobile/desktop gap comparison removed).
   const lhDesktop: LighthouseScores = { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
-  const [lh, gh, health, completeness, securityHeaders, legalPages, routesHealth] = await Promise.all([
+  // §15-E.3 Tier B gate · URL Fast Lane only (no repo). Repo-lane projects
+  // already have rich evidence; spending Browser Rendering credits on them
+  // is unnecessary. Cost-control gate · graceful fall-through when CF
+  // credentials aren't set on the server (deep-probe returns BLANK).
+  const isUrlFastLane = !project.github_url && !!project.live_url
+
+  const [lh, gh, health, completeness, securityHeaders, legalPages, routesHealth, deepProbe] = await Promise.all([
     project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
     inspectGitHub(project.github_url, explicitWorkspace),  // null URL → returns full empty shape (incl. signals) · §15-E URL-only safe
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
@@ -3833,6 +3923,8 @@ Deno.serve(async (req) => {
       items: [], broken_paths: [],
       sitemap_present: false, sitemap_url_count: 0,
     } satisfies RoutesHealth),
+    // Tier B · only fires on URL Fast Lane projects (cost gate)
+    isUrlFastLane ? callDeepProbe(project.live_url!) : Promise.resolve(DEEP_PROBE_BLANK),
   ])
 
   // Score components · v3 form-aware (2026-04-28).
@@ -3878,15 +3970,16 @@ Deno.serve(async (req) => {
   // sitemap-derived multi-route probe usually still get through. claude.ai
   // is the canonical case: liveHealth 403 → fell to library slots → 0/52
   // even though Lighthouse a11y 97 + 6/6 routes reachable were both
-  // evidence the site is real. Treat ANY of three positive signals as
+  // evidence the site is real. Treat ANY of FOUR positive signals as
   // proof the site is reachable for slot purposes:
-  //   1. liveHealth.ok       — happy path · most projects
-  //   2. routesHealth.reachable >= 1 — sitemap routes returned 2xx
-  //   3. lh.performance > 0  — PageSpeed actually scored the page
+  //   1. liveHealth.ok                — happy path · most projects
+  //   2. routesHealth.reachable >= 1  — sitemap routes returned 2xx
+  //   3. lh.performance > 0           — PageSpeed actually scored the page
+  //   4. deepProbe.proven_reachable   — Tier B (CF Browser Rendering) got through
   // Live URL Health POINTS still depend on health.ok (we don't pretend
   // the homepage is up when it isn't); only slot eligibility broadens.
   const lighthouseSucceeded = lh.performance > 0 || lh.accessibility > 0 || lh.bestPractices > 0 || lh.seo > 0
-  const siteEffectivelyReachable = health.ok || routesHealth.reachable >= 1 || lighthouseSucceeded
+  const siteEffectivelyReachable = health.ok || routesHealth.reachable >= 1 || lighthouseSucceeded || deepProbe.proven_reachable
   const isSaasForm   = gh.signals.is_saas && siteEffectivelyReachable && !isNativeApp
   // useWebSlots true if web app OR SaaS (both want LH/Live signals,
   // just rescaled differently). Library/CLI/scaffold/native_app
@@ -3927,7 +4020,38 @@ Deno.serve(async (req) => {
     if (r >= 0.6) return 3
     return 1                                     // homepage 200 인데 다른 라우트 다 깨진 케이스
   })()
-  const completenessRawPts = scoreCompleteness(completeness)                   //  0-2
+  // Tier B completeness recovery (§15-E.3) — when the basic Tier A fetch got
+  // bot-blocked, completeness.fetched=false and we'd score 0/2 even on
+  // a perfectly polished site. The deep-probe (real Chromium via CF
+  // Browser Rendering) usually gets through and recovers the meta tags.
+  // Merge: keep Tier A signals when present, else fall back to deep-probe.
+  const mergedCompleteness = completeness.fetched ? completeness : (deepProbe.fetched ? {
+    fetched:           true,
+    has_og_image:      deepProbe.meta_tags.has_og_image,
+    has_og_title:      deepProbe.meta_tags.has_og_title,
+    has_og_description: deepProbe.meta_tags.has_og_description,
+    has_twitter_card:  deepProbe.meta_tags.has_twitter_card,
+    has_apple_touch:   false,                            // not extracted by deep-probe
+    has_manifest:      false,                            // not extracted by deep-probe
+    has_theme_color:   false,                            // not extracted by deep-probe
+    has_favicon:       false,                            // not extracted by deep-probe
+    has_canonical:     deepProbe.meta_tags.has_canonical,
+    has_meta_desc:     deepProbe.meta_tags.has_meta_desc,
+    score:             0,                                 // recomputed below
+    filled:            (deepProbe.meta_tags.has_og_title ? 1 : 0)
+                     + (deepProbe.meta_tags.has_og_image ? 1 : 0)
+                     + (deepProbe.meta_tags.has_og_description ? 1 : 0)
+                     + (deepProbe.meta_tags.has_twitter_card ? 1 : 0)
+                     + (deepProbe.meta_tags.has_canonical ? 1 : 0)
+                     + (deepProbe.meta_tags.has_meta_desc ? 1 : 0),
+    of:                10,
+  } : completeness)
+  // Recompute the 0-5 score from deep-probe filled count (capped at 6 since
+  // 4 signals don't transit through deep-probe yet).
+  if (!completeness.fetched && deepProbe.fetched) {
+    mergedCompleteness.score = Math.min(5, Math.round((mergedCompleteness.filled / 6) * 5))
+  }
+  const completenessRawPts = scoreCompleteness(mergedCompleteness)               //  0-2
 
   // ── Non-web equivalent slots (for library/cli/scaffold/mcp) ──
   // Test depth · 0-8 (replaces ~Lighthouse Performance 8pt for libs)
@@ -4192,6 +4316,7 @@ Deno.serve(async (req) => {
       ? Math.abs(lhDesktop.performance - lh.performance) : null,
     live_url_health: health,
     routes_health: routesHealth,
+    deep_probe: deepProbe,
     completeness_signals: completeness,
     security_headers: securityHeaders,
     legal_pages: legalPages,
@@ -4410,7 +4535,7 @@ Deno.serve(async (req) => {
     github_signals:     gh.signals,
     // Mix in the completeness signals so the snapshot is self-contained:
     // future reruns / UI ledgers can reference exactly what was checked.
-    rich_analysis:      { ...claudeForSnapshot, completeness_signals: completeness, routes_health: routesHealth },
+    rich_analysis:      { ...claudeForSnapshot, completeness_signals: completeness, routes_health: routesHealth, deep_probe: deepProbe },
     parent_snapshot_id: parent?.id ?? null,
     delta_from_parent:  Object.keys(deltaFromParent).length ? deltaFromParent : null,
     score_total_delta:  scoreTotalDelta,
