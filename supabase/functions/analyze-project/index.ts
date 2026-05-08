@@ -2238,8 +2238,12 @@ async function callDeepProbe(url: string): Promise<DeepProbeResult> {
   if (!supabaseUrl || !serviceKey) return DEEP_PROBE_BLANK
 
   try {
+    // Hard 18s ceiling · analyze-project total wall is 150s and we run in
+    // parallel with Lighthouse (~60s) + a Claude call still pending (~90s)
+    // afterward. Anything over 18s here squeezes Claude's budget — let it
+    // fail-soft to BLANK rather than block the whole audit.
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 28_000)
+    const timer = setTimeout(() => ctrl.abort(), 18_000)
     const res = await fetch(`${supabaseUrl}/functions/v1/deep-probe`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },

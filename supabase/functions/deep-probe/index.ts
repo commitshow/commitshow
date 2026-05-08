@@ -144,8 +144,11 @@ async function callCfBrowserRendering(url: string, accountId: string, token: str
   // We keep timeout < 25s so the analyze-project parallel block doesn't
   // stall the whole audit if CF is slow.
   try {
+    // 14s outer timeout · waitUntil 'load' (faster than networkidle0) +
+    // 12s inner gotoOptions timeout. Tight to keep analyze-project under
+    // its 150s wall budget when running parallel to Lighthouse + Claude.
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 25_000)
+    const timer = setTimeout(() => ctrl.abort(), 14_000)
     const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/content`, {
       method:  'POST',
       headers: {
@@ -155,7 +158,7 @@ async function callCfBrowserRendering(url: string, accountId: string, token: str
       body: JSON.stringify({
         url,
         viewport: { width: 1280, height: 800 },
-        gotoOptions: { waitUntil: 'networkidle0', timeout: 20_000 },
+        gotoOptions: { waitUntil: 'load', timeout: 12_000 },
       }),
       signal: ctrl.signal,
     })
