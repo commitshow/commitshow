@@ -25,6 +25,9 @@ verify_jwt = false
 [functions.audit-preview]
 verify_jwt = false
 
+[functions.audit-site-preview]
+verify_jwt = false
+
 # usage-ingest reads auth.uid() from the user JWT — verify_jwt stays true
 # (default) so the gateway rejects unauthenticated calls before our code
 # runs. Member ownership of the target project is checked inside.

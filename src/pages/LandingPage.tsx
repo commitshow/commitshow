@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Hero } from '../components/Hero'
+import { HeroUrlHook } from '../components/HeroUrlHook'
 import { LadderTopStrip } from '../components/LadderTopStrip'
 import { SeasonProgressBar } from '../components/SeasonProgress'
 import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
@@ -79,6 +80,9 @@ export function LandingPage() {
   return (
     <div className="relative min-h-screen">
       <Hero stats={stats} />
+
+      {/* ── URL Fast Lane hook · §15-E.6 · try-before-signup funnel ── */}
+      <HeroUrlHook />
 
       {/* ── LADDER TOP 3 · always-on · §11-NEW.1 ── */}
       <LadderTopStrip />

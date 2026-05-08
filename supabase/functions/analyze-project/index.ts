@@ -392,7 +392,7 @@ async function fetchNpmWeeklyDownloads(pkg: string | null): Promise<number | nul
   }
 }
 
-async function inspectGitHub(url: string, explicitWorkspace: string | null = null): Promise<GitHubInfo> {
+async function inspectGitHub(url: string | null, explicitWorkspace: string | null = null): Promise<GitHubInfo> {
   const empty: GitHubInfo = {
     accessible: false, languages: {}, language_pct: {},
     stars: 0, forks: 0, open_issues: 0, commit_count_recent: 0,
@@ -470,6 +470,7 @@ async function inspectGitHub(url: string, explicitWorkspace: string | null = nul
     debut_brief: { found: false, path: null, raw: null, last_commit_at: null, sha: null },
     md_candidates: [],
   }
+  if (!url) return empty                                              // §15-E URL-only fast lane: no repo → full empty shape (signals etc.)
   const m = url.match(/github\.com\/([^/]+)\/([^/\s?#]+)/i)
   if (!m) return empty
   const owner = m[1], repo = m[2].replace(/\.git$/, '')
@@ -3809,7 +3810,7 @@ Deno.serve(async (req) => {
   const lhDesktop: LighthouseScores = { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
   const [lh, gh, health, completeness, securityHeaders, legalPages, routesHealth] = await Promise.all([
     project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
-    project.github_url ? inspectGitHub(project.github_url, explicitWorkspace) : Promise.resolve({ accessible: false, languages: {}, language_pct: {}, stars: 0, forks: 0, file_count_estimate: 0, last_commit_at: null }),
+    inspectGitHub(project.github_url, explicitWorkspace),  // null URL → returns full empty shape (incl. signals) · §15-E URL-only safe
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
     project.live_url ? inspectCompleteness(project.live_url) : Promise.resolve({
       fetched: false,
