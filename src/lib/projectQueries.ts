@@ -85,15 +85,18 @@ export async function resolvePreviewClaim(
   return { kind: 'fresh' }
 }
 
-// 1) Just registered — Week 1 blind stage.
-// Backed by `projects.created_at` within the last 7 days on the active season.
+// 1) Just registered — NEW AUDITS lane.
+// 2026-05-09 widened to 14 days (was 7). Reason: low submission cadence
+// in early V1 means a 7-day window often had < 3 entries · the lane
+// looked empty for visitors. 2 weeks gives a fuller "fresh" tape
+// without polluting it with stale projects.
 export async function fetchJustRegistered(): Promise<Project[]> {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000).toISOString()
   const { data } = await supabase
     .from('projects')
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq('status', 'active')
-    .gte('created_at', sevenDaysAgo)
+    .gte('created_at', fourteenDaysAgo)
     .order('created_at', { ascending: false })
     .limit(LANE_LIMIT)
   return (data ?? []) as unknown as Project[]
