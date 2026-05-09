@@ -44,8 +44,8 @@ function json(body: unknown, status = 200) {
 }
 
 const CACHE_TTL_MS         = 7 * 24 * 60 * 60 * 1000   // 7 days · same as CLI walk-on
-const RATE_ANON_PER_IP     = 5
-const RATE_AUTHED_PER_IP   = 50
+const RATE_ANON_PER_IP     = 3                         // 2026-05-09 · was 5 · CF free tier 60-120/day cap binding ahead of this anyway
+const RATE_AUTHED_PER_IP   = 10                        // 2026-05-09 · was 50 · power-users still fine, abuse vector tightened
 const RATE_PER_DOMAIN      = 5                         // §15-E.4 abuse defense — same domain ≤5/day
 const RATE_GLOBAL_DAILY    = 2000                      // shared global ceiling with audit-preview
 

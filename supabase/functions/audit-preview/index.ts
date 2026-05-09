@@ -74,8 +74,8 @@ async function fetchGithubHead(slug: string): Promise<string | null> {
     return null
   }
 }
-const RATE_ANON_PER_IP     = 5                          // anon IP cap
-const RATE_AUTHED_PER_IP   = 50                         // authed IP cap · early-launch generous (revisit when real traffic ramps)
+const RATE_ANON_PER_IP     = 3                          // 2026-05-09 · was 5 · tighter abuse vector + matches URL fast lane
+const RATE_AUTHED_PER_IP   = 10                         // 2026-05-09 · was 50 · power-users fine, CF/Claude budget protection
 const RATE_PER_URL_GLOBAL  = 5                          // per github_url cap (any IP)
 const RATE_GLOBAL_DAILY    = 2000                       // platform-wide cache-miss cap · bumped 800 → 2000 (2026-05-03) for viral launch headroom
 

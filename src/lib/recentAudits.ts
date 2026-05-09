@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 
 export interface AuditDemo {
+  projectId:   string
   projectName: string
   slug:        string                // "owner/repo" for the prompt line
   score:       number                // walk-on /100 — used in big digit
@@ -28,6 +29,8 @@ export interface AuditDemo {
   auditPts:    number                // raw 0-45 audit pillar
   strengths:   string[]              // up to 3
   concerns:    string[]              // up to 2
+  githubUrl:   string | null
+  liveUrl:     string | null
   // 'platform'      = creator submitted via web (status != 'preview') ·
   // 'walk_on'       = anonymous CLI audit (status = 'preview' AND github_url IS NOT NULL) ·
   // 'url_fast_lane' = anonymous URL-only audit (status = 'preview' AND github_url IS NULL · §15-E).
@@ -140,6 +143,7 @@ function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on' 
     if (strengths.length < 2 || concerns.length < 1) continue
 
     out.push({
+      projectId:   raw.project_id,
       projectName: proj.project_name,
       slug,
       score:       raw.score_total,
@@ -147,6 +151,8 @@ function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on' 
       auditPts:    raw.score_auto,
       strengths,
       concerns,
+      githubUrl:   proj.github_url,
+      liveUrl:     proj.live_url,
       source,
     })
     if (out.length >= PER_BUCKET_TOP) break

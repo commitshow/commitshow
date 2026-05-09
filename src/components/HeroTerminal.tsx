@@ -70,6 +70,7 @@ type Line =
 // Hardcoded fallback · used when the live audit pool is empty (cold start /
 // API failure / RLS block). Mirrors a real shadcn-ui/ui walk-on result.
 const FALLBACK_DEMO: AuditDemo = {
+  projectId:   '00000000-0000-0000-0000-000000000000',
   projectName: 'ui',
   slug:        'shadcn-ui/ui',
   score:       82,
@@ -84,6 +85,8 @@ const FALLBACK_DEMO: AuditDemo = {
     'Lighthouse perf 56 on docs site',
     'Zero observability libs detected',
   ],
+  githubUrl:   'https://github.com/shadcn-ui/ui',
+  liveUrl:     null,
   source:      'platform',
 }
 

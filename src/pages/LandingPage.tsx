@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Hero } from '../components/Hero'
 import { HeroUrlHook } from '../components/HeroUrlHook'
+import { AuditShowcase } from '../components/AuditShowcase'
 import { LadderTopStrip } from '../components/LadderTopStrip'
 import { SeasonProgressBar } from '../components/SeasonProgress'
 import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
@@ -83,6 +84,11 @@ export function LandingPage() {
 
       {/* ── URL Fast Lane hook · §15-E.6 · try-before-signup funnel ── */}
       <HeroUrlHook />
+
+      {/* ── Engine receipts · §15-E.6 · 6-card grid of real audits across
+          all three lanes (member full · CLI walk-on · URL fast). Hides
+          itself if the recent-audits pool is empty. ── */}
+      <AuditShowcase />
 
       {/* ── LADDER TOP 3 · always-on · §11-NEW.1 ── */}
       <LadderTopStrip />
