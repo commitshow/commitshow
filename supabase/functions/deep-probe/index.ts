@@ -66,6 +66,7 @@ interface DeepProbeResult {
     has_meta_desc:    boolean
     has_h1:           boolean
     h1_text:          string | null     // first 200 chars of first <h1>
+    og_image_url:     string | null     // §15-E.6 wave 6 · resolved og:image URL · used as thumbnail fallback for walk-on previews
   }
   // Real browser proved the page is reachable (200 + rendered) — used as
   // a strong proof of life when the basic Tier A fetch got bot-blocked.
@@ -87,6 +88,7 @@ const BLANK: DeepProbeResult = {
     has_og_title: false, has_og_image: false, has_og_description: false,
     has_twitter_card: false, has_canonical: false, has_meta_desc: false,
     has_h1: false, h1_text: null,
+    og_image_url: null,
   },
   proven_reachable: false,
   screenshot_url: null,
@@ -110,7 +112,7 @@ function detectHydrationFramework(html: string): { framework: DeepProbeResult['h
   return { framework, markers }
 }
 
-function extractMetaTags(html: string): DeepProbeResult['meta_tags'] {
+function extractMetaTags(html: string, pageUrl: string): DeepProbeResult['meta_tags'] {
   const head = html.slice(0, 200_000)
   const has = (re: RegExp) => re.test(head)
 
@@ -122,15 +124,43 @@ function extractMetaTags(html: string): DeepProbeResult['meta_tags'] {
     if (stripped) h1Text = stripped.slice(0, 200)
   }
 
+  // §15-E.6 og:image URL extraction · resolves relative URLs against the
+  // page origin so consumers (ProjectDetailPage thumbnail fallback) can use
+  // it directly. Tries property="og:image" first, then property="og:image:url"
+  // for sites that split the meta tags. Twitter card image as last resort.
+  let ogImageUrl: string | null = null
+  const ogPatterns = [
+    /<meta\s+(?:[^>]*\s+)?property=["']og:image:url["'][^>]*\s+content=["']([^"']+)["']/i,
+    /<meta\s+(?:[^>]*\s+)?content=["']([^"']+)["'][^>]*\s+property=["']og:image:url["']/i,
+    /<meta\s+(?:[^>]*\s+)?property=["']og:image["'][^>]*\s+content=["']([^"']+)["']/i,
+    /<meta\s+(?:[^>]*\s+)?content=["']([^"']+)["'][^>]*\s+property=["']og:image["']/i,
+    /<meta\s+(?:[^>]*\s+)?name=["']twitter:image["'][^>]*\s+content=["']([^"']+)["']/i,
+    /<meta\s+(?:[^>]*\s+)?content=["']([^"']+)["'][^>]*\s+name=["']twitter:image["']/i,
+  ]
+  for (const re of ogPatterns) {
+    const m = head.match(re)
+    if (m && m[1]) {
+      try {
+        // Resolve relative URLs against page origin · also handles protocol-relative //example.com
+        const resolved = new URL(m[1], pageUrl).toString()
+        if (/^https?:\/\//i.test(resolved)) {
+          ogImageUrl = resolved
+          break
+        }
+      } catch { /* malformed · try next pattern */ }
+    }
+  }
+
   return {
     has_og_title:       has(/<meta\s+(?:[^>]*\s+)?property=["']og:title["']/i),
-    has_og_image:       has(/<meta\s+(?:[^>]*\s+)?property=["']og:image["']/i),
+    has_og_image:       !!ogImageUrl,
     has_og_description: has(/<meta\s+(?:[^>]*\s+)?property=["']og:description["']/i),
     has_twitter_card:   has(/<meta\s+(?:[^>]*\s+)?name=["']twitter:card["']/i),
     has_canonical:      has(/<link\s+(?:[^>]*\s+)?rel=["']canonical["']/i),
     has_meta_desc:      has(/<meta\s+(?:[^>]*\s+)?name=["']description["']/i),
     has_h1:             !!h1Text,
     h1_text:            h1Text,
+    og_image_url:       ogImageUrl,
   }
 }
 
@@ -328,7 +358,7 @@ Deno.serve(async (req) => {
     post_hydration_text_length: plainTextLength(html),
     hydration_framework:        framework,
     hydration_markers_found:    markers,
-    meta_tags:                  extractMetaTags(html),
+    meta_tags:                  extractMetaTags(html, body.url),
     proven_reachable:           true,
     screenshot_url:             screenshotUrl,
     screenshot_error:           screenshotError,    // surface to caller for debug · null on success

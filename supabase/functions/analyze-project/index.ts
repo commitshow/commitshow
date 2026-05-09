@@ -2261,6 +2261,7 @@ interface DeepProbeMetaTags {
   has_meta_desc:      boolean
   has_h1:             boolean
   h1_text:            string | null
+  og_image_url:       string | null
 }
 interface DeepProbeResult {
   fetched:                    boolean
@@ -2281,7 +2282,7 @@ const DEEP_PROBE_BLANK: DeepProbeResult = {
   meta_tags: {
     has_og_title: false, has_og_image: false, has_og_description: false,
     has_twitter_card: false, has_canonical: false, has_meta_desc: false,
-    has_h1: false, h1_text: null,
+    has_h1: false, h1_text: null, og_image_url: null,
   },
   proven_reachable: false,
   screenshot_url: null,

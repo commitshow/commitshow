@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
@@ -309,6 +309,20 @@ export function ProjectDetailPage() {
     return () => observer.disconnect()
   }, [loading])
 
+  // §15-E.6 wave 6 · hero-image policy
+  //   1. owner-set thumbnail wins
+  //   2. else fall back to deep_probe.meta_tags.og_image_url (URL fast lane)
+  //   3. for WALK-ON PREVIEW · UNCLAIMED with no image at all → collapse
+  //      the column (avoid "NO IMAGE" empty box on anonymous walk-ons)
+  //   4. owned projects with no image still show placeholder (owner UX)
+  const heroImageDecision = useMemo(() => {
+    const ogImage   = (snapshotResult?.rich as { deep_probe?: { meta_tags?: { og_image_url?: string | null } } } | null)?.deep_probe?.meta_tags?.og_image_url ?? null
+    const heroImage = project?.thumbnail_url || ogImage || null
+    const isWalkOnUnclaimed = project?.status === 'preview' && !project?.creator_id
+    const hideImageColumn = !heroImage && !!isWalkOnUnclaimed
+    return { heroImage, hideImageColumn }
+  }, [project?.thumbnail_url, project?.status, project?.creator_id, snapshotResult])
+
   if (loading) {
     return (
       <div className="pt-24 pb-16 px-6 text-center font-mono text-sm" style={{ color: 'rgba(248,245,238,0.35)', minHeight: '100vh' }}>
@@ -449,14 +463,16 @@ export function ProjectDetailPage() {
               {heroRerunError}
             </div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
-            <div style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)', overflow: 'hidden' }}>
-              {project.thumbnail_url ? (
-                <img src={project.thumbnail_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center font-mono text-xs" style={{ color: 'rgba(248,245,238,0.25)' }}>NO IMAGE</div>
-              )}
-            </div>
+          <div className={heroImageDecision.hideImageColumn ? 'grid grid-cols-1' : 'grid grid-cols-1 md:grid-cols-[260px_1fr]'}>
+            {!heroImageDecision.hideImageColumn && (
+              <div style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)', overflow: 'hidden' }}>
+                {heroImageDecision.heroImage ? (
+                  <img src={heroImageDecision.heroImage} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} loading="lazy" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center font-mono text-xs" style={{ color: 'rgba(248,245,238,0.25)' }}>NO IMAGE</div>
+                )}
+              </div>
+            )}
             <div className="p-4 sm:p-6 flex flex-col gap-4 justify-between">
               <div>
                 <div className="font-mono text-[10px] tracking-widest mb-2 flex items-center gap-2 flex-wrap" style={{ color: 'var(--gold-500)' }}>
