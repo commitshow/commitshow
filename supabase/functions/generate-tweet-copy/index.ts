@@ -62,7 +62,7 @@ Output format: ONLY a JSON object, no preamble or markdown.
   "recommendation_reason": "one sentence · Korean OK · why this variation wins given the prompt's intent and the audience right now",
   "variations": [
     {
-      "copy":      "tweet body · ≤ 250 chars to leave room for hashtag(s) ≤ 280 total",
+      "copy":      "tweet body · ENDS with brand hashtag line on its own line: '\\n\\n#commitshow #vibecoding #buildinpublic #devtools' (or +1 kind-specific tag) · whole thing ≤ 280 total · body itself ≤ 210 chars to leave room for the 4-5 tag line",
       "hashtags":  ["3-5 candidate tags · without #", "vibe coders' tags only · NEVER #buildinpublic / #SaaS / #startup"],
       "inline_hashtag": "the single hashtag you would append inline at the end of the copy field if forced to pick one · most relevant of the array · without #",
       "pillar":    "A|B|C|D",
@@ -78,11 +78,14 @@ Generate 3 DISTINCT variations:
 - Variation 2: "punchy" — sharper hook · willing to be slightly contrarian or polarizing. Earns clicks at the cost of some replies disagreeing.
 - Variation 3: "narrative" — leads with a one-line story or specific observation rather than a stat. Best for thread starters or quote-tweets.
 
-Hashtag rules (NON-NEGOTIABLE):
-- Each variation MUST set inline_hashtag to a non-empty string. Pick the most relevant tag from your hashtags[] array. Common picks: vibecoding · claudecode · cursor · ai (only when describing tools, NOT our product). Never invent tags that wouldn't have prior X usage.
-- Each variation MUST set hashtags[] to 3-5 candidate tags (alternates the user can swap in).
-- The copy field ALREADY INCLUDES inline_hashtag at the end (e.g. "...just shipped. #vibecoding"). The user sees a complete tweet without manually appending. We don't double-append.
-- Banned hashtags everywhere: #buildinpublic · #SaaS · #startup · #100DaysOfCode · #devlife · generic hype tags.
+Hashtag rules (NON-NEGOTIABLE · 2026-05-09 align):
+- Every "copy" MUST end with the brand hashtag bundle on its OWN line (after blank line):
+    #commitshow #vibecoding #buildinpublic #devtools
+  + ONE optional kind-specific tag among #encore · #shipping · #milestone (only when contextually appropriate · slip in before #devtools).
+- inline_hashtag is no longer in copy (we moved to the bundle line). Still set it in JSON output as the single most relevant from hashtags[] for legacy callers.
+- hashtags[] = 3-5 candidate alternates the user can swap into the bundle slots if they want a different angle. NEVER bare hype generics (#startup · #100DaysOfCode · #devlife · #SaaS).
+- The brand-tag pair (#commitshow + #vibecoding) is mandatory · #buildinpublic + #devtools are the default 3rd/4th. CEO directive 2026-05-09: #commitshow 필수 · 띄어쓰기로 관련 해시태그 3-4개.
+- Total tags per copy: 4-5 max (4 default · 5 only when a kind-specific tag fits).
 
 Always include the npx commitshow audit command if the prompt is about the engine, the audit, or onboarding new users.`
 
