@@ -2521,6 +2521,28 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
 //
 // Walk-on note: Brief Integrity slot (5) is structurally inaccessible. CLI
 // renders walk-on score normalized against 45 (50 - 5). See render.ts.
+// Average raw mobile + desktop scores per axis BEFORE bucketing (2026-05-10).
+// If only one strategy is assessed, fall through to that one — never penalize
+// for a missing surface. Bucketing AFTER averaging is intentional: a 50/95
+// split (avg 72) lands in the 70-89 bucket, not the 0pt cliff that the 50
+// alone would hit. That's the calibration we want — real users hit both
+// surfaces and the slot score should reflect what's actually achievable.
+function combineLh(m: LighthouseScores, d: LighthouseScores): LighthouseScores {
+  const avg = (a: number, b: number) => {
+    if (a === LH_NOT_ASSESSED && b === LH_NOT_ASSESSED) return LH_NOT_ASSESSED
+    if (a === LH_NOT_ASSESSED) return b
+    if (b === LH_NOT_ASSESSED) return a
+    return Math.round((a + b) / 2)
+  }
+  return {
+    ...m,  // keep mobile-only audit byproducts (console errors / network failures / dom size · only collected on mobile run)
+    performance:   avg(m.performance,   d.performance),
+    accessibility: avg(m.accessibility, d.accessibility),
+    bestPractices: avg(m.bestPractices, d.bestPractices),
+    seo:           avg(m.seo,           d.seo),
+  }
+}
+
 function scoreLighthouse(lh: LighthouseScores) {
   // Step buckets (v3 calibration · 2026-04-27 restored). Linear interpolation
   // tried in v4 to absorb PageSpeed ±5pt measurement noise but caused
@@ -2528,6 +2550,7 @@ function scoreLighthouse(lh: LighthouseScores) {
   // Stepwise calibration was already field-validated on the v3 set.
   // -1 "not assessed" → neutral midpoint (no bonus, no penalty).
   // Legit 0 still takes the harshest bucket (bad signal).
+  // Input lh is mobile+desktop AVERAGED via combineLh (2026-05-10).
   const p = lh.performance   === LH_NOT_ASSESSED ? 4
            : lh.performance   >= 90 ? 8
            : lh.performance   >= 70 ? 6
@@ -2535,9 +2558,16 @@ function scoreLighthouse(lh: LighthouseScores) {
   const a = lh.accessibility === LH_NOT_ASSESSED ? 3
            : lh.accessibility >= 90 ? 5
            : lh.accessibility >= 70 ? 3 : 1
+  // BP cliff softened 2026-05-10 · the old <70 → 0 was too punitive for
+  // marketing sites that ship ~3 MB of JS (Stripe / Vercel / etc · BP
+  // dragged down by 'avoid-multiple-page-redirects' / 'csp-xss' / 'image
+  // size on heavy WebGL hero'). Adds a 50-69 → 1 partial-credit bucket so
+  // a single weak BP signal doesn't fully nuke the slot. 70+ ranges
+  // unchanged · 90+ still earns full 4.
   const b = lh.bestPractices === LH_NOT_ASSESSED ? 2
            : lh.bestPractices >= 90 ? 4
-           : lh.bestPractices >= 70 ? 2 : 0
+           : lh.bestPractices >= 70 ? 2
+           : lh.bestPractices >= 50 ? 1 : 0
   const s = lh.seo           === LH_NOT_ASSESSED ? 2
            : lh.seo           >= 90 ? 3
            : lh.seo           >= 70 ? 2 : 0
@@ -4053,20 +4083,24 @@ Deno.serve(async (req) => {
   // Parallel external probes · plus security headers + legal pages
   // (Tier-1 completeness · v4).
   //
-  // NOTE: dual mobile+desktop Lighthouse was tried in v4 but pushes
-  // total Edge Function wall time past the 150s timeout (each PageSpeed
-  // call is 30-60s + Claude call 60-90s + GH fetches). Reverted to
-  // mobile-only Lighthouse; responsive slot uses `mobile perf ≥70` as
-  // the sole positive signal (mobile/desktop gap comparison removed).
-  const lhDesktop: LighthouseScores = { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
+  // Lighthouse: mobile + desktop in parallel (2026-05-10). Earlier note
+  // claimed dual-LH pushed wall time past 150s, but that was wrong —
+  // running in Promise.all means total wait = max(mobile, desktop)
+  // ≈ one LH call (60s ceiling), not the sum. Real users hit both
+  // surfaces and SaaS dashboards (cal.com / supabase studio) score very
+  // different on mobile vs desktop — averaging the two before bucket
+  // scoring is more honest than a mobile-only view that punishes
+  // desktop-first products. Desktop also re-feeds the responsive slot's
+  // mobile/desktop gap signal that v4 had wired then orphaned.
+  const isUrlFastLane = !project.github_url && !!project.live_url
   // §15-E.3 Tier B gate · URL Fast Lane only (no repo). Repo-lane projects
   // already have rich evidence; spending Browser Rendering credits on them
   // is unnecessary. Cost-control gate · graceful fall-through when CF
   // credentials aren't set on the server (deep-probe returns BLANK).
-  const isUrlFastLane = !project.github_url && !!project.live_url
 
-  const [lh, gh, health, completeness, securityHeaders, legalPages, routesHealth, deepProbe] = await Promise.all([
+  const [lh, lhDesktop, gh, health, completeness, securityHeaders, legalPages, routesHealth, deepProbe] = await Promise.all([
     project.live_url ? runLighthouse(project.live_url, 'mobile')  : Promise.resolve({ performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }),
+    project.live_url ? runLighthouse(project.live_url, 'desktop') : Promise.resolve({ performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }),
     inspectGitHub(project.github_url, explicitWorkspace),  // null URL → returns full empty shape (incl. signals) · §15-E URL-only safe
     project.live_url ? liveHealth(project.live_url) : Promise.resolve({ status: 0, ok: false, elapsed_ms: 0 }),
     project.live_url ? inspectCompleteness(project.live_url) : Promise.resolve({
@@ -4146,7 +4180,9 @@ Deno.serve(async (req) => {
   //   4. deepProbe.proven_reachable   — Tier B (CF Browser Rendering) got through
   // Live URL Health POINTS still depend on health.ok (we don't pretend
   // the homepage is up when it isn't); only slot eligibility broadens.
-  const lighthouseSucceeded = lh.performance > 0 || lh.accessibility > 0 || lh.bestPractices > 0 || lh.seo > 0
+  const lighthouseSucceeded =
+    lh.performance > 0 || lh.accessibility > 0 || lh.bestPractices > 0 || lh.seo > 0 ||
+    lhDesktop.performance > 0 || lhDesktop.accessibility > 0 || lhDesktop.bestPractices > 0 || lhDesktop.seo > 0
   const siteEffectivelyReachable = health.ok || routesHealth.reachable >= 1 || lighthouseSucceeded || deepProbe.proven_reachable
   const isSaasForm   = gh.signals.is_saas && siteEffectivelyReachable && !isNativeApp
   // useWebSlots true if web app OR SaaS (both want LH/Live signals,
@@ -4173,7 +4209,10 @@ Deno.serve(async (req) => {
   const activity   = scoreActivity(gh)                                         //  0-2 soft
 
   // ── Web slots (only meaningful for app form) ──
-  const lhScore        = scoreLighthouse(lh)                                   //  0-20 (raw; only used if isAppForm)
+  // lh = mobile raw · lhDesktop = desktop raw · lhCombined = avg per axis.
+  // Slot score uses combined; raw mobile/desktop kept in evidence.
+  const lhCombined     = combineLh(lh, lhDesktop)
+  const lhScore        = scoreLighthouse(lhCombined)                           //  0-20 (raw; only used if isAppForm)
   // Live URL Health · binary 5/0 (v3 calibration restored) · §15-E.2 multi-route fold-in:
   // homepage 200 + SSL + <3000ms 가 base. routes_health 가 있으면 multi-route
   // reachable_rate 로 추가 modulation — homepage 만 잘 만들고 /pricing /signup
