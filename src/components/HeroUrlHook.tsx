@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { AuthModal } from './AuthModal'
+import { openTweetIntent } from '../lib/shareTweet'
 
 interface SnapshotRich {
   // Canonical scout_brief shape · matches recentAudits.ts and the Edge
@@ -698,7 +699,7 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
           uniform 44px height (mobile tap target standard). Primary CTA
           drives the user into the FULL lane (/submit) — not a "claim"
           flow, since URL audits have no ownership verification. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         <button
           onClick={onAudition}
           className="h-11 px-4 text-sm font-medium tracking-wide transition-all sm:col-span-1"
@@ -715,6 +716,37 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
           onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
         >
           Audition your repo →
+        </button>
+        <button
+          onClick={() => {
+            // Share via X intent · /projects/<id>?og=tweet hits the projects
+            // middleware which rewrites twitter:image to the og-png Edge
+            // Function (1280×720 PNG with score+bars+strengths/concerns).
+            // Same surface auto-tweet uses · "no policy A claim, just share
+            // the result card" — anonymous walk-on still gets to brag.
+            const projectUrl = `https://commit.show/projects/${result.project_id}?og=tweet`
+            const topStrength = result.latest_snapshot?.rich_analysis?.scout_brief?.strengths?.[0]?.bullet ?? null
+            openTweetIntent({
+              projectName: result.project.project_name,
+              score:       polishScore,
+              url:         projectUrl,
+              takeaway:    topStrength,
+            })
+          }}
+          className="h-11 px-4 text-sm font-mono transition-colors"
+          style={{
+            background: 'transparent',
+            color: 'var(--cream)',
+            border: '1px solid rgba(248,245,238,0.2)',
+            borderRadius: '2px',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
+          title="Share this audit result on X · auto-generates a card with the score + top finding"
+        >
+          Share on X
         </button>
         <button
           onClick={onRerun}
