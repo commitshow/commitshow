@@ -3087,7 +3087,26 @@ Format per bullet:
   Bad:  "Good security posture overall."
   Bad:  "Could improve UX."
 
-- All 10 bullets MUST be present in every analysis regardless of trigger_type. American English. No Korean.`
+- All 10 bullets MUST be present in every analysis regardless of trigger_type. American English. No Korean.
+
+URL FAST LANE OVERRIDE (when is_url_fast_lane=true · §15-E):
+- The audit ran with NO repo access. github_signals.accessible=false and every repo-derived slot (tests · CI · LICENSE · Brief · Tech Diversity · Source Hygiene · Production Maturity sub-slots) is structurally 0 because the engine couldn't see the source. Those zeros are NOT faults of the project — they're dimensions we couldn't measure.
+- Weaknesses MUST focus ONLY on URL-OBSERVABLE issues:
+  · Lighthouse breakdowns (perf · a11y · BP · SEO bucket regressions)
+  · routes_health (broken paths · 4xx/5xx · slow TTFB)
+  · meta tag gaps (missing og:image · no canonical · sparse twitter card)
+  · live_url_health failures (3s+ TTFB · cert issues)
+  · security_headers absence (CSP · HSTS missing)
+  · legal_pages absence (no /privacy /terms reachable)
+- FORBIDDEN weakness patterns when is_url_fast_lane=true:
+  · "0 commits / 0 contributors / 0 files / no source code evaluable"
+  · "no tests / no CI / no observability / no lockfile / no TS strict"
+  · "no LICENSE / no governance docs / no monorepo signal"
+  · "no Brief / Phase 1 missing / no audition story"
+  · "Tech Diversity 0 / Maturity 0 / Hygiene 0"
+  Any bullet that says "no [repo signal] detected" → DROP IT. The user already knows we can't see the repo. Listing it as a weakness reads as an indictment of the project, not a description of the audit's scope.
+- If you genuinely can't find 5 URL-side weaknesses (e.g., a pristine site like google.com), output FEWER. 0-2 weaknesses is acceptable for a top-tier site under URL Fast Lane. Don't pad.
+- DO surface, in any open spot, ONE bullet of axis:"Ops" framed as: "Repo signals not visible — link a public repo to unlock tests, CI, governance, and Brief integrity scoring." This is the upsell hook, not a weakness. Place it as the LAST weakness only when fewer than 5 URL-side weaknesses exist.`
 
   const userPrompt = `Evaluate this project using ONLY the evidence below. Every axis score must be backed by a specific number from the evidence.
 
@@ -4351,6 +4370,8 @@ Deno.serve(async (req) => {
   const includeExpertPanel = panelTriggers.includes(triggerType)
   const claude = await callClaude({
     is_initial_snapshot: !parent,
+    audit_kind: isUrlFastLane ? 'url_fast_lane' : 'full',
+    is_url_fast_lane: isUrlFastLane,
     previous_snapshot: parent ? {
       created_at:   parent.created_at,
       score_total:  parent.score_total,

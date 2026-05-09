@@ -491,8 +491,14 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
   const rich  = snap?.rich_analysis ?? {}
   // Canonical bullet path · scout_brief.strengths / .weaknesses.
   const strengths = (rich.scout_brief?.strengths ?? []).slice(0, 3)
-  const concerns  = (rich.scout_brief?.weaknesses ?? []).slice(0, 2)
-  const routes    = rich.routes_health
+  // Belt-and-suspenders filter · the prompt now forbids repo-absence
+  // weaknesses for URL fast lane, but if Claude slips one in we drop it
+  // client-side too. Reframe is "what we couldn't see is an upsell, not
+  // a fault" — keep concerns focused on URL-observable issues only.
+  const REPO_ABSENCE_PATTERNS = /\b(no source code|0 commits?|0 contributors?|0 files?|no tests|no CI|no observability|no lockfile|no LICENSE|TypeScript strict mode|no Brief|production maturity points|repo signals|repo not visible|GitHub repo (not |in)accessible|no governance|monorepo)\b/i
+  const concernsRaw = (rich.scout_brief?.weaknesses ?? []) as Array<{ axis?: string | null; bullet?: string }>
+  const concerns    = concernsRaw.filter(c => !c.bullet || !REPO_ABSENCE_PATTERNS.test(c.bullet)).slice(0, 2)
+  const routes      = rich.routes_health
 
   // URL Polish Score · §15-E.3 separate scale.
   // The full /50 audit pillar can't be the denominator for URL-only audits
@@ -566,7 +572,7 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
           )}
         </div>
         <div>
-          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--scarlet)' }}>− CONCERNS</div>
+          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--scarlet)' }}>− TO IMPROVE</div>
           {concerns.length > 0 ? (
             <ul className="space-y-1.5">
               {concerns.map((c, i) => (
@@ -576,9 +582,34 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
               ))}
             </ul>
           ) : (
-            <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>None surfaced at this depth.</p>
+            <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+              No URL-side issues surfaced at this depth.
+            </p>
           )}
         </div>
+      </div>
+
+      {/* UNLOCK WITH REPO · positive-framing upsell · replaces the old
+          negative pattern of listing repo-absence as concerns (§15-E). */}
+      <div
+        className="mb-6 px-4 py-3"
+        style={{
+          background: 'rgba(240,192,64,0.05)',
+          border: '1px dashed rgba(240,192,64,0.25)',
+          borderRadius: '2px',
+        }}
+      >
+        <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+          ↑ UNLOCK WITH REPO
+        </div>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          Linking a public repo unlocks <span style={{ color: 'var(--cream)' }}>tests · CI · LICENSE</span> ·{' '}
+          <span style={{ color: 'var(--cream)' }}>secret-leak detection</span> ·{' '}
+          <span style={{ color: 'var(--cream)' }}>Brief integrity</span> ·{' '}
+          <span style={{ color: 'var(--cream)' }}>tech-stack diversity</span> ·{' '}
+          <span style={{ color: 'var(--cream)' }}>source hygiene</span> · the full
+          50-point audit + ladder ranking + Encore eligibility at score ≥ 85.
+        </p>
       </div>
 
       {routes && routes.probed > 0 && (
