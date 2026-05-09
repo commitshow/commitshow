@@ -67,38 +67,65 @@ export function AboutProjectSection({ projectId, projectName }: { projectId: str
   const [row, setRow]         = useState<BriefRow | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // §19 rule 9 · creator_brief_en is the audit-side English translation
+  // of build_briefs.problem / features / target_user. Korean creators
+  // submit Korean briefs · Claude renders an English summary on each
+  // audit · we PREFER it for any user-facing render to keep the public
+  // surface in American English.
+  const [briefEn, setBriefEn] = useState<{ headline: string; target_user: string; features: string[] } | null>(null)
+
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const { data } = await supabase
-        .from('build_briefs')
-        .select('problem, features, target_user, ai_tools, one_liner, business_model, stage')
-        .eq('project_id', projectId)
-        .maybeSingle()
+      const [briefRes, snapRes] = await Promise.all([
+        supabase
+          .from('build_briefs')
+          .select('problem, features, target_user, ai_tools, one_liner, business_model, stage')
+          .eq('project_id', projectId)
+          .maybeSingle(),
+        supabase
+          .from('analysis_snapshots')
+          .select('rich_analysis')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
       if (!alive) return
-      setRow((data ?? null) as BriefRow | null)
+      setRow((briefRes.data ?? null) as BriefRow | null)
+      const ce = (snapRes.data?.rich_analysis as { creator_brief_en?: { headline?: string; target_user?: string; features?: string[] } } | null)?.creator_brief_en
+      if (ce && (ce.headline || ce.target_user || (ce.features?.length ?? 0) > 0)) {
+        setBriefEn({
+          headline:    ce.headline ?? '',
+          target_user: ce.target_user ?? '',
+          features:    Array.isArray(ce.features) ? ce.features : [],
+        })
+      }
       setLoading(false)
     })()
     return () => { alive = false }
   }, [projectId])
 
   if (loading) return null
-  if (!row) return null
+  if (!row && !briefEn) return null
 
-  const featureList = parseFeatures(row.features)
-  const tools       = parseTools(row.ai_tools)
+  // Audit-side English translation wins · raw row only used as fallback
+  // when no audit has run yet (no snapshot · creator_brief_en absent).
+  const featureList = briefEn ? briefEn.features : parseFeatures(row?.features ?? null)
+  const targetUser  = briefEn?.target_user || row?.target_user || ''
+  const tools       = parseTools(row?.ai_tools ?? null)
   // Hide when there's nothing meaningful to say · old projects that
   // never filled brief or market position render nothing.
   const hasContent = !!(
-    row.one_liner || row.problem || row.target_user ||
+    briefEn?.headline || row?.one_liner || row?.problem || targetUser ||
     featureList.length > 0 || tools.length > 0 ||
-    row.business_model || row.stage
+    row?.business_model || row?.stage
   )
   if (!hasContent) return null
 
-  const headline    = row.one_liner?.trim() || row.problem?.trim().split('\n')[0]
-  const bmodelLabel = row.business_model ? (BMODEL_LABELS[row.business_model] ?? row.business_model) : null
-  const stageLabel  = row.stage          ? (STAGE_LABELS[row.stage]            ?? row.stage)          : null
+  const headline    = briefEn?.headline?.trim() || row?.one_liner?.trim() || row?.problem?.trim().split('\n')[0]
+  const bmodelLabel = row?.business_model ? (BMODEL_LABELS[row.business_model] ?? row.business_model) : null
+  const stageLabel  = row?.stage          ? (STAGE_LABELS[row.stage]            ?? row.stage)          : null
 
   return (
     <div
@@ -119,10 +146,10 @@ export function AboutProjectSection({ projectId, projectName }: { projectId: str
         </p>
       )}
 
-      {row.target_user && (
+      {targetUser && (
         <p className="font-light text-sm mb-3" style={{ color: 'var(--text-secondary)', lineHeight: 1.65 }}>
           <span style={{ color: 'var(--text-muted)' }}>Built for </span>
-          <span style={{ color: 'var(--cream)' }}>{row.target_user}</span>
+          <span style={{ color: 'var(--cream)' }}>{targetUser}</span>
           <span style={{ color: 'var(--text-muted)' }}>.</span>
         </p>
       )}
@@ -160,7 +187,7 @@ export function AboutProjectSection({ projectId, projectName }: { projectId: str
       {/* Hide-empty fallback never reached when hasContent is true ·
           but the projectName ref keeps the prop wired for future
           per-name copy. */}
-      {!headline && !row.target_user && featureList.length === 0 && (
+      {!headline && !targetUser && featureList.length === 0 && (
         <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
           The creator hasn't filled in {projectName}'s description yet.
         </p>

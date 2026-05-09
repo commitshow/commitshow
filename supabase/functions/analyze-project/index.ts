@@ -2983,6 +2983,11 @@ interface RichAnalysis {
   }>
   expert_panel?: ExpertVerdict[]     // length 4 when present · omitted on weekly/applaud triggers
   scout_brief?: ScoutBrief           // distilled 5+5 for scout-tier visibility (creator keeps the long form private)
+  creator_brief_en?: {                // §19 rule 9 · English translation of build_briefs (Korean → English)
+    headline:    string
+    target_user: string
+    features:    string[]
+  }
 }
 
 const RICH_ANALYSIS_FALLBACK: RichAnalysis = {
@@ -3164,7 +3169,8 @@ ${JSON.stringify(input, null, 2)}
 
 OUTPUT RULES
 - Return ONLY valid JSON. No markdown, no prose outside JSON.
-- ALL prose fields (tldr, headline, role_title reasoning, delta_reasoning, sublabels, findings detail, open_questions, honest_evaluation, tampering signal detail) MUST be written in American English. Do not use Korean, Korean characters, or Korean phrasing anywhere in the output.
+- ALL prose fields (tldr, headline, role_title reasoning, delta_reasoning, sublabels, findings detail, open_questions, honest_evaluation, tampering signal detail, scout_brief bullets, creator_brief_en) MUST be written in American English. Do not use Korean, Korean characters, or Korean phrasing anywhere in the output.
+- creator_brief_en: even when build_brief_phase_1.problem / features / target_user arrive in Korean (or any non-English), TRANSLATE them into a clean American English summary in this field. headline = one-line product summary (≤120 chars). target_user = audience description (≤180 chars · empty string if unknown). features = 1-6 short bullets (≤140 chars each). The UI uses creator_brief_en in the public "About this project" section when present — never the raw build_brief row — so any Korean here would leak directly to user-facing surfaces.
 - Do NOT mention any AI coding tool / platform brand names (e.g. Cursor, Lovable, Claude Code, v0, Bolt, Windsurf, Replit AI). Describe what was built, not which tool built it. Tool identity is irrelevant to evaluation.
 - tldr: one-line impression, <= 120 characters, the strongest takeaway about the project today.
 - headline: one bold sentence shown prominently. For initial snapshot, describe the project's character. For re-analysis, describe the direction of change since the previous snapshot.
@@ -3452,6 +3458,11 @@ OUTPUT SHAPE
   "scout_brief": {
     "strengths":  [ { "axis": "Security", "bullet": "RLS policies on every state-changing table ..." } ],
     "weaknesses": [ { "axis": "Code",     "bullet": "No tests in repo; 80+ Edge Functions untested ..." } ]
+  },
+  "creator_brief_en": {
+    "headline":    "One-line product summary in American English (≤120 chars).",
+    "target_user": "Audience description in American English (≤180 chars). Empty string if unknown.",
+    "features":    [ "Feature 1 in American English (≤140 chars)", "Feature 2", "Feature 3" ]
   }${includeExpertPanel ? `,
   "expert_panel": [
     { "role": "staff_engineer",   "display_name": "Staff Engineer",   "verdict_label": "iterate", "verdict_summary": "...", "top_strength": "...", "top_issue": "...", "confidence": 7 },
@@ -3470,7 +3481,7 @@ OUTPUT SHAPE
       type: 'object',
       required: ['tldr', 'headline', 'role_title', 'score', 'headline_metrics',
                  'axis_scores', 'github_findings', 'open_questions', 'honest_evaluation',
-                 'tampering_signals', 'scout_brief',
+                 'tampering_signals', 'scout_brief', 'creator_brief_en',
                  ...(includeExpertPanel ? ['expert_panel'] : [])],
       properties: {
         tldr: { type: 'string' },
@@ -3586,6 +3597,22 @@ OUTPUT SHAPE
                   bullet: { type: 'string', minLength: 15, maxLength: 140 },
                 },
               },
+            },
+          },
+        },
+        // §19 rule 9 enforcement · creator brief may be Korean (or any
+        // non-English) when submitted · we render an English-translated
+        // version in user-facing surfaces (AboutProjectSection · share
+        // cards). Never user the raw build_briefs row directly in UI.
+        creator_brief_en: {
+          type: 'object',
+          required: ['headline', 'target_user', 'features'],
+          properties: {
+            headline:    { type: 'string', maxLength: 200 },
+            target_user: { type: 'string', maxLength: 220 },
+            features:    {
+              type: 'array', minItems: 0, maxItems: 6,
+              items: { type: 'string', minLength: 5, maxLength: 160 },
             },
           },
         },
