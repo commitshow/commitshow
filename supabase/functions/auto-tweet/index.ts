@@ -25,6 +25,7 @@
 // retries don't re-roll content).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { appendHashtags } from '../_shared/tweetHashtags.ts'
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin':  '*',
@@ -388,9 +389,23 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Truncate to 280 chars (X hard limit). Templates are ~250 chars
-  // headroom but a long project name + concern can push over.
-  const finalText = tweetText.length <= 280 ? tweetText : tweetText.slice(0, 277) + '...'
+  // Hashtag bundle (CEO 2026-05-09) · #commitshow 필수 + 3-4 related.
+  // Append BEFORE truncate so the brand tag is the last thing trimmed.
+  // Hashtag line ≈ 55-65 chars · audit body ~150-220 chars · combined
+  // safely under 280 even for long project names. Trajectory bodies
+  // are tighter so even more headroom.
+  const tweetWithTags = appendHashtags(tweetText, kind)
+
+  // Truncate to 280 chars (X hard limit). Templates + hashtag line are
+  // ~210-280 char range · long project name + concern can edge over.
+  const finalText = tweetWithTags.length <= 280
+    ? tweetWithTags
+    : (() => {
+        // Preserve the hashtag line · trim the body instead.
+        const hashtagLine = tweetWithTags.split(/\n\n/).pop() ?? ''
+        const bodyMax     = 280 - hashtagLine.length - 4   // 4 = '\n\n…' separator + ellipsis
+        return tweetText.slice(0, Math.max(0, bodyMax)).replace(/\s+\S*$/, '') + '…\n\n' + hashtagLine
+      })()
 
   // Post · or skip if no token in x_official_account.
   if (!hasToken) {

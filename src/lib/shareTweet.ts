@@ -7,6 +7,8 @@
 // auto-posting on graduation; that's V1.5+ and lives behind admin
 // configuration.
 
+import { appendHashtags } from './tweetHashtags'
+
 interface ShareOpts {
   projectName: string
   score:       number
@@ -14,6 +16,9 @@ interface ShareOpts {
   /** Optional one-line takeaway (a strength bullet or a verdict). Kept
    *  short — X counts URLs as 23 chars and the brand handle eats more. */
   takeaway?:   string | null
+  /** Optional · drives kind-specific hashtag extra (encore · trajectory ·
+   *  milestone). Defaults to no extra · brand bundle only. */
+  kind?:       string
 }
 
 /**
@@ -31,7 +36,7 @@ export function buildTweetIntent(opts: ShareOpts): string {
   const handle = '@commitshow'
   const head   = `${opts.projectName} · ${opts.score}/100 — audited by ${handle}.`
   const body   = opts.takeaway ? `\n\n↑ ${opts.takeaway}` : ''
-  const text   = head + body
+  const text   = appendHashtags(head + body, opts.kind)
   const params = new URLSearchParams({
     text: text,
     url:  opts.url,

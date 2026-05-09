@@ -12,6 +12,7 @@
 // embeds an unfurled card if the linked URL has og:image meta tags.
 
 import { supabase } from './supabase'
+import { appendHashtags } from './tweetHashtags'
 
 // Fixed enum mirroring cmo_templates seed rows.
 // audit_complete    · /project/:slug  (own audit · creator share)
@@ -108,6 +109,17 @@ function injectOgQuery(text: string, templateId: UserShareTemplateId, slots: Slo
 /** End-to-end: load template by id, fill slots, open the intent URL.
  *  Returns false if the template couldn't be loaded (caller decides
  *  whether to surface a fallback / error toast). */
+// Map template id → tweetHashtags kind (drives extra hashtag selection).
+// audit_complete · milestone share inline a project URL with no kind suffix
+// for the brand+vibecoding+buildinpublic+devtools default · encore tags
+// '#encore' as 4th alongside the brand · early_spotter is generic share.
+const HASHTAG_KIND_BY_TEMPLATE: Record<UserShareTemplateId, string> = {
+  audit_complete: 'audit',
+  encore:         'encore',
+  milestone:      'milestone',
+  early_spotter:  'tweet',
+}
+
 export async function shareWithTemplate(
   id:   UserShareTemplateId,
   slots: SlotMap,
@@ -117,6 +129,8 @@ export async function shareWithTemplate(
   if (!template) return false
   const filled = fillSlots(template, slots)
   const text   = injectOgQuery(filled, id, slots)
-  window.open(buildIntentUrl(text, url), '_blank', 'noopener,noreferrer')
+  // Append hashtag bundle · CEO 2026-05-09 · #commitshow + 3-4 related.
+  const withTags = appendHashtags(text, HASHTAG_KIND_BY_TEMPLATE[id])
+  window.open(buildIntentUrl(withTags, url), '_blank', 'noopener,noreferrer')
   return true
 }
