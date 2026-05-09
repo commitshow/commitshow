@@ -24,21 +24,25 @@ export const FREE_AUDITS_FALLBACK_DEFAULT = 3
 export const REGISTRATION_PRICE_CENTS = 9900  // $99.00 · standard audit fee
 export const FOUNDER_PRICE_FALLBACK_CENTS = 4900  // $49.00 · matches founder_price_cents
 
-// $99 = $20 audit/operations cost (non-refundable) + $79 graduation
-// deposit (refunded on Diploma). Founder pricing scales the same split.
-// Strategy doc §7.2 — narrative decomposition required on every price
-// surface to neutralize the "$99 too high" gut reaction.
+// $99 = $20 audit & operations (non-recoupable platform cost) + $79
+// Encore credit (recoupable on Diploma graduation). Founder pricing
+// scales the same split. Terminology lock 2026-05-09: "credit" +
+// "recoupable" everywhere · NEVER "deposit" / "refund" / "refundable"
+// (Apple App Store + Steam Wallet pattern · avoids consumer-protection
+// refund-obligation framing). Strategy doc §7.2 · narrative decomposition
+// required on every price surface to neutralize "$99 too high" gut
+// reaction.
 export interface PriceBreakdown {
-  total:    number  // cents
-  cost:     number  // cents · platform-retained
-  deposit:  number  // cents · refundable on Diploma
+  total:    number  // cents · what the customer pays
+  cost:     number  // cents · platform-retained · non-recoupable
+  credit:   number  // cents · Encore credit · recoupable on Diploma graduation
 }
 export function priceBreakdown(totalCents: number): PriceBreakdown {
   // Cost stays at ~20% of total (rounded to dollars). $99 → $20/$79;
   // $49 → $10/$39. Keeps the narrative tidy at every price point.
   const costRatio = 0.2020   // chosen so 9900 → 2000 and 4900 → ~990 (rounded to 1000)
   const cost = Math.round(totalCents * costRatio / 100) * 100
-  return { total: totalCents, cost, deposit: totalCents - cost }
+  return { total: totalCents, cost, credit: totalCents - cost }
 }
 
 export interface FounderStatus {

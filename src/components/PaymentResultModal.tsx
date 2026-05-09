@@ -97,8 +97,8 @@ function SuccessBody({ paidCredit, onClose }: { paidCredit?: number | null; onCl
         <strong style={{ color: 'var(--gold-500)' }}>
           {(paidCredit ?? 1).toLocaleString()} paid audit{(paidCredit ?? 1) === 1 ? '' : 's'}
         </strong>{' '}
-        ready to spend on a project. Conditional refund applies when the
-        product earns Encore (see Rulebook).
+        ready to spend on a project. The Encore credit portion is recoupable
+        when the product earns Encore (see Rulebook).
       </p>
 
       <div className="mb-5 px-4 py-3 font-mono text-[11px]" style={{

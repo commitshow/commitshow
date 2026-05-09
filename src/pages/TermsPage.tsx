@@ -9,7 +9,7 @@
 // LEGAL DISCLAIMER (in-code only · NOT user-facing): this draft is not a
 // substitute for counsel review. Before paid auditions go live (V1 §16.2
 // P7), an attorney has to sign off on the indemnity, liability cap,
-// governing-law clause, and refund mechanics.
+// governing-law clause, and recoup mechanics.
 
 import { useNavigate } from 'react-router-dom'
 
@@ -152,7 +152,7 @@ export function TermsPage() {
           </P>
         </Section>
 
-        <Section title="7 · Fees and refunds" anchor="fees">
+        <Section title="7 · Fees and recoup" anchor="fees">
           <P>
             We may, from time to time, offer a free-audition allowance that
             lets each member submit a limited number of auditions at no
@@ -164,13 +164,15 @@ export function TermsPage() {
             point of submission.
           </P>
           <P>
-            Auditions outside any active free allowance carry an audition
-            fee. The fee has two internally-tracked components: a
-            non-refundable audit and operations cost, and a refundable
-            graduation deposit. The deposit becomes refundable only when
-            the audited product earns a Diploma in a future League
-            cohort; it carries no claim to interest, dividends, or payout
-            from any pool.
+            Auditions outside any active free allowance carry a one-time
+            audition fee. The fee has two internally-tracked components: a
+            non-recoupable audit & operations cost, and an Encore credit
+            recoupable on Diploma. The Encore credit is platform credit
+            applied within the audition lifecycle — it is not a refundable
+            deposit and carries no claim to interest, dividends, or payout
+            from any pool. The credit becomes recoupable only when the
+            audited product earns a Diploma in a future League cohort,
+            subject to the rules and timing in effect at that time.
           </P>
           <P>
             From time to time we may run a Founder pricing window in which
@@ -183,8 +185,8 @@ export function TermsPage() {
             All fees are stated in US dollars unless noted otherwise. Payment
             is processed by third-party providers (currently Stripe). Their
             terms also apply. We do not guarantee future Diploma eligibility,
-            League cohort timing, or that any deposit will become refundable
-            within a specific timeframe.
+            League cohort timing, or that any Encore credit will become
+            recoupable within a specific timeframe.
           </P>
         </Section>
 

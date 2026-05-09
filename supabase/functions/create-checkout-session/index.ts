@@ -124,8 +124,8 @@ Deno.serve(async (req) => {
     ? (founder?.price_cents ?? FOUNDER_PRICE_FALLBACK_CENTS)
     : AUDIT_FEE_CENTS
   const productDescription = founderActive
-    ? `Founder pricing · audition ${founder!.paid_count + 1} of ${founder!.cap} · conditional refund on Diploma`
-    : 'One additional audit · conditional refund on Diploma'
+    ? `Founder pricing · audition ${founder!.paid_count + 1} of ${founder!.cap} · Encore credit recoupable on Diploma`
+    : 'One additional audit · Encore credit recoupable on Diploma'
 
   // Build Stripe session.
   const stripe = new Stripe(STRIPE_SECRET, { apiVersion: '2024-09-30.acacia' })

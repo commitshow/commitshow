@@ -774,8 +774,8 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
   const [error, setError] = useState<string | null>(null)
   const priceDollars = (eligibility.priceCents / 100).toFixed(0)
   const breakdown = priceBreakdown(eligibility.priceCents)
-  const costDollars    = (breakdown.cost    / 100).toFixed(0)
-  const depositDollars = (breakdown.deposit / 100).toFixed(0)
+  const costDollars    = (breakdown.cost   / 100).toFixed(0)
+  const creditDollars  = (breakdown.credit / 100).toFixed(0)
   // Founder pricing surfaces both the discount AND the scarcity ("947
   // founder spots left"). When the window is closed, all three values
   // collapse and we fall back to the standard narrative.
@@ -830,9 +830,13 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
       </p>
 
       {/* Narrative breakdown · strategy doc §7.6: never lead with "$99
-          audition fee" naked — decompose into cost + refundable deposit
-          on every price surface so the gut "too high" reaction lands on
-          the actual non-refundable amount ($20 at full / $10 at founder). */}
+          audition fee" naked — decompose into non-recoupable platform
+          cost + recoupable Encore credit on every price surface so the
+          gut "too high" reaction lands on the actual non-recoupable
+          portion ($20 at full / $10 at founder). Terminology lock
+          2026-05-09: "credit" / "recoupable" everywhere · NEVER
+          "deposit" / "refund" (consumer-protection safety + Apple App
+          Store + Steam Wallet pattern alignment). */}
       <div className="mb-5 px-4 py-3" style={{
         background: 'rgba(240,192,64,0.04)',
         border: '1px solid rgba(240,192,64,0.18)',
@@ -843,10 +847,10 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
           WHAT YOU'RE ACTUALLY PAYING
         </div>
         <div className="grid grid-cols-[1fr_auto] gap-y-1 font-mono text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-          <span>Audit & operations cost <span style={{ color: 'var(--text-muted)' }}>· non-refundable</span></span>
+          <span>Audit & operations <span style={{ color: 'var(--text-muted)' }}>· non-recoupable</span></span>
           <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${costDollars}</span>
-          <span>Encore deposit <span style={{ color: 'var(--text-muted)' }}>· refunded on Diploma</span></span>
-          <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${depositDollars}</span>
+          <span>Encore credit <span style={{ color: 'var(--text-muted)' }}>· recoupable on Diploma</span></span>
+          <span className="tabular-nums" style={{ color: 'var(--cream)' }}>${creditDollars}</span>
           <span style={{ borderTop: '1px solid rgba(240,192,64,0.2)', paddingTop: 4, color: 'var(--gold-500)' }}>Total</span>
           <span className="tabular-nums" style={{ borderTop: '1px solid rgba(240,192,64,0.2)', paddingTop: 4, color: 'var(--gold-500)', fontWeight: 700 }}>${priceDollars}</span>
         </div>

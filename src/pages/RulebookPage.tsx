@@ -417,8 +417,8 @@ export function RulebookPage() {
           These rules are binding for the active ladder and any in-flight
           event. Material changes are announced at least two weeks before
           they take effect and do not apply retroactively to projects already
-          ranked or entered. Pricing and refund mechanics live on each
-          project's audit page, not here.
+          ranked or entered. Pricing and Encore-credit recoup mechanics
+          live on each project's audit page, not here.
         </div>
       </div>
     </section>
