@@ -284,12 +284,17 @@ Deno.serve(async (req) => {
     return json({ ...BLANK, error: 'cf_credentials_missing' })
   }
 
-  // /content + /screenshot in parallel · two CF API calls but both are
-  // necessary (REST API is stateless · no way to share a session). Total
-  // wall ~14s max since they share the 14s and 12s timeouts respectively.
+  // §15-E.3 · Screenshot capture is gated behind ENABLE_SCREENSHOT env var
+  // because it doubles CF Browser Rendering browser-time consumption per
+  // audit (free tier = 10 min/day → ~60-120 audits/day with screenshot,
+  // ~120-240 without). Default OFF for V1 free tier · flip to 'true' once
+  // CF is upgraded to Workers Paid ($5/mo · 10 hours/day browser time).
+  // /content (post-hydration HTML) stays on always — it's the main value.
   const supabaseUrl  = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceKey   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const screenshotFlag = (Deno.env.get('ENABLE_SCREENSHOT') ?? '').toLowerCase()
   const wantScreenshot = !!supabaseUrl && !!serviceKey
+                       && (screenshotFlag === 'true' || screenshotFlag === '1' || screenshotFlag === 'on')
 
   const [cf, png] = await Promise.all([
     callCfBrowserRendering(body.url, accountId, cfToken),

@@ -1831,22 +1831,33 @@ band=$(echo "$json" | jq -r .score.band)
 
 **Claude evidence prompt 추가**: `routes_health.broken_paths` 가 strengths/concerns 의 evidence 로 surface.
 
-### 15-E.3 Tier B · Playwright deep probe (V1.5+ · "deep audit" 묶음)
+### 15-E.3 Tier B · Playwright deep probe (V1 라이브 · 2026-05-09)
 
-**한 묶음 도입**:
-- post-hydration HTML (`__NEXT_DATA__` · `__NUXT__` · h1/h2 hierarchy after JS)
-- 런타임 console error count
-- 네트워크 실패 (4xx/5xx 리소스 카운트)
-- 스크린샷 fold + full → 프로젝트 상세 페이지에 evidence
+**라이브 구성**:
+- ✅ post-hydration HTML (Cloudflare Browser Rendering `/content`) · meta tags UNION 회수 + 봇 wall 우회 + hydration framework 감지
+- ✅ 런타임 console error count · network 실패 (Lighthouse `audits[]` 마이닝 · CF call 추가 비용 0)
+- ⏸️ 스크린샷 (코드는 박혀있지만 `ENABLE_SCREENSHOT=false` 디폴트 · CF free tier 10min/day 한도 때문 · paid 전환 시 활성화)
 
-**점수 fold-in**: Production Maturity 12 안에 새 +2 signals (console_clean +1 · network_clean +1).
+**점수 fold-in**:
+- console_clean + network_clean → +2pt (`runtimeEvidencePts`) · auto_hard 에 직접 합산
+- URL_LANE_MAX UI denominator 24 → 26 (Lighthouse 20 + Completeness 2 + Responsive 2 + Runtime 2)
+- 회원 repo audit 도 동일 +2pt 가능 (이전 50pt 가 52pt 천장으로 격상 · 미세)
 
-**인프라**: Cloudflare Browser Rendering API ($5/1k page · 우리가 이미 Pages 위에 있음 · keep-alive session). 또는 self-hosted Browserless. 결정은 V1.5 timeline.
+**인프라 · CF Browser Rendering 정책 (2026-05-09 결정 · 정책 B)**:
+- **CF free tier = 10 분 browser time/day** = `/content` 5-10s/회 → ~60-120 audits/day
+- 정책 B 채택: `/content` 만 호출 (1 call/audit) · `/screenshot` 제외 (`ENABLE_SCREENSHOT=false`)
+- audit 한 번당 ~5-10s browser time → free tier ceiling **~60-120 deep-probes/day**
+- 초과 시 graceful: 429 → BLANK → analyze-project 가 Tier A only 로 계속 진행 (audit 끊기지 않음)
+- 트래픽 늘면 **Workers Paid $5/mo** 로 업그레이드 → 10 hours/day = 60× 더 → screenshot 자동 활성
 
 **비용 게이팅**:
-- Fast lane (anonymous walk-on) = Tier A only (Playwright 발동 X)
-- Full lane = Tier B 항상 발동
-- → owner verified 만 Playwright 비용 부담
+- URL Fast Lane (`!github_url && live_url`) → Tier B 발동 (분리 게이트 = `isUrlFastLane`)
+- Full lane (회원 repo audit) → Tier B **발동 안 함** (이미 풀 evidence 있음 · CF budget 보호)
+
+**Rate limit 2-layer (URL fast lane)**:
+- 사용자 facing: anon 5/IP/day · authed 50/IP/day · per-domain 5/day · global 2000/day
+- CF 인프라: 10 min/day total (free tier · binding cap = 60-120/day across all users)
+- CF 한도 hit → fallback to Tier A → 사용자엔 graceful (정확도만 살짝 낮아짐 · 봇 wall 사이트만 영향)
 
 ### 15-E.4 Abuse defense · "남의 URL 마구 넣기" 처리
 
