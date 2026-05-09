@@ -138,8 +138,16 @@ Deno.serve(async (req) => {
   // 'Pay $99' button can spawn two Checkout sessions. We bucket the key
   // per (member, day) so a deliberate second purchase the next day still
   // works, but a same-day retry just returns the existing session.
-  const dayBucket = new Date().toISOString().slice(0, 10)
-  const idempotencyKey = `audit-fee:${userId}:${dayBucket}`
+  //
+  // CONFIG_VERSION: bump whenever the Checkout Session params change
+  // (price · payment methods · metadata · etc). Stripe enforces "same key
+  // + different params = error" — bumping version separates new config
+  // from any cached prior-day attempts. History:
+  //   v1 → original payment_method_types: ['card'] · test mode era
+  //   v2 → 2026-05-09 · payment_method_types removed (dynamic) · live mode
+  const CONFIG_VERSION = 'v2'
+  const dayBucket      = new Date().toISOString().slice(0, 10)
+  const idempotencyKey = `audit-fee:${CONFIG_VERSION}:${userId}:${dayBucket}:${unitAmount}`
 
   let session
   try {
