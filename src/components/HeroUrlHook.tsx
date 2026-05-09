@@ -465,10 +465,15 @@ export function HeroUrlHook() {
         {phase === 'ready' && result && (
           <ResultCard
             result={result}
-            onClaim={async () => {
+            onAudition={async () => {
+              // §15-E policy A · URL audit ≠ owned audit · we never claim.
+              // CTA funnels users into the FULL lane with their own repo
+              // instead. Signed-in users go straight to /submit; anonymous
+              // users see the auth modal first, then the auth modal's own
+              // post-signup redirect lands them somewhere useful.
               const { data: { user } } = await supabase.auth.getUser()
               if (user) {
-                navigate(`/projects/${result.project_id}`)
+                navigate('/submit')
               } else {
                 setAuthOpen(true)
               }
@@ -479,7 +484,18 @@ export function HeroUrlHook() {
         )}
       </div>
 
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode="signup" />
+      <AuthModal
+        open={authOpen}
+        onClose={async () => {
+          setAuthOpen(false)
+          // If signup just completed (Supabase session live), funnel
+          // straight into /submit so the user lands on the FULL lane
+          // entry · removes the "I signed up, now what?" gap.
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) navigate('/submit')
+        }}
+        initialMode="signup"
+      />
     </section>
   )
 }
@@ -503,12 +519,12 @@ function extractErrorMessage(err: unknown): string | null {
 
 interface ResultCardProps {
   result:       SiteAuditResult
-  onClaim:      () => void
+  onAudition:   () => void
   onTryAnother: () => void
   onRerun:      () => void
 }
 
-function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps) {
+function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardProps) {
   const snap = result.latest_snapshot
   const rich  = snap?.rich_analysis ?? {}
   // Canonical bullet path · scout_brief.strengths / .weaknesses.
@@ -679,10 +695,12 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
 
       {/* Action row · mobile stacks full-width · sm+ rows side-by-side with
           consistent button widths. Primary gold · secondaries outline ·
-          uniform 44px height (mobile tap target standard). */}
+          uniform 44px height (mobile tap target standard). Primary CTA
+          drives the user into the FULL lane (/submit) — not a "claim"
+          flow, since URL audits have no ownership verification. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         <button
-          onClick={onClaim}
+          onClick={onAudition}
           className="h-11 px-4 text-sm font-medium tracking-wide transition-all sm:col-span-1"
           style={{
             background: 'var(--gold-500)',
@@ -696,7 +714,7 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--gold-400)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
         >
-          Claim &amp; upgrade →
+          Audition your repo →
         </button>
         <button
           onClick={onRerun}
@@ -733,11 +751,11 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
         </button>
       </div>
       <p className="mt-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
-        Walk-on result · creator unclaimed · not on the public ladder. Polish Score
-        is the URL-lane scale — it weighs Lighthouse + meta + routing only and
-        ignores repo signals (tests · CI · LICENSE · Brief · Tech) the engine can't
-        see without a repo. Sign in to claim, share, or upgrade with a repo for
-        the full audit on the public ladder.
+        Walk-on result · anonymous · not on the public ladder. Polish Score is
+        the URL-lane scale — Lighthouse + meta + routing only · repo signals
+        (tests · CI · LICENSE · Brief · Tech) aren't visible from a URL alone.
+        Want the full 50-point report and a spot on the ladder? Audition your
+        own repo from the button above.
       </p>
     </div>
   )

@@ -1860,18 +1860,16 @@ band=$(echo "$json" | jq -r .score.band)
 | 점수 게이밍 / 반복 audit | Tier B Playwright 비용은 owner verify 후만 (Fast lane 은 cheap probe 만) |
 | 도메인 owner 글로벌 거부 | `_commitshow.<domain> TXT "audit=no"` lookup → 발견 시 fetch 시작 전 거부. **gstack 류 대비 차별 채널** |
 
-### 15-E.5 Owner claim flow (V1.5+)
+### 15-E.5 Owner claim flow — 정책 A · NOT IMPLEMENTED (2026-05-09 결정)
 
-closed-source 도메인 owner 가 자기 walk-on audit 을 정식 등재로 승격하는 경로:
+**원칙**: URL 만으론 소유 verify 불가능 → claim 자체가 어뷰징 벡터. anyone-can-paste-anyone 모델에서 "claim" 버튼은 누가 먼저 누른 사람 차지가 됨. 따라서 V1 은 claim flow **빌드 안 함**.
 
-```
-1. Walk-on result 페이지에 "Claim this audition" CTA
-2. 두 verify 옵션:
-   (a) GitHub OAuth + linked repo URL                 — repo 있는 케이스 (default)
-   (b) DNS TXT `_commitshow.<domain>` = <token>      — closed-source SaaS 친화 (V2)
-3. verify 통과 → projects.creator_id 부여 · status='preview' → 'active' · ladder 진입
-4. (옵션) Brief Phase 1 입력 권장 → score_total recalc with Brief Integrity 5pt 추가
-```
+**대신**: URL audit 결과의 primary CTA = "Audition your repo →" → 회원 본인이 자기 GitHub repo 가지고 풀 lane (/submit) 으로 직접 들어감. URL audit 의 walk-on row 와 회원의 풀 audit 은 별개 entity 로 둠.
+
+V2 후보 (verify 인프라 갖춰지면):
+- DNS TXT `_commitshow.<domain>` = `<token>` 검증 후 closed-source SaaS 정식 등재
+- Stripe payment + 사이트 owner email confirmation
+- 그 전엔 walk-on row 는 익명 evidence 로만 존재 · 90일 후 auto-purge 후보 (V1.5+)
 
 ### 15-E.6 UI 분리
 
