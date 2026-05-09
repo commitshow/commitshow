@@ -2329,6 +2329,35 @@ git add -A && git commit -m "..." && git push origin main
 ✅ P5 (부분) ProjectDetail Audition/Audit 톤 · 이모지 CTA · ProjectActionFooter (fe56c41)
 ✅ P9a Library v2 spec — Intent-first + Trending list + 시간 축 (CLAUDE.md §15 · commit ac3c9d1)
 ✅ hotfix · auditionStreak ap_events → activity_point_ledger (commit c6988bc)
+
+✅ 2026-05-09 V1 Stripe Live mode + Pricing terminology lock
+       · Stripe Live transition (sk_live_/whsec_live_ secrets · osascript dialog)
+       · 첫 cs_live_ 결제 ($49 founder) succeeded → refunded clawback test 정상
+       · payment_method_types ['card'] anti-pattern 제거 (commit 4896666)
+       · Idempotency key v3 · 5-min bucket (commit f6a33fe · post-refund retry fix)
+       · 6 user-facing surface "deposit/refund" → "credit/recoupable" (commit 024558a)
+       · INTERNAL.md §1.0 terminology lock 표
+✅ 2026-05-09 §15-E URL Fast Lane 풀스택 (wave 1-6 · commits c3bede7 ~ 30e04c4)
+       · audit-site-preview Edge Function (URL fast lane backend)
+       · deep-probe Edge Function (CF Browser Rendering · post-hydration HTML)
+       · Hero URL hook (try-before-signup funnel)
+       · Polish Score 26pt scale (URL_LANE_MAX 24→26 · runtime evidence slot)
+       · og:image fallback (Tier A + Tier B UNION · repo audits 도 적용)
+       · AuditShowcase 6-card grid (3-lane proof on landing)
+       · Rate limits anon 3/IP/day · authed 10/IP/day (CF free tier 60-120/day binding)
+       · 정책 A no-claim (URL audit 은 owner verify 불가능)
+       · 정책 B no-screenshot (CF free tier 보호 · ENABLE_SCREENSHOT=false 디폴트)
+✅ 2026-05-09 Tweet hashtag bundle 일원화 (commits ded5615 · 63b9d36)
+       · #commitshow + 3 related (#vibecoding #buildinpublic #devtools) 모든 share path
+       · 4 surfaces: auto-tweet (audit + trajectory) · shareTweet · userShareTemplate · CMO M draft
+       · kind-specific extra (#encore · #shipping · #milestone) 자동 추가
+✅ 2026-05-09 §15-E gameable detail INTERNAL.md §10 분리 (commit 8b35a9a)
+       · bot-block fallback signal logic · URL_LANE_MAX breakdown · LH bucket thresholds
+       · Polish×Maturity coupling 공식 · rate limit 정확 숫자 · LH audits[] mapping
+✅ 2026-05-09 Outreach loop drafts 재생성 (CEO target_audience 룰 반영)
+       · 5 channels (claude-code · cursor · aider · MCP · lovable) drafts
+       · Web URL primary CTA · CLI 는 secondary (초보 터미널 못 침)
+       · curiosity-first hook 전략 (URL 댓글로만 drop)
 ```
 
 ### 20.2 진행 대기 (2026-05-06 audit 후 갱신 · §16.2.1 와 sync)
@@ -2376,7 +2405,14 @@ Follow-up · 작은 정리
 ---
 
 *이 파일은 프로젝트가 진행될수록 업데이트한다.*
-*마지막 업데이트: 2026-05-09 · §15-E URL Fast Lane 풀스택 (audit-site-preview · deep-probe · Hero URL hook · Polish Score 26pt scale · runtime evidence slot · og:image fallback · AuditShowcase · rate limits 3/10 · 정책 A no-claim · 정책 B no-screenshot) + §15-E gameable detail INTERNAL.md §10 으로 이전*
+*마지막 업데이트: 2026-05-09 (저녁) · **V1 Stripe Live mode 가동 + Pricing terminology lock + 첫 live charge 성공**:*
+*· Stripe Live transition · sk_live_/whsec_live_ secrets 등록 (osascript hidden-answer dialog · 채팅 평문 미노출) · 첫 cs_live_a1Qr $49 founder pricing 결제 successful → refund clawback test · webhook 양방향 정상 (succeeded → refunded → -1 credit trigger).*
+*· Stripe code hardening · stripe-best-practices skill audit 통과 · `payment_method_types ['card']` anti-pattern 제거 → dynamic payment methods 활성 (Apple Pay / Google Pay / Cash App / Naver Pay / Samsung Pay 자동 노출 · 미국 사용자엔 한국 method auto-hidden).*
+*· Idempotency key v2 → v3 · day-bucket → 5분 bucket 으로 narrow (post-refund 재결제 retry 시 dead session 캐시 collision 차단 · double-click 방지는 그대로).*
+*· Pricing terminology lock 2026-05-09 (CEO 지시 · 소비자보호 안전) · 모든 user-facing surface "refund/refundable/non-refundable/deposit/conditional refund" → "Encore credit · recoupable · non-recoupable" 일원화. Apple App Store ("App credits") + Steam Wallet + Steam Direct ("Recoupable Steam Direct fee") 패턴 차용. 6 surfaces: SubmitForm pricing breakdown · PaymentResultModal · TermsPage §7 (제목 "Fees and recoup") · RulebookPage 푸터 · create-checkout-session Stripe product description (영수증 노출) · pricing.ts type 필드 (deposit→credit). 약관 §7 본문엔 "it is not a refundable deposit" 명시 negative anchor 추가. 내부 DB/Stripe API 명칭 (charge.refunded · payments.refunded_at · awards_ledger 'refund' enum) 은 그대로 (사용자 미노출 · Stripe spec 일치 필요).*
+*· INTERNAL.md §1.0 신설 · terminology 금지/허용 표 + 근거 기록.*
+
+*이전 마지막 업데이트: 2026-05-09 (오전) · §15-E URL Fast Lane 풀스택 (audit-site-preview · deep-probe · Hero URL hook · Polish Score 26pt scale · runtime evidence slot · og:image fallback · AuditShowcase · rate limits 3/10 · 정책 A no-claim · 정책 B no-screenshot) + §15-E gameable detail INTERNAL.md §10 으로 이전*
 
 *이전 마지막 업데이트: 2026-05-07 · 토큰 사용량/효율 풀스택 V1 (audit_token_usage 테이블 · analyze-project Claude 응답 usage 캡처 · usage-ingest Edge Function · commitshow extract CLI subcommand · TokenReceiptForm UI · TokenEfficiencyPanel · /leaderboard/tokens · "Verified Claude Code" 만 V1 · vendor lock 인 Cursor/Lovable/Bolt 는 V1.5+) + Soft 404 SEO fix (NotFoundPage + sitemap canonicalization) + NEW AUDITS lane cream*
 *이전: 2026-05-07 trajectory 카드 풀스택 + ThisWeekHighlight bookend + LeaderboardPage quadrant strip*
