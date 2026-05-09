@@ -621,10 +621,13 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3 items-center">
+      {/* Action row · mobile stacks full-width · sm+ rows side-by-side with
+          consistent button widths. Primary gold · secondaries outline ·
+          uniform 44px height (mobile tap target standard). */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
         <button
           onClick={onClaim}
-          className="px-5 py-3 text-sm font-medium tracking-wide transition-all"
+          className="h-11 px-4 text-sm font-medium tracking-wide transition-all sm:col-span-1"
           style={{
             background: 'var(--gold-500)',
             color: 'var(--navy-900)',
@@ -632,36 +635,43 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
             borderRadius: '2px',
             cursor: 'pointer',
             fontFamily: 'DM Mono, monospace',
+            whiteSpace: 'nowrap',
           }}
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--gold-400)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
         >
-          Claim this audit · upgrade to full →
+          Claim &amp; upgrade →
         </button>
         <button
           onClick={onRerun}
-          className="px-5 py-3 text-sm font-mono"
+          className="h-11 px-4 text-sm font-mono transition-colors"
           style={{
             background: 'transparent',
             color: 'var(--cream)',
             border: '1px solid rgba(248,245,238,0.2)',
             borderRadius: '2px',
             cursor: 'pointer',
+            whiteSpace: 'nowrap',
           }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
           title="Force a fresh audit · skips the 7-day cache · counts against your daily IP cap"
         >
-          Re-run audit
+          Re-run
         </button>
         <button
           onClick={onTryAnother}
-          className="px-5 py-3 text-sm font-mono"
+          className="h-11 px-4 text-sm font-mono transition-colors"
           style={{
             background: 'transparent',
             color: 'var(--cream)',
             border: '1px solid rgba(248,245,238,0.2)',
             borderRadius: '2px',
             cursor: 'pointer',
+            whiteSpace: 'nowrap',
           }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
         >
           Try another URL
         </button>
