@@ -311,12 +311,21 @@ export function ProjectDetailPage() {
 
   // §15-E.6 wave 6 · hero-image policy
   //   1. owner-set thumbnail wins
-  //   2. else fall back to deep_probe.meta_tags.og_image_url (URL fast lane)
+  //   2. fall back to scraped og:image URL · two sources merged:
+  //        a) Tier A inspectCompleteness.og_image_url (always runs · repo audits get this)
+  //        b) Tier B deep_probe.meta_tags.og_image_url (URL fast lane only)
+  //      Tier B preferred when both exist (sees post-hydration injected tags)
   //   3. for WALK-ON PREVIEW · UNCLAIMED with no image at all → collapse
-  //      the column (avoid "NO IMAGE" empty box on anonymous walk-ons)
+  //      column (avoid "NO IMAGE" empty box on anonymous walk-ons)
   //   4. owned projects with no image still show placeholder (owner UX)
   const heroImageDecision = useMemo(() => {
-    const ogImage   = (snapshotResult?.rich as { deep_probe?: { meta_tags?: { og_image_url?: string | null } } } | null)?.deep_probe?.meta_tags?.og_image_url ?? null
+    const richTyped = snapshotResult?.rich as {
+      deep_probe?:           { meta_tags?: { og_image_url?: string | null } }
+      completeness_signals?: { og_image_url?: string | null }
+    } | null
+    const ogTierB   = richTyped?.deep_probe?.meta_tags?.og_image_url ?? null
+    const ogTierA   = richTyped?.completeness_signals?.og_image_url ?? null
+    const ogImage   = ogTierB || ogTierA || null
     const heroImage = project?.thumbnail_url || ogImage || null
     const isWalkOnUnclaimed = project?.status === 'preview' && !project?.creator_id
     const hideImageColumn = !heroImage && !!isWalkOnUnclaimed

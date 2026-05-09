@@ -2386,6 +2386,10 @@ interface CompletenessSignals {
   score:             number     // 0-5 derived for Claude evidence
   filled:            number     // raw count of present signals · 0-10
   of:                number     // total checks · 10
+  // §15-E.6 wave 6 · resolved og:image URL · used as thumbnail fallback for
+  // BOTH repo audits and URL fast lane (Tier A only call · cheap regex
+  // on the already-fetched head HTML · no extra fetch).
+  og_image_url:      string | null
 }
 
 async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
@@ -2396,6 +2400,7 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
     has_theme_color: false, has_favicon: false, has_canonical: false,
     has_meta_desc: false,
     score: 0, filled: 0, of: 10,
+    og_image_url: null,
   }
   if (!url) return blank
   try {
@@ -2442,6 +2447,32 @@ async function inspectCompleteness(url: string): Promise<CompletenessSignals> {
       has_canonical:      has(/<link\s+[^>]*rel\s*=\s*["']canonical["']/i),
       has_meta_desc:      has(/<meta\s+[^>]*name\s*=\s*["']description["']/i),
       score: 0, filled: 0, of: 10,
+      og_image_url: null,
+    }
+
+    // §15-E.6 wave 6 · og:image URL extraction (Tier A · free · same head HTML)
+    // Same fallback chain as Tier B: og:image:url → og:image → twitter:image.
+    // Resolves relative URLs against the page URL so consumers (ProjectDetail
+    // hero thumbnail) can use the result directly.
+    const ogPatterns: RegExp[] = [
+      /<meta\s+(?:[^>]*\s+)?property=["']og:image:url["'][^>]*\s+content=["']([^"']+)["']/i,
+      /<meta\s+(?:[^>]*\s+)?content=["']([^"']+)["'][^>]*\s+property=["']og:image:url["']/i,
+      /<meta\s+(?:[^>]*\s+)?property=["']og:image["'][^>]*\s+content=["']([^"']+)["']/i,
+      /<meta\s+(?:[^>]*\s+)?content=["']([^"']+)["'][^>]*\s+property=["']og:image["']/i,
+      /<meta\s+(?:[^>]*\s+)?name=["']twitter:image["'][^>]*\s+content=["']([^"']+)["']/i,
+      /<meta\s+(?:[^>]*\s+)?content=["']([^"']+)["'][^>]*\s+name=["']twitter:image["']/i,
+    ]
+    for (const re of ogPatterns) {
+      const m = head.match(re)
+      if (m && m[1]) {
+        try {
+          const resolved = new URL(m[1], url).toString()
+          if (/^https?:\/\//i.test(resolved)) {
+            signals.og_image_url = resolved
+            break
+          }
+        } catch { /* malformed src · try next pattern */ }
+      }
     }
 
     // Weighted score · the social-share signals carry more weight because they
@@ -4017,6 +4048,7 @@ Deno.serve(async (req) => {
       has_twitter_card: false, has_apple_touch: false, has_manifest: false,
       has_theme_color: false, has_favicon: false, has_canonical: false,
       has_meta_desc: false,
+      og_image_url: null,
       score: 0, filled: 0, of: 10,
     }),
     project.live_url ? inspectSecurityHeaders(project.live_url) : Promise.resolve({
@@ -4152,11 +4184,16 @@ Deno.serve(async (req) => {
                  + (has_twitter_card?1:0) + (has_canonical?1:0) + (has_meta_desc?1:0)
                  + (has_apple_touch?1:0) + (has_manifest?1:0) + (has_theme_color?1:0)
                  + (has_favicon?1:0)
+    // og_image_url precedence · Tier B (real Chromium) > Tier A static
+    // fetch · because deep_probe sees post-hydration meta tags injected
+    // by next-seo etc. that the static fetch may miss.
+    const og_image_url = deepProbe.meta_tags.og_image_url || completeness.og_image_url || null
     return {
       fetched: true,
       has_og_title, has_og_image, has_og_description, has_twitter_card,
       has_apple_touch, has_manifest, has_theme_color, has_favicon,
       has_canonical, has_meta_desc,
+      og_image_url,
       score:  Math.round((filled / 10) * 5),                           // 0-5 score on the canonical /10 scale
       filled,
       of:     10,
