@@ -2314,66 +2314,20 @@ async function callDeepProbeOne(url: string): Promise<DeepProbeResult> {
   }
 }
 
-// §15-E.3 multi-page deep probe · homepage + 2 priority paths in parallel.
-// Aggregates into one DeepProbeResult-shaped envelope so the rest of the
-// pipeline doesn't need to know about the multi-page expansion.
-//   · meta_tags = UNION across pages (any page with og:image counts)
-//   · proven_reachable = OR across pages (any page renders → site is alive)
-//   · post_hydration_text_length = SUM (rough corpus size)
-//   · hydration_framework = first non-null
-// Cost: 3 × $0.09 / 1k = $0.27 per audit max. Trivial.
+// §15-E.3 deep probe · homepage only (2026-05-09 reverted from multi-page
+// to fit CF Browser Rendering free-tier 10/min cap). The deep-probe
+// Edge Function makes /content + /screenshot in parallel = 2 CF calls
+// per audit. With multi-page (3 /content × N pages + 1 /screenshot) we
+// hit CF rate limit "cf_429: Rate limit exceeded" within 2-3 audits/min.
+// 2-call sustainable: 5 audits/min on free tier.
+//
+// Trade-off: lose meta UNION across /pricing /about. For most sites this
+// is fine — homepage meta + Tier A static fetch UNION already covers
+// the typical case. Multi-page can return when CF is upgraded to paid
+// (Workers Paid plan has 6× higher Browser Rendering quota).
 async function callDeepProbe(homepageUrl: string): Promise<DeepProbeResult> {
   if (!homepageUrl) return DEEP_PROBE_BLANK
-  let origin: string
-  try { origin = new URL(homepageUrl).origin }
-  catch { return DEEP_PROBE_BLANK }
-
-  // Priority paths · pick 2 most likely to carry rich meta. Order matches
-  // typical SaaS layout (pricing/about land OG cards · /docs has h1/h2).
-  const EXTRA_PATHS = ['/pricing', '/about']
-  const targets = [homepageUrl, ...EXTRA_PATHS.map(p => `${origin}${p}`)]
-
-  const results = await Promise.all(targets.map(t =>
-    callDeepProbeOne(t).catch(() => DEEP_PROBE_BLANK)
-  ))
-
-  // Aggregate · UNION meta_tags · OR proven_reachable · sum text length ·
-  // first non-null hydration_framework. via = 'cf-browser-rendering' if
-  // ANY page got through; 'failed' if all failed; 'skipped' otherwise.
-  const anyFetched   = results.some(r => r.fetched)
-  const anyReachable = results.some(r => r.proven_reachable)
-  const firstFw      = results.find(r => r.hydration_framework)?.hydration_framework ?? null
-  const allMarkers   = Array.from(new Set(results.flatMap(r => r.hydration_markers_found)))
-  const totalText    = results.reduce((s, r) => s + (r.post_hydration_text_length || 0), 0)
-  const totalHtml    = results.reduce((s, r) => s + (r.html_length              || 0), 0)
-  const m = (sel: (m: DeepProbeMetaTags) => boolean) => results.some(r => sel(r.meta_tags))
-  const firstH1Text  = results.map(r => r.meta_tags.h1_text).find(t => !!t) ?? null
-  // Screenshot · use the homepage capture (results[0]) since /pricing and
-  // /about screenshots aren't surfaced in the result card. Falls back to
-  // first non-null in case homepage screenshot failed but a route worked.
-  const screenshotUrl = results.map(r => r.screenshot_url).find(u => !!u) ?? null
-
-  return {
-    fetched:                    anyFetched,
-    via:                        anyFetched ? 'cf-browser-rendering' : 'failed',
-    html_length:                totalHtml,
-    post_hydration_text_length: totalText,
-    hydration_framework:        firstFw,
-    hydration_markers_found:    allMarkers,
-    meta_tags: {
-      has_og_title:       m(t => t.has_og_title),
-      has_og_image:       m(t => t.has_og_image),
-      has_og_description: m(t => t.has_og_description),
-      has_twitter_card:   m(t => t.has_twitter_card),
-      has_canonical:      m(t => t.has_canonical),
-      has_meta_desc:      m(t => t.has_meta_desc),
-      has_h1:             m(t => t.has_h1),
-      h1_text:            firstH1Text,
-    },
-    proven_reachable:           anyReachable,
-    screenshot_url:             screenshotUrl,
-    error:                      anyFetched ? null : (results[0]?.error ?? 'all_pages_failed'),
-  }
+  return callDeepProbeOne(homepageUrl)
 }
 
 async function inspectMultiRoutes(baseUrl: string): Promise<RoutesHealth> {

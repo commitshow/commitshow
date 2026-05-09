@@ -149,7 +149,7 @@ function plainTextLength(html: string): number {
 // endpoint. Returns PNG bytes or null on failure. Tight 12s budget (we're
 // already inside a parallel block with /content). Same anti-SSRF caller
 // validates URL before invoking us.
-async function callCfScreenshot(url: string, accountId: string, token: string): Promise<Uint8Array | null> {
+async function callCfScreenshot(url: string, accountId: string, token: string): Promise<{ ok: true; png: Uint8Array } | { ok: false; reason: string }> {
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 12_000)
@@ -158,6 +158,7 @@ async function callCfScreenshot(url: string, accountId: string, token: string): 
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type':  'application/json',
+        'Accept':        'image/png',
       },
       body: JSON.stringify({
         url,
@@ -168,13 +169,22 @@ async function callCfScreenshot(url: string, accountId: string, token: string): 
       signal: ctrl.signal,
     })
     clearTimeout(timer)
-    if (!res.ok) return null
-    // CF returns the PNG as a binary body when accept defaults to image
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      return { ok: false, reason: `cf_${res.status}: ${body.slice(0, 200)}` }
+    }
+    const ct = res.headers.get('content-type') ?? ''
+    if (!ct.startsWith('image/')) {
+      const body = await res.text().catch(() => '')
+      return { ok: false, reason: `bad_ct ${ct}: ${body.slice(0, 200)}` }
+    }
     const buf = new Uint8Array(await res.arrayBuffer())
-    if (buf.byteLength < 256 || buf.byteLength > 5_000_000) return null    // sanity (256B min, 5MB cap)
-    return buf
-  } catch {
-    return null
+    if (buf.byteLength < 256 || buf.byteLength > 5_000_000) {
+      return { ok: false, reason: `suspicious_size ${buf.byteLength}` }
+    }
+    return { ok: true, png: buf }
+  } catch (e) {
+    return { ok: false, reason: `exception: ${(e as Error)?.message ?? String(e)}`.slice(0, 200) }
   }
 }
 
@@ -283,20 +293,30 @@ Deno.serve(async (req) => {
 
   const [cf, png] = await Promise.all([
     callCfBrowserRendering(body.url, accountId, cfToken),
-    wantScreenshot ? callCfScreenshot(body.url, accountId, cfToken) : Promise.resolve(null),
+    wantScreenshot ? callCfScreenshot(body.url, accountId, cfToken) : Promise.resolve(null as { ok: true; png: Uint8Array } | { ok: false; reason: string } | null),
   ])
   if (!cf.ok) {
     return json({ ...BLANK, via: 'failed', error: cf.error })
   }
 
   let screenshotUrl: string | null = null
-  if (png && wantScreenshot) {
-    screenshotUrl = await uploadScreenshotToStorage(supabaseUrl, serviceKey, host, png)
+  let screenshotError: string | null = null
+  if (wantScreenshot) {
+    if (png && 'ok' in png && png.ok) {
+      screenshotUrl = await uploadScreenshotToStorage(supabaseUrl, serviceKey, host, png.png)
+      if (!screenshotUrl) screenshotError = 'storage_upload_failed'
+    } else if (png && 'reason' in png) {
+      screenshotError = png.reason
+    } else {
+      screenshotError = 'no_png_returned'
+    }
+  } else {
+    screenshotError = 'storage_disabled'
   }
 
   const html = cf.html
   const { framework, markers } = detectHydrationFramework(html)
-  const result: DeepProbeResult = {
+  const result: DeepProbeResult & { screenshot_error?: string | null } = {
     fetched:                    true,
     via:                       'cf-browser-rendering',
     html_length:                html.length,
@@ -306,6 +326,7 @@ Deno.serve(async (req) => {
     meta_tags:                  extractMetaTags(html),
     proven_reachable:           true,
     screenshot_url:             screenshotUrl,
+    screenshot_error:           screenshotError,    // surface to caller for debug · null on success
     error:                      null,
   }
   return json(result)
