@@ -29,6 +29,11 @@ interface SnapshotRich {
     weaknesses?: Array<{ axis?: string | null; bullet?: string }>
   }
   routes_health?: { probed: number; reachable: number; broken: number; reachable_rate: number; broken_paths?: string[] }
+  deep_probe?: {
+    screenshot_url?: string | null
+    proven_reachable?: boolean
+    hydration_framework?: string | null
+  }
 }
 
 interface SiteAuditResult {
@@ -89,6 +94,22 @@ export function HeroUrlHook() {
     if (stepTimer.current)     window.clearInterval(stepTimer.current)
     if (engineTimer.current)   window.clearInterval(engineTimer.current)
     if (reassureTimer.current) window.clearInterval(reassureTimer.current)
+  }, [])
+
+  // Cold-load auto-scroll · when the page loads with #url-hook in the URL
+  // (e.g., from /submit's "Just paste a URL" card), scroll the section into
+  // view + focus the input so the user lands ready to type.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.location.hash !== '#url-hook') return
+    const t = window.setTimeout(() => {
+      const el = document.getElementById('url-hook')
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      // Try to focus the URL input (idle phase only).
+      const input = document.querySelector('#url-hook input[type="text"]') as HTMLInputElement | null
+      input?.focus()
+    }, 80)
+    return () => window.clearTimeout(t)
   }, [])
 
   // Two-phase progress · always-moving so it never looks frozen:
@@ -288,7 +309,8 @@ export function HeroUrlHook() {
 
   return (
     <section
-      className="relative z-10 py-20 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40"
+      id="url-hook"
+      className="relative z-10 py-20 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40 scroll-mt-20"
       style={{
         borderTop: '1px solid rgba(240,192,64,0.08)',
         background: 'rgba(15,32,64,0.35)',
@@ -499,6 +521,7 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
   const concernsRaw = (rich.scout_brief?.weaknesses ?? []) as Array<{ axis?: string | null; bullet?: string }>
   const concerns    = concernsRaw.filter(c => !c.bullet || !REPO_ABSENCE_PATTERNS.test(c.bullet)).slice(0, 2)
   const routes      = rich.routes_health
+  const screenshot  = rich.deep_probe?.screenshot_url ?? null
 
   // URL Polish Score · §15-E.3 separate scale.
   // The full /50 audit pillar can't be the denominator for URL-only audits
@@ -506,14 +529,16 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
   // STRUCTURALLY UNATTAINABLE without a repo. Reporting "anthropic.com 26 / 100"
   // sounds awful when it actually means "URL signals are strong, repo signals
   // unseen". Calibrate against bot-fight-realistic achievable signals:
-  //   · Lighthouse 20  — always fillable (PageSpeed = Google's infra)
-  //   · Completeness 2 — meta tags · recovered via Tier B even when bot-walled
-  //   · Responsive 2   — derived from LH perf
+  //   · Lighthouse 20      — always fillable (PageSpeed = Google's infra)
+  //   · Completeness 2     — meta tags · recovered via Tier B even when bot-walled
+  //   · Responsive 2       — derived from LH perf
+  //   · Runtime evidence 2 — console_clean + network_clean (mined from LH audits)
   //   · (Live URL Health 5 often 0 due to bot fight — excluded so well-polished
   //      SaaS aren't penalized for having bot protection)
-  // Total: 24. Sites with reachable homepage probe naturally hit the >100
-  // ceiling and clamp · this is intentional · we don't dock for over-delivery.
-  const URL_LANE_MAX = 24
+  // Total: 26 (was 24 · wave 5 added runtime evidence). Sites with reachable
+  // homepage probe naturally hit the >100 ceiling and clamp · intentional ·
+  // no docking for over-delivery.
+  const URL_LANE_MAX = 26
   const autoPts = snap?.score_auto ?? result.project.score_auto ?? 0
   const polishScore = Math.max(0, Math.min(100, Math.round((autoPts / URL_LANE_MAX) * 100)))
 
@@ -611,6 +636,37 @@ function ResultCard({ result, onClaim, onTryAnother, onRerun }: ResultCardProps)
           50-point audit + ladder ranking + Encore eligibility at score ≥ 85.
         </p>
       </div>
+
+      {/* Screenshot · §15-E.3 wave 5 · captured by CF Browser Rendering ·
+          stored in audit-screenshots bucket · shown above stats so it's the
+          first proof users see ("yes the engine actually rendered it"). */}
+      {screenshot && (
+        <div
+          className="mb-5 overflow-hidden"
+          style={{
+            border: '1px solid rgba(248,245,238,0.12)',
+            borderRadius: '2px',
+            background: 'rgba(6,12,26,0.4)',
+          }}
+        >
+          <img
+            src={screenshot}
+            alt={`${result.project.project_name} · audited render`}
+            loading="lazy"
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 'auto',
+              maxHeight: 360,
+              objectFit: 'cover',
+              objectPosition: 'top',
+            }}
+          />
+          <div className="px-3 py-1.5 font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(248,245,238,0.06)' }}>
+            CAPTURED BY ENGINE · 1280×720 · POST-HYDRATION
+          </div>
+        </div>
+      )}
 
       {routes && routes.probed > 0 && (
         <div className="mb-6 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>

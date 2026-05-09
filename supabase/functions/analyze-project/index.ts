@@ -42,6 +42,16 @@ interface LighthouseScores {
   accessibility: number
   bestPractices: number
   seo: number
+  // §15-E.3 Tier B mining · pulled from Lighthouse audits[] (free, already
+  // fetched). null = audit didn't run or wasn't applicable. PageSpeed
+  // already runs Chromium against the URL — these are signals we were
+  // throwing away by only consuming the 4 category scores.
+  console_errors_count?:   number | null    // # of `console.error` events captured during the run
+  network_failures_count?: number | null    // # of resources with status >= 400 (or no response)
+  uses_https?:             boolean | null   // page served over HTTPS
+  no_doc_write?:           boolean | null   // didn't call document.write
+  total_byte_weight_kb?:   number | null    // total page transfer size
+  dom_size?:               number | null    // # of DOM elements (>1500 = warning territory)
 }
 
 const LH_NOT_ASSESSED = -1
@@ -49,6 +59,22 @@ const LH_NOT_ASSESSED = -1
 function lhScoreOrNA(raw: number | null | undefined): number {
   if (raw == null) return LH_NOT_ASSESSED
   return Math.round(raw * 100)
+}
+
+// Lighthouse audit results have a `score` (0-1 or null) and `details`.
+// We use score==1 as "clean" for boolean audits and details.items.length
+// as a count for items-style audits (errors-in-console etc.).
+function lhAuditPasses(audit: any): boolean | null {
+  if (!audit) return null
+  if (audit.score == null) return null
+  return audit.score >= 0.9
+}
+
+function lhAuditItemCount(audit: any): number | null {
+  if (!audit) return null
+  const items = audit.details?.items
+  if (!Array.isArray(items)) return null
+  return items.length
 }
 
 async function runLighthouse(url: string, strategy: 'mobile' | 'desktop' = 'mobile'): Promise<LighthouseScores> {
@@ -73,16 +99,45 @@ async function runLighthouse(url: string, strategy: 'mobile' | 'desktop' = 'mobi
     const data = await res.json()
     const c = data.lighthouseResult?.categories
     if (!c) throw new Error('No categories')
+    // §15-E.3 mine the audits[] for runtime-evidence signals (free · CF
+    // Chromium already ran the page · these are byproducts of the same call).
+    const a = data.lighthouseResult?.audits ?? {}
+    const consoleErrCount  = lhAuditItemCount(a['errors-in-console'])
+    const netFailuresCount = lhAuditItemCount(a['network-requests']) != null
+      ? (Array.isArray(a['network-requests']?.details?.items)
+          ? a['network-requests'].details.items.filter((it: any) =>
+              typeof it?.statusCode === 'number' && (it.statusCode >= 400 || it.statusCode === 0)
+            ).length
+          : null)
+      : null
+    const totalByteKb = a['total-byte-weight']?.numericValue != null
+      ? Math.round(a['total-byte-weight'].numericValue / 1024)
+      : null
+    const domSize = a['dom-size']?.numericValue != null
+      ? Math.round(a['dom-size'].numericValue)
+      : null
     return {
-      performance:   lhScoreOrNA(c.performance?.score),
-      accessibility: lhScoreOrNA(c.accessibility?.score),
-      bestPractices: lhScoreOrNA(c['best-practices']?.score),
-      seo:           lhScoreOrNA(c.seo?.score),
+      performance:           lhScoreOrNA(c.performance?.score),
+      accessibility:         lhScoreOrNA(c.accessibility?.score),
+      bestPractices:         lhScoreOrNA(c['best-practices']?.score),
+      seo:                   lhScoreOrNA(c.seo?.score),
+      console_errors_count:  consoleErrCount,
+      network_failures_count: netFailuresCount,
+      uses_https:            lhAuditPasses(a['is-on-https']),
+      no_doc_write:          lhAuditPasses(a['no-document-write']),
+      total_byte_weight_kb:  totalByteKb,
+      dom_size:              domSize,
     }
   } catch (e) {
     console.error('runLighthouse failed', e)
     // Network/API failure — everything unassessed (not 0)
-    return { performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED, bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED }
+    return {
+      performance: LH_NOT_ASSESSED, accessibility: LH_NOT_ASSESSED,
+      bestPractices: LH_NOT_ASSESSED, seo: LH_NOT_ASSESSED,
+      console_errors_count: null, network_failures_count: null,
+      uses_https: null, no_doc_write: null,
+      total_byte_weight_kb: null, dom_size: null,
+    }
   }
 }
 
@@ -2216,6 +2271,7 @@ interface DeepProbeResult {
   hydration_markers_found:    string[]
   meta_tags:                  DeepProbeMetaTags
   proven_reachable:           boolean
+  screenshot_url:             string | null     // §15-E.3 wave 5 · uploaded to audit-screenshots bucket
   error:                      string | null
 }
 const DEEP_PROBE_BLANK: DeepProbeResult = {
@@ -2228,6 +2284,7 @@ const DEEP_PROBE_BLANK: DeepProbeResult = {
     has_h1: false, h1_text: null,
   },
   proven_reachable: false,
+  screenshot_url: null,
   error: null,
 }
 
@@ -2291,6 +2348,10 @@ async function callDeepProbe(homepageUrl: string): Promise<DeepProbeResult> {
   const totalHtml    = results.reduce((s, r) => s + (r.html_length              || 0), 0)
   const m = (sel: (m: DeepProbeMetaTags) => boolean) => results.some(r => sel(r.meta_tags))
   const firstH1Text  = results.map(r => r.meta_tags.h1_text).find(t => !!t) ?? null
+  // Screenshot · use the homepage capture (results[0]) since /pricing and
+  // /about screenshots aren't surfaced in the result card. Falls back to
+  // first non-null in case homepage screenshot failed but a route worked.
+  const screenshotUrl = results.map(r => r.screenshot_url).find(u => !!u) ?? null
 
   return {
     fetched:                    anyFetched,
@@ -2310,6 +2371,7 @@ async function callDeepProbe(homepageUrl: string): Promise<DeepProbeResult> {
       h1_text:            firstH1Text,
     },
     proven_reachable:           anyReachable,
+    screenshot_url:             screenshotUrl,
     error:                      anyFetched ? null : (results[0]?.error ?? 'all_pages_failed'),
   }
 }
@@ -3188,6 +3250,20 @@ OUTPUT RULES
                             already reflects it. If reachable_rate >= 0.8 with
                             sitemap_present, it's a STRENGTH-worthy signal
                             ("multi-route routing intact").
+       runtime_evidence   — §15-E.3 wave 5 · mined from Lighthouse audits[].
+                            Catches the "looks polished but console is on fire"
+                            failure mode static probes can't see.
+                            Fields: console_clean (zero console.error events) ·
+                            network_clean (no 4xx/5xx resource) · console_errors_count ·
+                            network_failures_count · uses_https · no_doc_write ·
+                            total_byte_weight_kb · dom_size. ALREADY priced into
+                            scoring_so_far.auto_50_breakdown.runtime_evidence_pts (0-2).
+                            Use console_errors_count > 0 OR network_failures_count > 0
+                            as a CONCERN bullet ("12 console errors fired during
+                            page load · uncaught TypeError in /assets/main.js"). Use
+                            both clean as a STRENGTH bullet ("zero console errors,
+                            no network failures during render"). Don't add a separate
+                            minus chip — the slot already reflects it.
        deep_probe         — Tier B (§15-E.3) Playwright via Cloudflare Browser
                             Rendering · post-hydration HTML + hydration framework
                             detection + runtime meta tags. Surfaces SPA content
@@ -4133,6 +4209,17 @@ Deno.serve(async (req) => {
   })() : completeness
   const completenessRawPts = scoreCompleteness(mergedCompleteness)               //  0-2
 
+  // ── Runtime evidence slot · §15-E.3 wave 5 ──
+  // Mined from Lighthouse audits[] (free · already fetched). Catches the
+  // "looks polished but console is on fire / API calls 500" failure mode
+  // that static probes can't detect. 0-2pt · only fires for app form with
+  // a successful Lighthouse run · null counts treated as "not assessed"
+  // (no penalty, just no bonus). Folded into Production Maturity slot
+  // for app form so existing 12pt cap doesn't shift.
+  const consoleClean = lh.console_errors_count != null && lh.console_errors_count <= 0
+  const networkClean = lh.network_failures_count != null && lh.network_failures_count <= 0
+  const runtimeEvidencePts = (consoleClean ? 1 : 0) + (networkClean ? 1 : 0)   // 0-2
+
   // ── Non-web equivalent slots (for library/cli/scaffold/mcp) ──
   // Test depth · 0-8 (replaces ~Lighthouse Performance 8pt for libs)
   const testFiles      = gh.signals.test_files
@@ -4345,9 +4432,9 @@ Deno.serve(async (req) => {
     // (these are still polish slots), with SaaS-rescaled values.
     const polishSaas  = lhSaas + healthSaas + completenessPts + tech.pts
     const scaledSaas  = Math.round(polishSaas * maturityFactor)
-    auto_hard = scaledSaas + matSaas + hygSaas + briefEffective + backendSignalsPts
+    auto_hard = scaledSaas + matSaas + hygSaas + briefEffective + backendSignalsPts + runtimeEvidencePts
   } else {
-    auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefEffective
+    auto_hard = scaledPolish + maturity.pts + hygiene.pts + briefEffective + runtimeEvidencePts
   }
   const auto_soft = ecosystem.pts + activity.pts + elite.pts
   const score_auto = Math.max(0, Math.min(65, auto_hard + auto_soft + env_penalty))
@@ -4432,7 +4519,18 @@ Deno.serve(async (req) => {
         brief_substitute:     briefSubst,              //  describes which substitute pts applied if any
         health_pts:           healthPts,               //  0-5 (app: live URL · lib/cli: npm publish + reach)
         env_penalty:          env_penalty,             //  -5 if .env committed
-        hard_subtotal:        auto_hard,               //  cap 52
+        runtime_evidence_pts: runtimeEvidencePts,      //  0-2 console_clean + network_clean (from Lighthouse audits[])
+        runtime_evidence: {
+          console_clean:           consoleClean,
+          network_clean:           networkClean,
+          console_errors_count:    lh.console_errors_count ?? null,
+          network_failures_count:  lh.network_failures_count ?? null,
+          uses_https:              lh.uses_https ?? null,
+          no_doc_write:            lh.no_doc_write ?? null,
+          total_byte_weight_kb:    lh.total_byte_weight_kb ?? null,
+          dom_size:                lh.dom_size ?? null,
+        },
+        hard_subtotal:        auto_hard,               //  cap 54 (was 52 + runtime evidence 2)
         soft: {
           ecosystem:          ecosystem,               //  +0-3 stars · contributors · npm dl · releases
           activity:           activity,                //  +0-2 recent commit · momentum

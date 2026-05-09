@@ -70,6 +70,12 @@ interface DeepProbeResult {
   // Real browser proved the page is reachable (200 + rendered) — used as
   // a strong proof of life when the basic Tier A fetch got bot-blocked.
   proven_reachable:         boolean
+  // §15-E.3 wave 5 · screenshot · 1280x720 PNG uploaded to Supabase Storage
+  // when CF Browser Rendering /screenshot endpoint succeeds. Surfaced in
+  // the Hero result card + project detail page as visual evidence. Falls
+  // through to null when the screenshot endpoint fails or storage upload
+  // errors — never fatal to the audit.
+  screenshot_url:           string | null
   error:                    string | null
 }
 
@@ -83,6 +89,7 @@ const BLANK: DeepProbeResult = {
     has_h1: false, h1_text: null,
   },
   proven_reachable: false,
+  screenshot_url: null,
   error: null,
 }
 
@@ -136,6 +143,72 @@ function plainTextLength(html: string): number {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
   return stripped.trim().length
+}
+
+// §15-E.3 wave 5 · screenshot capture via CF Browser Rendering /screenshot
+// endpoint. Returns PNG bytes or null on failure. Tight 12s budget (we're
+// already inside a parallel block with /content). Same anti-SSRF caller
+// validates URL before invoking us.
+async function callCfScreenshot(url: string, accountId: string, token: string): Promise<Uint8Array | null> {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 12_000)
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/screenshot`, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        viewport: { width: 1280, height: 720 },
+        gotoOptions: { waitUntil: 'load', timeout: 10_000 },
+        screenshotOptions: { fullPage: false, type: 'png', omitBackground: false },
+      }),
+      signal: ctrl.signal,
+    })
+    clearTimeout(timer)
+    if (!res.ok) return null
+    // CF returns the PNG as a binary body when accept defaults to image
+    const buf = new Uint8Array(await res.arrayBuffer())
+    if (buf.byteLength < 256 || buf.byteLength > 5_000_000) return null    // sanity (256B min, 5MB cap)
+    return buf
+  } catch {
+    return null
+  }
+}
+
+// Hash for stable filename · keeps dedupe semantics (same URL → same path
+// so a re-audit overwrites instead of accumulating). djb2 alphanumeric.
+function djb2Path(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
+async function uploadScreenshotToStorage(supabaseUrl: string, serviceKey: string, host: string, png: Uint8Array): Promise<string | null> {
+  const path = `${djb2Path(host)}/${host.replace(/[^a-z0-9.-]/gi, '_')}.png`
+  try {
+    const res = await fetch(`${supabaseUrl}/storage/v1/object/audit-screenshots/${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'apikey':        serviceKey,
+        'Content-Type':  'image/png',
+        'x-upsert':      'true',                            // overwrite on re-audit
+        'Cache-Control': 'public, max-age=86400',
+      },
+      body: png,
+    })
+    if (!res.ok) {
+      console.error('storage upload failed', res.status, (await res.text()).slice(0, 200))
+      return null
+    }
+    return `${supabaseUrl}/storage/v1/object/public/audit-screenshots/${path}`
+  } catch (e) {
+    console.error('storage upload exception', (e as Error)?.message)
+    return null
+  }
 }
 
 async function callCfBrowserRendering(url: string, accountId: string, token: string): Promise<{ ok: true; html: string } | { ok: false; error: string }> {
@@ -201,9 +274,24 @@ Deno.serve(async (req) => {
     return json({ ...BLANK, error: 'cf_credentials_missing' })
   }
 
-  const cf = await callCfBrowserRendering(body.url, accountId, cfToken)
+  // /content + /screenshot in parallel · two CF API calls but both are
+  // necessary (REST API is stateless · no way to share a session). Total
+  // wall ~14s max since they share the 14s and 12s timeouts respectively.
+  const supabaseUrl  = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const wantScreenshot = !!supabaseUrl && !!serviceKey
+
+  const [cf, png] = await Promise.all([
+    callCfBrowserRendering(body.url, accountId, cfToken),
+    wantScreenshot ? callCfScreenshot(body.url, accountId, cfToken) : Promise.resolve(null),
+  ])
   if (!cf.ok) {
     return json({ ...BLANK, via: 'failed', error: cf.error })
+  }
+
+  let screenshotUrl: string | null = null
+  if (png && wantScreenshot) {
+    screenshotUrl = await uploadScreenshotToStorage(supabaseUrl, serviceKey, host, png)
   }
 
   const html = cf.html
@@ -217,6 +305,7 @@ Deno.serve(async (req) => {
     hydration_markers_found:    markers,
     meta_tags:                  extractMetaTags(html),
     proven_reachable:           true,
+    screenshot_url:             screenshotUrl,
     error:                      null,
   }
   return json(result)

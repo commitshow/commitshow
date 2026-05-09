@@ -56,7 +56,18 @@ export function SubmitPage() {
 
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => {
+              // Land on the URL hook section · scroll-mt-20 on the section
+              // gives breathing room under the fixed Nav. The hash also lets
+              // users back-button into the form's previous state.
+              navigate('/#url-hook')
+              // Defer the scroll to next tick so navigate finishes mounting
+              // the section before we try to align it.
+              setTimeout(() => {
+                const el = document.getElementById('url-hook')
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }, 50)
+            }}
             className="p-4 text-left transition-all"
             style={{
               background: 'transparent',
