@@ -397,10 +397,25 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
           </div>
         </div>
         <div className="flex-shrink-0 flex items-baseline gap-1">
-          <span className="font-display font-bold text-2xl tabular-nums" style={{ color: 'var(--gold-500)' }}>
-            {row.score_total}
-          </span>
-          <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/100</span>
+          {/* §re-audit privacy · round-1 only audits hide the score on
+              public listings · reveals on the second analysis. Keeps
+              creators from being judged on the unflattering first run. */}
+          {(row.audit_count ?? 0) <= 1 ? (
+            <span
+              className="font-mono text-[11px] tracking-widest"
+              style={{ color: 'var(--text-muted)' }}
+              title="Score is hidden until the creator re-audits"
+            >
+              ROUND 1
+            </span>
+          ) : (
+            <>
+              <span className="font-display font-bold text-2xl tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                {row.score_total}
+              </span>
+              <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/100</span>
+            </>
+          )}
         </div>
       </button>
     </li>

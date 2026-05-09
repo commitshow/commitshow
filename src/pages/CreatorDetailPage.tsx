@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 import { supabase, PUBLIC_MEMBER_COLUMNS, type Member, type CreatorGrade } from '../lib/supabase'
 import { isEncoreScore, fetchAllEncoresByProjectIds, type EncoreRow, type EncoreKind } from '../lib/encore'
 import { EncoreBadge } from '../components/EncoreBadge'
@@ -46,6 +47,11 @@ interface CreatorMember extends Member {
 
 export function CreatorDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  // §re-audit privacy · viewer is the project owner only when the
+  // signed-in user matches the creator whose profile is being viewed.
+  // If a non-owner views, scores on round-1 audits get hidden.
+  const isOwnProfile = !!user?.id && user.id === id
   const [member, setMember]     = useState<CreatorMember | null>(null)
   const [products, setProducts] = useState<ProductRow[]>([])
   const [encoresByProject, setEncoresByProject] = useState<Map<string, EncoreRow[]>>(new Map())
@@ -158,7 +164,7 @@ export function CreatorDetailPage() {
               ) : (
                 <div className="grid gap-2 md:grid-cols-2">
                   {products.map(p => (
-                    <ProductCard key={p.id} p={p} encores={encoresByProject.get(p.id) ?? []} />
+                    <ProductCard key={p.id} p={p} encores={encoresByProject.get(p.id) ?? []} hideRound1Score={!isOwnProfile} />
                   ))}
                 </div>
               )}
@@ -186,8 +192,10 @@ function Stat({ label, value, hint, accent }: { label: string; value: number | s
   )
 }
 
-function ProductCard({ p, encores }: { p: ProductRow; encores: EncoreRow[] }) {
-  const isEncore = isEncoreScore(p.score_total) || encores.length > 0
+function ProductCard({ p, encores, hideRound1Score }: { p: ProductRow; encores: EncoreRow[]; hideRound1Score?: boolean }) {
+  const isRound1   = (p.audit_count ?? 0) <= 1
+  const scoreHidden = !!hideRound1Score && isRound1
+  const isEncore   = !scoreHidden && (isEncoreScore(p.score_total) || encores.length > 0)
   return (
     <Link
       to={`/projects/${p.id}`}
@@ -217,13 +225,23 @@ function ProductCard({ p, encores }: { p: ProductRow; encores: EncoreRow[] }) {
                   renders production when score≥85 but no row exists yet
                   (e.g. trigger lag) — shouldn't happen in steady state
                   but keeps the badge visible if it does. */}
-              {encores.length > 0
+              {!scoreHidden && (encores.length > 0
                 ? encores.map(e => <EncoreBadge key={e.kind} kind={e.kind as EncoreKind} serial={e.serial} />)
                 : isEncoreScore(p.score_total) && <EncoreBadge score={p.score_total} />
-              }
-              <span className="font-mono text-sm tabular-nums ml-1" style={{ color: isEncore ? 'var(--gold-500)' : 'var(--cream)' }}>
-                {p.score_total ?? '—'}
-              </span>
+              )}
+              {scoreHidden ? (
+                <span
+                  className="font-mono text-[10px] tracking-widest ml-1"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="Score is hidden until the creator re-audits"
+                >
+                  ROUND 1
+                </span>
+              ) : (
+                <span className="font-mono text-sm tabular-nums ml-1" style={{ color: isEncore ? 'var(--gold-500)' : 'var(--cream)' }}>
+                  {p.score_total ?? '—'}
+                </span>
+              )}
             </div>
           </div>
           {p.description && (

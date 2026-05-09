@@ -56,6 +56,7 @@ interface RawSnapshot {
     github_url:   string | null
     live_url:     string | null
     status:       string
+    audit_count:  number | null
   } | null
 }
 
@@ -177,7 +178,7 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
   // "URL fast lane" in sequence.
   const baseSelect = `
     project_id, created_at, score_total, score_auto, rich_analysis,
-    projects!inner(project_name, github_url, live_url, status)
+    projects!inner(project_name, github_url, live_url, status, audit_count)
   `
   const [platformRes, walkonRes, urlLaneRes] = await Promise.all([
     supabase
@@ -185,6 +186,9 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
       .select(baseSelect)
       .gte('score_total', SCORE_FLOOR)
       .neq('projects.status', 'preview')
+      .gte('projects.audit_count', 2)   // §re-audit privacy · round-1 only
+                                          // projects don't surface in showcase
+                                          // until creator re-audits
       .order('created_at', { ascending: false })
       .limit(RAW_FETCH),
     supabase
