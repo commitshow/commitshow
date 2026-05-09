@@ -104,6 +104,22 @@ const SCORE_FLOOR    = 74    // hard cutoff · '74점 이상' per CEO directive
 const PER_BUCKET_TOP = 10    // top 10 platform + top 10 walk-on, both shown
 const RAW_FETCH      = 120   // each query · room for dedupe and bullet-quality drops
 
+// §15-E URL fast lane uses a separate /26 polish scale. The DB column
+// `score_total` is the raw absolute pillar (caps near 46 because most
+// repo-evidence slots are structurally unattainable for URL audits). The
+// number users see on the detail page is `score_auto / URL_LANE_MAX × 100`.
+// Hero must compare against that polish number — comparing the floor (74)
+// against raw 46 means URL lane never surfaces, even when polish is 88+
+// (apple.com / google.com case).
+const URL_LANE_MAX = 26
+function urlLanePolish(scoreAuto: number): number {
+  return Math.max(0, Math.min(100, Math.round((scoreAuto / URL_LANE_MAX) * 100)))
+}
+// SQL-side prefilter for the url_fast_lane query · score_auto >= 20 maps
+// to polish ≥ ~77 with the URL_LANE_MAX=26 scale. We re-apply the exact
+// 74 floor in JS after polish conversion below.
+const URL_LANE_AUTO_FLOOR = Math.ceil((SCORE_FLOOR * URL_LANE_MAX) / 100)  // ~20
+
 // Build a normalized AuditDemo array from raw snapshot rows · same
 // filters (project_name length, slug, ≥2 strengths, ≥1 concern), same
 // dedupe (latest snapshot per project), capped at PER_BUCKET_TOP.
@@ -118,14 +134,25 @@ function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on' 
     seen.add(r.project_id)
     latest.push(r)
   }
-  // Re-rank by current score_total within the bucket.
-  latest.sort((a, b) => (b.score_total ?? 0) - (a.score_total ?? 0))
+  // Compute the display score per row (URL lane = polish, others = raw
+  // score_total) and rank by that. Without the polish conversion, URL lane
+  // rows are ranked by raw score_total which has a different ceiling.
+  const isUrlLane = source === 'url_fast_lane'
+  const displayScoreOf = (r: RawSnapshot): number =>
+    isUrlLane ? urlLanePolish(r.score_auto ?? 0) : (r.score_total ?? 0)
+  latest.sort((a, b) => displayScoreOf(b) - displayScoreOf(a))
 
   const out: AuditDemo[] = []
   for (const raw of latest) {
     const proj = raw.projects
     if (!proj) continue
     if (!proj.project_name || proj.project_name.length > 24) continue
+
+    // Apply the 74 floor on the user-facing polish score for URL lane,
+    // raw score_total for others — keeps the bar consistent with what
+    // visitors see on the detail page.
+    const display = displayScoreOf(raw)
+    if (display < SCORE_FLOOR) continue
 
     // Slug source depends on bucket · github slug for repo lanes,
     // bare host for the URL fast lane. Both feed the same `slug` field
@@ -147,8 +174,8 @@ function buildDemoBucket(rawRows: RawSnapshot[], source: 'platform' | 'walk_on' 
       projectId:   raw.project_id,
       projectName: proj.project_name,
       slug,
-      score:       raw.score_total,
-      band:        bandFor(raw.score_total),
+      score:       display,
+      band:        bandFor(display),
       auditPts:    raw.score_auto,
       strengths,
       concerns,
@@ -202,7 +229,11 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
     supabase
       .from('analysis_snapshots')
       .select(baseSelect)
-      .gte('score_total', SCORE_FLOOR)
+      // URL lane uses the polish scale (/26 → /100) not raw score_total,
+      // so prefilter on score_auto instead. score_auto >= URL_LANE_AUTO_FLOOR
+      // (~20) is the SQL-side proxy for polish ≥ 74; final 74 floor is
+      // re-applied on the polish value in buildDemoBucket.
+      .gte('score_auto', URL_LANE_AUTO_FLOOR)
       .eq('projects.status', 'preview')
       .is('projects.github_url', null)
       .order('created_at', { ascending: false })

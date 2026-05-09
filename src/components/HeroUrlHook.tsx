@@ -208,8 +208,14 @@ export function HeroUrlHook() {
       })
 
       if (invokeError) {
+        // supabase-js wraps non-2xx as `invokeError` and swallows the body.
+        // Pull the friendly `message` field out of the Response when present
+        // (rate-limit / DNS opt-out / invalid URL all return JSON bodies with
+        // a human-readable `message`). Falls through to the generic string
+        // only if the body isn't parseable JSON.
+        const friendly = await extractFriendlyMessage(invokeError)
         setPhase('error')
-        setError(extractErrorMessage(invokeError) ?? 'Audit failed. Try again in a moment.')
+        setError(friendly ?? 'Audit failed. Try again in a moment.')
         return
       }
       if (!data || typeof data !== 'object') {
@@ -510,7 +516,20 @@ function prettyHost(raw: string): string {
   }
 }
 
-function extractErrorMessage(err: unknown): string | null {
+// supabase-js `FunctionsHttpError` stuffs the raw Response onto
+// `error.context` so we can recover the JSON body. `clone()` because
+// supabase-js may have already consumed it. Falls back to the generic
+// `error.message` ("Edge Function returned a non-2xx status code") only
+// if no body or it isn't JSON.
+async function extractFriendlyMessage(err: unknown): Promise<string | null> {
+  const ctx = (err as { context?: unknown })?.context
+  if (ctx instanceof Response) {
+    try {
+      const body = await ctx.clone().json() as { message?: string; error?: string }
+      if (typeof body?.message === 'string' && body.message.trim()) return body.message
+      if (typeof body?.error   === 'string' && body.error.trim())   return body.error
+    } catch { /* not JSON · ignore */ }
+  }
   if (err && typeof err === 'object' && 'message' in err) {
     const m = (err as { message?: unknown }).message
     if (typeof m === 'string') return m
