@@ -145,7 +145,13 @@ Deno.serve(async (req) => {
   try {
     session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card'],
+      // Dynamic payment methods (default when payment_method_types is omitted) ·
+      // Stripe evaluates 100+ signals (currency · location · amount · device)
+      // and shows the most relevant method per customer · Apple Pay / Google
+      // Pay / Cash App / Klarna / ACH all auto-show when enabled in Dashboard
+      // settings. Hardcoding ['card'] blocks these and hurts conversion.
+      // Configure which methods are enabled at:
+      //   https://dashboard.stripe.com/settings/payment_methods
       customer_email: userEmail ?? undefined,
       client_reference_id: userId,
       line_items: [{
