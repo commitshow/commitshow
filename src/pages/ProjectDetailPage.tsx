@@ -353,6 +353,16 @@ export function ProjectDetailPage() {
 
   const canForecast = !!user && user.id !== project.creator_id
   const isOwner     = !!user && user.id === project.creator_id
+  // §re-audit privacy · 2026-05-10 directive · initial-only audits
+  // (audit_count <= 1) hide the score from non-owners until the creator
+  // re-audits. Lets creators iterate before public reveal · the first
+  // run is often unflattering before they fix the surfaced concerns.
+  // Owner always sees their own score. URL Fast Lane (status='preview' ·
+  // creator_id null) is unaffected — that's the anonymous walk-on lane
+  // with separate Polish Score framing.
+  const scoreHidden = !isOwner
+                   && (project.status !== 'preview')
+                   && ((project.audit_count ?? 0) <= 1)
   // Forecast ballots are only accepted during the 3 active weeks (§11.2).
   const isVotingPhase = seasonPhase === 'week_1' || seasonPhase === 'week_2' || seasonPhase === 'week_3'
 
@@ -710,7 +720,29 @@ export function ProjectDetailPage() {
           dayNumber={seasonProgress?.dayNumber ?? null}
           totalDays={seasonProgress?.totalDays ?? 28}
           phaseLabel={seasonProgress?.phaseLabel ?? ''}
+          scoreHidden={scoreHidden}
         />
+
+        {/* §re-audit privacy banner · public viewers see one line so the
+            "—" in the score cell isn't a mystery. Owner doesn't see this
+            (they see their score normally + the Re-audit CTA). */}
+        {scoreHidden && (
+          <div
+            className="mb-4 px-4 py-3 font-mono text-xs"
+            style={{
+              background: 'rgba(248,245,238,0.04)',
+              border: '1px solid rgba(248,245,238,0.12)',
+              borderRadius: '2px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>// </span>
+            Score is hidden until the creator re-audits.
+            <span style={{ color: 'var(--text-muted)' }}> First-run scores
+              often catch surfacable concerns the creator hasn't had a chance
+              to fix yet · the public view waits for round 2.</span>
+          </div>
+        )}
 
         {/* ── About this project · casual narrative card right under
               the score banner. Aggregates Phase 1 brief + Market
@@ -885,7 +917,32 @@ export function ProjectDetailPage() {
                         : 'Scout · 5 strengths + 3 key issues. Higher tier = earlier access.'
               }
             />
-            {snapshotResult ? (
+            {scoreHidden ? (
+              <div
+                className="px-5 py-6 font-mono text-xs"
+                style={{
+                  background: 'rgba(248,245,238,0.03)',
+                  border: '1px dashed rgba(248,245,238,0.15)',
+                  borderRadius: '2px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.7,
+                }}
+              >
+                <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
+                  // ANALYSIS LOCKED · ROUND 1
+                </div>
+                <p className="mb-2" style={{ color: 'var(--cream)' }}>
+                  The full audit is hidden until the creator re-audits.
+                </p>
+                <p className="mb-0" style={{ color: 'var(--text-muted)' }}>
+                  First-run scores often reflect concerns the creator hasn't
+                  had time to address yet. The public report unlocks on
+                  round 2 — strengths · concerns · axis breakdown · all of it.
+                  Drop a forecast or applaud while you wait — those land on
+                  the round 2 card too.
+                </p>
+              </div>
+            ) : snapshotResult ? (
               <AnalysisResultCard
                 // The snapshot froze score_total at audit time; engagement
                 // triggers (votes/applauds/comments) lift projects.score_total
@@ -1101,6 +1158,7 @@ function ActivityRow({ primary, detail, secondary, time }: {
 // ── Scan strip · 5-6 metric pills in one row ────────────────────
 function ScanStrip({
   score, roundCount, roundDelta, forecasts, applauds, dayNumber, totalDays, phaseLabel,
+  scoreHidden,
 }: {
   score: number
   roundCount: number
@@ -1110,6 +1168,10 @@ function ScanStrip({
   dayNumber: number | null
   totalDays: number
   phaseLabel: string
+  /** §re-audit privacy · hides initial-only scores from non-owners.
+   *  Owner sees score · public sees "—" + tooltip. Score reveals on
+   *  re-audit (audit_count >= 2). */
+  scoreHidden?: boolean
 }) {
   const scoreColor = score >= 75 ? '#00D4AA' : score >= 50 ? '#F0C040' : '#C8102E'
   const deltaColor = roundDelta == null || roundDelta === 0 ? 'var(--text-muted)'
@@ -1124,9 +1186,15 @@ function ScanStrip({
         borderRadius: '2px',
       }}
     >
-      <ScanCell label="Score"     value={`${score}`}                      sub="out of 100"   color={scoreColor} />
+      <ScanCell
+        label="Score"
+        value={scoreHidden ? '—' : `${score}`}
+        sub={scoreHidden ? 'hidden until re-audit' : 'out of 100'}
+        color={scoreHidden ? 'var(--text-muted)' : scoreColor}
+        tooltip={scoreHidden ? 'Score is hidden from public until the creator re-audits. Visible to the owner only.' : undefined}
+      />
       <ScanCell label="Round"     value={roundCount > 0 ? `${roundCount}` : '—'} sub="analyses" color="var(--cream)" />
-      <ScanCell label="Δ Round"   value={deltaText}                       sub="vs last round" color={deltaColor} />
+      <ScanCell label="Δ Round"   value={scoreHidden ? '—' : deltaText}   sub={scoreHidden ? 'hidden' : 'vs last round'} color={scoreHidden ? 'var(--text-muted)' : deltaColor} />
       <ScanCell label="Forecasts" value={`${forecasts}`}                  sub="cast"         color="var(--cream)" />
       <ScanCell label="Applauds"  value={`${applauds}`}                   sub="craft award"  color="#A78BFA" />
       <ScanCell label="Season"
@@ -1138,11 +1206,12 @@ function ScanStrip({
   )
 }
 
-function ScanCell({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+function ScanCell({ label, value, sub, color, tooltip }: { label: string; value: string; sub: string; color: string; tooltip?: string }) {
   return (
     <div
       className="px-3 py-3 flex flex-col items-start justify-center"
       style={{ borderLeft: '1px solid rgba(255,255,255,0.04)' }}
+      title={tooltip}
     >
       <div className="font-mono text-[9px] tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>
         {label}
