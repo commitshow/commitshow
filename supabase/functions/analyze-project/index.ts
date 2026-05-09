@@ -2231,17 +2231,15 @@ const DEEP_PROBE_BLANK: DeepProbeResult = {
   error: null,
 }
 
-async function callDeepProbe(url: string): Promise<DeepProbeResult> {
+async function callDeepProbeOne(url: string): Promise<DeepProbeResult> {
   if (!url) return DEEP_PROBE_BLANK
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceKey) return DEEP_PROBE_BLANK
 
   try {
-    // Hard 18s ceiling · analyze-project total wall is 150s and we run in
-    // parallel with Lighthouse (~60s) + a Claude call still pending (~90s)
-    // afterward. Anything over 18s here squeezes Claude's budget — let it
-    // fail-soft to BLANK rather than block the whole audit.
+    // Hard 18s ceiling · analyze-project total wall is 150s · parallel with
+    // Lighthouse (~60s) and Claude (~90s) follow-up. Fail-soft to BLANK.
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 18_000)
     const res = await fetch(`${supabaseUrl}/functions/v1/deep-probe`, {
@@ -2256,6 +2254,63 @@ async function callDeepProbe(url: string): Promise<DeepProbeResult> {
     return data && typeof data === 'object' ? data : DEEP_PROBE_BLANK
   } catch (e) {
     return { ...DEEP_PROBE_BLANK, via: 'failed', error: (e instanceof Error ? e.message : String(e)).slice(0, 200) }
+  }
+}
+
+// §15-E.3 multi-page deep probe · homepage + 2 priority paths in parallel.
+// Aggregates into one DeepProbeResult-shaped envelope so the rest of the
+// pipeline doesn't need to know about the multi-page expansion.
+//   · meta_tags = UNION across pages (any page with og:image counts)
+//   · proven_reachable = OR across pages (any page renders → site is alive)
+//   · post_hydration_text_length = SUM (rough corpus size)
+//   · hydration_framework = first non-null
+// Cost: 3 × $0.09 / 1k = $0.27 per audit max. Trivial.
+async function callDeepProbe(homepageUrl: string): Promise<DeepProbeResult> {
+  if (!homepageUrl) return DEEP_PROBE_BLANK
+  let origin: string
+  try { origin = new URL(homepageUrl).origin }
+  catch { return DEEP_PROBE_BLANK }
+
+  // Priority paths · pick 2 most likely to carry rich meta. Order matches
+  // typical SaaS layout (pricing/about land OG cards · /docs has h1/h2).
+  const EXTRA_PATHS = ['/pricing', '/about']
+  const targets = [homepageUrl, ...EXTRA_PATHS.map(p => `${origin}${p}`)]
+
+  const results = await Promise.all(targets.map(t =>
+    callDeepProbeOne(t).catch(() => DEEP_PROBE_BLANK)
+  ))
+
+  // Aggregate · UNION meta_tags · OR proven_reachable · sum text length ·
+  // first non-null hydration_framework. via = 'cf-browser-rendering' if
+  // ANY page got through; 'failed' if all failed; 'skipped' otherwise.
+  const anyFetched   = results.some(r => r.fetched)
+  const anyReachable = results.some(r => r.proven_reachable)
+  const firstFw      = results.find(r => r.hydration_framework)?.hydration_framework ?? null
+  const allMarkers   = Array.from(new Set(results.flatMap(r => r.hydration_markers_found)))
+  const totalText    = results.reduce((s, r) => s + (r.post_hydration_text_length || 0), 0)
+  const totalHtml    = results.reduce((s, r) => s + (r.html_length              || 0), 0)
+  const m = (sel: (m: DeepProbeMetaTags) => boolean) => results.some(r => sel(r.meta_tags))
+  const firstH1Text  = results.map(r => r.meta_tags.h1_text).find(t => !!t) ?? null
+
+  return {
+    fetched:                    anyFetched,
+    via:                        anyFetched ? 'cf-browser-rendering' : 'failed',
+    html_length:                totalHtml,
+    post_hydration_text_length: totalText,
+    hydration_framework:        firstFw,
+    hydration_markers_found:    allMarkers,
+    meta_tags: {
+      has_og_title:       m(t => t.has_og_title),
+      has_og_image:       m(t => t.has_og_image),
+      has_og_description: m(t => t.has_og_description),
+      has_twitter_card:   m(t => t.has_twitter_card),
+      has_canonical:      m(t => t.has_canonical),
+      has_meta_desc:      m(t => t.has_meta_desc),
+      has_h1:             m(t => t.has_h1),
+      h1_text:            firstH1Text,
+    },
+    proven_reachable:           anyReachable,
+    error:                      anyFetched ? null : (results[0]?.error ?? 'all_pages_failed'),
   }
 }
 
@@ -4024,37 +4079,39 @@ Deno.serve(async (req) => {
     if (r >= 0.6) return 3
     return 1                                     // homepage 200 인데 다른 라우트 다 깨진 케이스
   })()
-  // Tier B completeness recovery (§15-E.3) — when the basic Tier A fetch got
-  // bot-blocked, completeness.fetched=false and we'd score 0/2 even on
-  // a perfectly polished site. The deep-probe (real Chromium via CF
-  // Browser Rendering) usually gets through and recovers the meta tags.
-  // Merge: keep Tier A signals when present, else fall back to deep-probe.
-  const mergedCompleteness = completeness.fetched ? completeness : (deepProbe.fetched ? {
-    fetched:           true,
-    has_og_image:      deepProbe.meta_tags.has_og_image,
-    has_og_title:      deepProbe.meta_tags.has_og_title,
-    has_og_description: deepProbe.meta_tags.has_og_description,
-    has_twitter_card:  deepProbe.meta_tags.has_twitter_card,
-    has_apple_touch:   false,                            // not extracted by deep-probe
-    has_manifest:      false,                            // not extracted by deep-probe
-    has_theme_color:   false,                            // not extracted by deep-probe
-    has_favicon:       false,                            // not extracted by deep-probe
-    has_canonical:     deepProbe.meta_tags.has_canonical,
-    has_meta_desc:     deepProbe.meta_tags.has_meta_desc,
-    score:             0,                                 // recomputed below
-    filled:            (deepProbe.meta_tags.has_og_title ? 1 : 0)
-                     + (deepProbe.meta_tags.has_og_image ? 1 : 0)
-                     + (deepProbe.meta_tags.has_og_description ? 1 : 0)
-                     + (deepProbe.meta_tags.has_twitter_card ? 1 : 0)
-                     + (deepProbe.meta_tags.has_canonical ? 1 : 0)
-                     + (deepProbe.meta_tags.has_meta_desc ? 1 : 0),
-    of:                10,
-  } : completeness)
-  // Recompute the 0-5 score from deep-probe filled count (capped at 6 since
-  // 4 signals don't transit through deep-probe yet).
-  if (!completeness.fetched && deepProbe.fetched) {
-    mergedCompleteness.score = Math.min(5, Math.round((mergedCompleteness.filled / 6) * 5))
-  }
+  // Tier A + Tier B completeness UNION (§15-E.3 · 2026-05-09 fix).
+  // Earlier version only fell back to Tier B when Tier A failed entirely.
+  // That missed the common case where Tier A returned 200 but with sparse
+  // meta (the SPA shell has no og:image at static-fetch time, only after
+  // hydration). UNION the two sources signal-by-signal — best of both.
+  // 6 signals transit through deep_probe (og_title · og_image · og_desc ·
+  // twitter · canonical · meta_desc); 4 are Tier A only (favicon · manifest ·
+  // apple_touch · theme_color).
+  const mergedCompleteness = (completeness.fetched || deepProbe.fetched) ? (() => {
+    const has_og_title       = completeness.has_og_title       || deepProbe.meta_tags.has_og_title
+    const has_og_image       = completeness.has_og_image       || deepProbe.meta_tags.has_og_image
+    const has_og_description = completeness.has_og_description || deepProbe.meta_tags.has_og_description
+    const has_twitter_card   = completeness.has_twitter_card   || deepProbe.meta_tags.has_twitter_card
+    const has_canonical      = completeness.has_canonical      || deepProbe.meta_tags.has_canonical
+    const has_meta_desc      = completeness.has_meta_desc      || deepProbe.meta_tags.has_meta_desc
+    const has_apple_touch    = completeness.has_apple_touch
+    const has_manifest       = completeness.has_manifest
+    const has_theme_color    = completeness.has_theme_color
+    const has_favicon        = completeness.has_favicon
+    const filled = (has_og_title?1:0) + (has_og_image?1:0) + (has_og_description?1:0)
+                 + (has_twitter_card?1:0) + (has_canonical?1:0) + (has_meta_desc?1:0)
+                 + (has_apple_touch?1:0) + (has_manifest?1:0) + (has_theme_color?1:0)
+                 + (has_favicon?1:0)
+    return {
+      fetched: true,
+      has_og_title, has_og_image, has_og_description, has_twitter_card,
+      has_apple_touch, has_manifest, has_theme_color, has_favicon,
+      has_canonical, has_meta_desc,
+      score:  Math.round((filled / 10) * 5),                           // 0-5 score on the canonical /10 scale
+      filled,
+      of:     10,
+    }
+  })() : completeness
   const completenessRawPts = scoreCompleteness(mergedCompleteness)               //  0-2
 
   // ── Non-web equivalent slots (for library/cli/scaffold/mcp) ──
@@ -4197,7 +4254,16 @@ Deno.serve(async (req) => {
   // dividing by 10 used to push factor to 1.08 at perfect maturity, inflating
   // the polish slots beyond raw value. Cap ratio at 1.0 explicitly.
   const maturityRatio  = Math.min(1.0, maturity.pts / 10)
-  const maturityFactor = useWebSlots ? (0.6 + 0.4 * maturityRatio) : 1.0  // 0.6-1.0 for web-evaluable · 1.0 for lib-evaluable
+  // §15-E URL Fast Lane override · Polish×Maturity coupling assumes Maturity
+  // is MEASURABLE. For URL-only audits (no github_url) the entire Maturity slot
+  // is structurally unmeasurable — it's not "low maturity", it's "we can't see
+  // the dimension at all". Applying the 0.6 floor here was double-penalizing
+  // URL-lane audits (LH 14pt → effective 8.4pt for anthropic.com et al.,
+  // landing the Polish Score in single digits). Set factor = 1.0 for URL lane
+  // so polish slots score on raw Lighthouse + meta merit instead.
+  const maturityFactor = !useWebSlots                  ? 1.0    // libraries / native apps — slots ARE maturity evidence
+                       : isUrlFastLane                 ? 1.0    // URL lane — Maturity unmeasurable, don't deflate Polish
+                       : (0.6 + 0.4 * maturityRatio)            // standard web app · 0.6-1.0 coupled to measurable maturity
   const polishSubtotal = lhPts + healthPts + completenessPts + tech.pts
   const scaledPolish   = Math.round(polishSubtotal * maturityFactor)
 
@@ -4321,7 +4387,7 @@ Deno.serve(async (req) => {
     live_url_health: health,
     routes_health: routesHealth,
     deep_probe: deepProbe,
-    completeness_signals: completeness,
+    completeness_signals: mergedCompleteness,
     security_headers: securityHeaders,
     legal_pages: legalPages,
     github: gh,
@@ -4539,7 +4605,7 @@ Deno.serve(async (req) => {
     github_signals:     gh.signals,
     // Mix in the completeness signals so the snapshot is self-contained:
     // future reruns / UI ledgers can reference exactly what was checked.
-    rich_analysis:      { ...claudeForSnapshot, completeness_signals: completeness, routes_health: routesHealth, deep_probe: deepProbe },
+    rich_analysis:      { ...claudeForSnapshot, completeness_signals: mergedCompleteness, routes_health: routesHealth, deep_probe: deepProbe },
     parent_snapshot_id: parent?.id ?? null,
     delta_from_parent:  Object.keys(deltaFromParent).length ? deltaFromParent : null,
     score_total_delta:  scoreTotalDelta,
