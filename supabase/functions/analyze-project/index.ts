@@ -2551,10 +2551,17 @@ function scoreLighthouse(lh: LighthouseScores) {
   // -1 "not assessed" → neutral midpoint (no bonus, no penalty).
   // Legit 0 still takes the harshest bucket (bad signal).
   // Input lh is mobile+desktop AVERAGED via combineLh (2026-05-10).
+  // Perf cliff softened 2026-05-10 (same rationale as BP) · the old <50 → 0
+  // was punitive for image-heavy luxury / marketing sites (omegawatches /
+  // luxury brand pages routinely score mobile 30-50 because of hero photo
+  // weight) where a11y · SEO · BP are all exemplary. Adds a 30-49 → 1
+  // partial-credit bucket so a single perf weakness doesn't fully nuke 8pt.
+  // 50+ ranges unchanged · 90+ still earns full 8.
   const p = lh.performance   === LH_NOT_ASSESSED ? 4
            : lh.performance   >= 90 ? 8
            : lh.performance   >= 70 ? 6
-           : lh.performance   >= 50 ? 3 : 0
+           : lh.performance   >= 50 ? 3
+           : lh.performance   >= 30 ? 1 : 0
   const a = lh.accessibility === LH_NOT_ASSESSED ? 3
            : lh.accessibility >= 90 ? 5
            : lh.accessibility >= 70 ? 3 : 1
