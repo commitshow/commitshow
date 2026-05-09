@@ -20,6 +20,15 @@ INTERNAL_*.md
 CTO.md
 CMO.md
 
+# Per-machine skill installs (Anthropic Skills SDK · `npx skills add ...`)
+# These are runtime-loaded into Claude Code from ~/.claude/skills/ via
+# symlinks; the per-project `.claude/skills/` and `.agents/skills/` trees
+# are reproducible by re-running the install command, so they don't
+# belong in version control.
+.claude/skills/
+.agents/skills/
+skills-lock.json
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
