@@ -236,15 +236,29 @@ export function HeroUrlHook() {
         finishWithResult(envelope)
         return
       }
-      // Else poll
-      pollForSnapshot(envelope.project_id)
+      // Capture the latest pre-rerun snapshot id so polling only accepts
+      // a NEWER one. Without this, force=true reruns immediately resolve
+      // to the cached snapshot at the first 6s poll (analyze-project
+      // hasn't finished writing the new row yet) — same number redisplayed.
+      let baselineId: string | null = null
+      if (opts.force === true) {
+        const { data: prev } = await supabase
+          .from('analysis_snapshots')
+          .select('id')
+          .eq('project_id', envelope.project_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        baselineId = prev?.id ?? null
+      }
+      pollForSnapshot(envelope.project_id, 0, baselineId)
     } catch (err) {
       setPhase('error')
       setError(err instanceof Error ? err.message : 'Audit failed.')
     }
   }
 
-  function pollForSnapshot(projectId: string, attempt = 0) {
+  function pollForSnapshot(projectId: string, attempt = 0, baselineId: string | null = null) {
     const maxAttempts = 36 // 36 × 5s = 180s · analyze-project wall is ~150s
     const tick = async () => {
       try {
@@ -256,7 +270,11 @@ export function HeroUrlHook() {
           .limit(1)
           .maybeSingle()
 
-        if (snap) {
+        // baselineId set on force-rerun · ignore the stale snapshot until a
+        // truly new row appears.
+        const snapIsNew = !!snap && (!baselineId || snap.id !== baselineId)
+
+        if (snap && snapIsNew) {
           const { data: proj } = await supabase
             .from('projects')
             .select('id, project_name, live_url, score_total, score_auto, status, creator_id')
@@ -278,14 +296,14 @@ export function HeroUrlHook() {
           setError('Audit took longer than expected. Refresh in a minute.')
           return
         }
-        pollTimer.current = window.setTimeout(() => pollForSnapshot(projectId, attempt + 1), 5000)
+        pollTimer.current = window.setTimeout(() => pollForSnapshot(projectId, attempt + 1, baselineId), 5000)
       } catch {
         if (attempt + 1 >= maxAttempts) {
           setPhase('error')
           setError('Audit polling failed.')
           return
         }
-        pollTimer.current = window.setTimeout(() => pollForSnapshot(projectId, attempt + 1), 5000)
+        pollTimer.current = window.setTimeout(() => pollForSnapshot(projectId, attempt + 1, baselineId), 5000)
       }
     }
     // First poll fires after 6s · gives analyze-project the head start
