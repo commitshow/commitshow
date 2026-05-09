@@ -134,20 +134,24 @@ Deno.serve(async (req) => {
   const cancelUrl  = body.cancel_url  ?? `${origin}/submit?payment=canceled`
 
   // Idempotency-Key — Stripe collapses identical create() calls within 24h
-  // to the same session. Without it, a network retry or a double-clicked
-  // 'Pay $99' button can spawn two Checkout sessions. We bucket the key
-  // per (member, day) so a deliberate second purchase the next day still
-  // works, but a same-day retry just returns the existing session.
+  // to the same session. Goal: stop a double-clicked 'Pay $99' button
+  // from spawning two Checkout sessions while letting deliberate retries
+  // (after refund · session expired · day later) create fresh sessions.
   //
-  // CONFIG_VERSION: bump whenever the Checkout Session params change
-  // (price · payment methods · metadata · etc). Stripe enforces "same key
-  // + different params = error" — bumping version separates new config
-  // from any cached prior-day attempts. History:
+  // 5-minute bucket: retries within 5 min of clicking Pay → same key →
+  // Stripe returns the same session URL (idempotent). Retry after 5 min
+  // (e.g. after a refund · after closing the tab and coming back later)
+  // → new key → new session. Day-bucket was too coarse — caused dead-
+  // session retrieval after refund (2026-05-09 incident · cs_live_a1Qr).
+  //
+  // CONFIG_VERSION: bump when Checkout Session params change so cached
+  // sessions from prior config don't collide. History:
   //   v1 → original payment_method_types: ['card'] · test mode era
-  //   v2 → 2026-05-09 · payment_method_types removed (dynamic) · live mode
-  const CONFIG_VERSION = 'v2'
-  const dayBucket      = new Date().toISOString().slice(0, 10)
-  const idempotencyKey = `audit-fee:${CONFIG_VERSION}:${userId}:${dayBucket}:${unitAmount}`
+  //   v2 → 2026-05-09 dynamic payment methods · day-bucket idempotency
+  //   v3 → 2026-05-09 5-min bucket idempotency · post-refund retry fix
+  const CONFIG_VERSION = 'v3'
+  const fiveMinBucket  = Math.floor(Date.now() / 300_000)   // 5 min · UNIX-floor
+  const idempotencyKey = `audit-fee:${CONFIG_VERSION}:${userId}:${fiveMinBucket}:${unitAmount}`
 
   let session
   try {
