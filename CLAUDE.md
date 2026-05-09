@@ -1790,7 +1790,7 @@ band=$(echo "$json" | jq -r .score.band)
 │ entry: 도메인 URL 한 줄                             │  │ entry: GitHub URL + Live URL + Brief Phase 1   │
 │ probe: Lighthouse + Live + multi-route + meta      │  │ probe: 모든 것 (repo 까지)                       │
 │        + (V1.5) Playwright deep probe              │  │                                                 │
-│ ceiling: ~32 / 50 (Audit pillar)                   │  │ ceiling: 50 / 50 + 10 soft = 62                │
+│ ceiling: partial (URL signals only · /50 cap)      │  │ ceiling: 50 / 50 + 10 soft = 62                │
 │ status: 'preview' (CLI walk-on 과 동급)              │  │ status: 'active'                                │
 │ creator_id: NULL (anonymous)                        │  │ creator_id: 등록 회원                            │
 │ ladder/HoF: ❌ 등재 안 함                           │  │ ladder/HoF: ✅                                  │
@@ -1805,59 +1805,24 @@ band=$(echo "$json" | jq -r .score.band)
 
 ### 15-E.2 Tier A · multi-route probe (V1 · 인프라 0)
 
-**Playwright 없이도 가능**. 헤드리스 브라우저 호출 안 함. Edge Function 안 fetch 만으로 처리.
+Edge Function 안 fetch 만으로 sitemap + homepage `<a href>` → 같은 origin internal routes 병렬 probe. Live URL Health 슬롯이 homepage 단일 200 만이 아니라 multi-route reachable rate 까지 반영하도록 격상. 정확한 fold-in 임계값과 fallback 결합 로직은 **`INTERNAL.md` §10** 참조.
 
-```
-1. fetch homepage HTML → <a href> 파싱 → 같은 origin 의 internal route 추출
-2. 병행으로 sitemap.xml 도 fetch (있으면 더 정확한 source-of-truth)
-3. dedupe + cap 6 routes (homepage 제외) · prioritize: /pricing /signup /login /docs /about /blog
-4. 각 route HEAD or GET (4s timeout each · BROWSER_PROBE_HEADERS)
-5. 결과 형태:
-   routes_health = {
-     probed: 6, reachable: 5, broken: 1,
-     items: [
-       { path: '/pricing',  status: 200, ttfb_ms: 240, ok: true },
-       { path: '/signup',   status: 500, ttfb_ms: 1200, ok: false },
-       …
-     ],
-     sitemap_present: true, sitemap_url_count: 47,
-   }
-```
-
-**Live URL Health 슬롯 (5pt) 의미 격상**:
-- v3: homepage 200 + SSL + <3000ms → 5
-- 신규: homepage 200 + SSL + <3000ms + **multi-route reachable rate ≥ 0.8** → 5; 0.6-0.8 → 3; <0.6 → 1
-- form_factor='app' 일 때만 multi-route 적용 (library/cli 는 routes 개념 N/A)
-
-**Claude evidence prompt 추가**: `routes_health.broken_paths` 가 strengths/concerns 의 evidence 로 surface.
+`routes_health.broken_paths` 는 Claude evidence prompt 의 strengths/concerns 입력으로 surface — broken 경로가 있으면 자동 concern bullet.
 
 ### 15-E.3 Tier B · Playwright deep probe (V1 라이브 · 2026-05-09)
 
 **라이브 구성**:
 - ✅ post-hydration HTML (Cloudflare Browser Rendering `/content`) · meta tags UNION 회수 + 봇 wall 우회 + hydration framework 감지
-- ✅ 런타임 console error count · network 실패 (Lighthouse `audits[]` 마이닝 · CF call 추가 비용 0)
-- ⏸️ 스크린샷 (코드는 박혀있지만 `ENABLE_SCREENSHOT=false` 디폴트 · CF free tier 10min/day 한도 때문 · paid 전환 시 활성화)
+- ✅ 런타임 console error · network 실패 (Lighthouse `audits[]` 마이닝 · 추가 비용 0)
+- ⏸️ 스크린샷 (`ENABLE_SCREENSHOT=false` 디폴트 · CF free tier 한도 보호 · paid 전환 시 활성화)
 
-**점수 fold-in**:
-- console_clean + network_clean → +2pt (`runtimeEvidencePts`) · auto_hard 에 직접 합산
-- URL_LANE_MAX UI denominator 24 → 26 (Lighthouse 20 + Completeness 2 + Responsive 2 + Runtime 2)
-- 회원 repo audit 도 동일 +2pt 가능 (이전 50pt 가 52pt 천장으로 격상 · 미세)
-
-**인프라 · CF Browser Rendering 정책 (2026-05-09 결정 · 정책 B)**:
-- **CF free tier = 10 분 browser time/day** = `/content` 5-10s/회 → ~60-120 audits/day
-- 정책 B 채택: `/content` 만 호출 (1 call/audit) · `/screenshot` 제외 (`ENABLE_SCREENSHOT=false`)
-- audit 한 번당 ~5-10s browser time → free tier ceiling **~60-120 deep-probes/day**
-- 초과 시 graceful: 429 → BLANK → analyze-project 가 Tier A only 로 계속 진행 (audit 끊기지 않음)
-- 트래픽 늘면 **Workers Paid $5/mo** 로 업그레이드 → 10 hours/day = 60× 더 → screenshot 자동 활성
+**점수 fold-in**: console_clean + network_clean 신호로 +2pt 추가 슬롯 · URL Fast Lane + 회원 repo audit 둘 다 적용. 정확한 슬롯 매핑·임계값·LH audit id mapping 은 **`INTERNAL.md` §10**.
 
 **비용 게이팅**:
-- URL Fast Lane (`!github_url && live_url`) → Tier B 발동 (분리 게이트 = `isUrlFastLane`)
-- Full lane (회원 repo audit) → Tier B **발동 안 함** (이미 풀 evidence 있음 · CF budget 보호)
+- URL Fast Lane (`!github_url && live_url`) → Tier B 발동
+- Full lane (회원 repo audit) → Tier B **발동 안 함** (CF budget 보호 · repo evidence 충분)
 
-**Rate limit 2-layer (URL fast lane)**:
-- 사용자 facing: anon 5/IP/day · authed 50/IP/day · per-domain 5/day · global 2000/day
-- CF 인프라: 10 min/day total (free tier · binding cap = 60-120/day across all users)
-- CF 한도 hit → fallback to Tier A → 사용자엔 graceful (정확도만 살짝 낮아짐 · 봇 wall 사이트만 영향)
+**Rate limit / fallback**: CF 한도 hit 시 graceful → Tier A only fallback · audit 끊기지 않음. 정확한 한도 숫자·게이팅 동작은 INTERNAL.md §10. 트래픽 늘면 **Workers Paid $5/mo** 업그레이드 → 60× 더 → screenshot 자동 활성.
 
 ### 15-E.4 Abuse defense · "남의 URL 마구 넣기" 처리
 
@@ -1866,7 +1831,7 @@ band=$(echo "$json" | jq -r .score.band)
 | 위협 | 디펜스 |
 |---|---|
 | 남의 SaaS 마구 audit | `status='preview'` · `creator_id IS NULL` · ladder 등재 X · 자동 트윗 X (§18-B.4 게이트) |
-| 비용 폭주 | `preview_rate_limits` 재사용 · IP 20/day · **per-domain 5/day** · global 800/day · 7-day cache |
+| 비용 폭주 | `preview_rate_limits` 재사용 · IP/Domain/Global 3-tier (정확 숫자는 INTERNAL.md §10) · 7-day cache |
 | Owner 동의 없는 점수 공개 | share card 워터마크 + `social_share_disabled` 토글 · **+ DNS TXT opt-out** (아래) |
 | 점수 게이밍 / 반복 audit | Tier B Playwright 비용은 owner verify 후만 (Fast lane 은 cheap probe 만) |
 | 도메인 owner 글로벌 거부 | `_commitshow.<domain> TXT "audit=no"` lookup → 발견 시 fetch 시작 전 거부. **gstack 류 대비 차별 채널** |
@@ -2411,7 +2376,9 @@ Follow-up · 작은 정리
 ---
 
 *이 파일은 프로젝트가 진행될수록 업데이트한다.*
-*마지막 업데이트: 2026-05-07 · 토큰 사용량/효율 풀스택 V1 (audit_token_usage 테이블 · analyze-project Claude 응답 usage 캡처 · usage-ingest Edge Function · commitshow extract CLI subcommand · TokenReceiptForm UI · TokenEfficiencyPanel · /leaderboard/tokens · "Verified Claude Code" 만 V1 · vendor lock 인 Cursor/Lovable/Bolt 는 V1.5+) + Soft 404 SEO fix (NotFoundPage + sitemap canonicalization) + NEW AUDITS lane cream*
+*마지막 업데이트: 2026-05-09 · §15-E URL Fast Lane 풀스택 (audit-site-preview · deep-probe · Hero URL hook · Polish Score 26pt scale · runtime evidence slot · og:image fallback · AuditShowcase · rate limits 3/10 · 정책 A no-claim · 정책 B no-screenshot) + §15-E gameable detail INTERNAL.md §10 으로 이전*
+
+*이전 마지막 업데이트: 2026-05-07 · 토큰 사용량/효율 풀스택 V1 (audit_token_usage 테이블 · analyze-project Claude 응답 usage 캡처 · usage-ingest Edge Function · commitshow extract CLI subcommand · TokenReceiptForm UI · TokenEfficiencyPanel · /leaderboard/tokens · "Verified Claude Code" 만 V1 · vendor lock 인 Cursor/Lovable/Bolt 는 V1.5+) + Soft 404 SEO fix (NotFoundPage + sitemap canonicalization) + NEW AUDITS lane cream*
 *이전: 2026-05-07 trajectory 카드 풀스택 + ThisWeekHighlight bookend + LeaderboardPage quadrant strip*
 *이전 마지막 업데이트: 2026-05-06 · §16 / §20.2 backlog audit · 백로그가 실제 코드 상태와 어긋나있던 것 정리*
 *이전 마지막 업데이트: 2026-04-24 · **commit.show PRD v2** (통합 기획서 2026-04-19 + Creator Community 2026-04-23 기반 재정비 + §15 Intent-first/Trending UX)*
