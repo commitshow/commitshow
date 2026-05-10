@@ -659,7 +659,7 @@ export function PitchKPage() {
               bio="세부기획 · GTM · 파트너십 · 도구 생태계 outreach 를 이끕니다. V1.5 Library 마켓플레이스 공급의 anchor 가 될 Tool maker 관계를 운영합니다."
             />
             <p className="font-mono text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
-              V1 까지 외부 채용 없이 출시했습니다. 엔진과 deck 와 이 페이지를 같은 손이 씁니다.
+              V1 까지 외부 채용 없이 출시했습니다. 엔진도, deck 도, 이 페이지도 두 사람이 직접 만듭니다.
             </p>
           </div>
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: `1px solid ${GOLD}50`, borderRadius: '2px' }}>
