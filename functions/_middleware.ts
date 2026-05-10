@@ -71,6 +71,21 @@ const GENERIC_BOT_RE = /\b(bot|crawler|spider|scraper|headless|phantom|puppeteer
 // would 10x our writes for no analytic value).
 const STATIC_ASSET_RE = /\.(css|js|map|mjs|json|xml|ico|svg|png|jpe?g|webp|gif|mp4|webm|woff2?|ttf|otf|eot|wasm|txt)$/i
 
+// Scanner-bot probe paths · commodity secret/admin scanners (nuclei,
+// feroxbuster, gobuster, .env scrapers) hammer these from cloud VPS
+// IPs. Their UA is often a real browser string (rotated to evade
+// GENERIC_BOT_RE), so the only reliable signal is the requested path.
+// Logging them inflates country/visitor stats with bot noise — most
+// notable was a NL-VPS sweep skewing dashboards before this filter
+// landed (~95% of NL pageviews were /.env · /.git/config · /.aws/*).
+const SCANNER_DOTFILE_RE = /\/\.(env|git|aws|ssh|htaccess|htpasswd|svn|hg|ds_store|vscode|idea|pypirc|npmrc|dockercfg|docker|kube|terraform|terraformrc|gem|m2|netrc)(\/|\.|$)/i
+const SCANNER_ADMIN_RE   = /^\/(wp-admin|wp-login|wp-content|wp-includes|xmlrpc|phpmyadmin|administrator|admin\.php|server-status|server-info|webdav|owa|ecp|autodiscover|cgi-bin|telescope|debug|actuator|console)(\/|\.|$)/i
+// API probe paths · cloud-VPS scanners trying to read app secrets via
+// guessed endpoints. Conservative · only matches known leak surfaces
+// (env / config / settings / secrets / credentials), not generic API
+// routes like /api/account or /api/health that may be legitimate later.
+const SCANNER_APIPROBE_RE = /^\/api(?:\/v\d+)?\/(env|config|settings|secrets|credentials|keys|tokens)(\/|\.|$)/i
+
 // Referer kind classifier · maps host to one of 5 buckets.
 const SEARCH_HOSTS = ['google.', 'bing.', 'duckduckgo.', 'yahoo.', 'naver.', 'baidu.', 'yandex.', 'kagi.']
 const SOCIAL_HOSTS = ['x.com', 'twitter.com', 't.co', 'reddit.com', 'news.ycombinator.com', 'linkedin.com',
@@ -171,6 +186,10 @@ async function logVisitorHit(env: Env, req: Request, response: Response): Promis
   if (STATIC_ASSET_RE.test(path)) return
   if (path.startsWith('/functions/')) return
   if (path === '/robots.txt' || path === '/sitemap.xml') return  // tracked separately as crawler hits when bots fetch them
+  // Skip scanner-bot probe paths · see SCANNER_*_RE comment above.
+  if (SCANNER_DOTFILE_RE.test(path))  return
+  if (SCANNER_ADMIN_RE.test(path))    return
+  if (SCANNER_APIPROBE_RE.test(path)) return
   // Skip generic bot UAs we don't classify as AI crawlers.
   if (!ua || GENERIC_BOT_RE.test(ua)) return
   // Skip empty UAs (likely bot too).
