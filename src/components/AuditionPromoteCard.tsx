@@ -106,11 +106,11 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
 
   const auditionLabel = balance
     ? balance.free_remaining > 0
-      ? `Audition with free ticket →`
+      ? `Put on audition stage · free ticket →`
       : balance.paid_credit > 0
-        ? `Audition with paid ticket →`
-        : `Audition with payment →`
-    : 'Audition →'
+        ? `Put on audition stage · paid ticket →`
+        : `Put on audition stage · pay →`
+    : 'Put on audition stage →'
 
   // Visual band based on score · matches the four-band convention used
   // elsewhere (encore 85+ · strong 70-84 · building 50-69 · early <50).

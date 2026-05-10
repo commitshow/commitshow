@@ -155,7 +155,7 @@ export function BackstageSection({ memberId }: { memberId: string }) {
                   opacity:      busyId === p.id ? 0.6 : 1,
                 }}
               >
-                {busyId === p.id ? 'PROCESSING…' : 'AUDITION →'}
+                {busyId === p.id ? 'PROCESSING…' : 'PUT ON AUDITION STAGE →'}
               </button>
             </div>
           </div>
