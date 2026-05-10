@@ -537,7 +537,7 @@ export function PitchPage() {
               photo="/team/cj.jpg"
               initial="C"
               linkedin="https://www.linkedin.com/in/chanjoonkim/"
-              bio="Drives go-to-market, partnerships, and the ecosystem outreach pipeline. Operates the Tool-maker relationships that anchor V1.5 Library Marketplace supply."
+              bio="Drives product planning, go-to-market, partnerships, and the ecosystem outreach pipeline. Operates the Tool-maker relationships that anchor V1.5 Library Marketplace supply."
             />
             <p className="font-mono text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
               No outside hires shipped V1. Same hands write the engine, the deck, and this page.
