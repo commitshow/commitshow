@@ -314,6 +314,13 @@ export function Nav() {
                     )}
                   </NavLink>
 
+                  {/* Audition tickets · creator-side balance. Same
+                      callout pattern as Forecast Balance above so the
+                      two scarcity surfaces (Scout votes vs Creator
+                      tickets) sit visually parallel. Click → /me
+                      where TicketWalletCard exposes the buy CTA. */}
+                  <AuditionTicketsCallout onSelect={() => setMenuOpen(false)} />
+
                   {/* My Products · creator-side counterpart to the
                       Forecast Balance callout above. Same callout
                       pattern (callout with key info + accent border)
@@ -326,7 +333,23 @@ export function Nav() {
                       Terms / Privacy) live in the footer. Keeping this menu
                       to two items removes redundancy + makes Sign out a
                       one-tap target. */}
-                  <DropdownLink to="/me" onSelect={() => setMenuOpen(false)} icon={<IconGear />}>My profile</DropdownLink>
+                  {/* My profile · button + manual navigate (instead of
+                      NavLink) because clicking on the same route doesn't
+                      always re-fire NavLink's onClick reliably across
+                      React-Router-DOM versions, leaving the menu stuck
+                      open. Manual handler + setMenuOpen(false) before
+                      navigate guarantees the close. */}
+                  <button
+                    type="button"
+                    onClick={() => { setMenuOpen(false); navigate('/me') }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 font-mono text-xs tracking-wide transition-colors"
+                    style={{ color: 'rgba(248,245,238,0.7)', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold-500)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,245,238,0.7)')}
+                  >
+                    <span className="inline-flex items-center" style={{ color: 'inherit' }}><IconGear /></span>
+                    <span>My profile</span>
+                  </button>
                   {/* Admin-only entry points · members.is_admin gate. /admin
                       is the operational dashboard; /admin/cmo is the
                       marketing post-studio preview surface. Both hidden
@@ -605,6 +628,67 @@ function IconMail({ size = 13 }: { size?: number }) {
 // dropdown. Routes to /me which lists all the user's audited
 // projects. Counts fetch lazily on mount; while loading the box
 // shows muted placeholders so the dropdown stays a fixed height.
+// AuditionTicketsCallout · creator-side scarcity (mirror of FORECAST
+// BALANCE callout). Shows total tickets · breakdown · click → /me
+// where TicketWalletCard handles purchase.
+function AuditionTicketsCallout({ onSelect }: { onSelect: () => void }) {
+  const { user } = useAuth()
+  const [bal, setBal] = useState<{ free_remaining: number; paid_credit: number; total_tickets: number } | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+    let alive = true
+    void supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
+      if (!alive || error) return
+      setBal(data as { free_remaining: number; paid_credit: number; total_tickets: number })
+    })
+    return () => { alive = false }
+  }, [user])
+
+  const accent = 'var(--gold-500)'
+  const total  = bal?.total_tickets ?? 0
+  const tone   = total === 0 ? 'var(--text-muted)' : accent
+
+  return (
+    <NavLink
+      to="/me"
+      onClick={onSelect}
+      className="block px-3 py-2 mb-1 transition-colors"
+      style={{
+        background: total === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(240,192,64,0.08)',
+        border:     `1px solid ${total === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(240,192,64,0.4)'}`,
+        borderRadius: '2px',
+        textDecoration: 'none',
+      }}
+      onMouseEnter={e => { if (total > 0) e.currentTarget.style.borderColor = 'rgba(240,192,64,0.7)' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = total === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(240,192,64,0.4)' }}
+    >
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+          AUDITION TICKETS
+        </span>
+        <span className="font-mono text-[10px] tabular-nums" style={{ color: tone }}>
+          {bal === null
+            ? '—'
+            : <><strong>{total}</strong><span style={{ color: 'var(--text-muted)' }}> ticket{total === 1 ? '' : 's'}</span></>}
+        </span>
+      </div>
+      <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
+        {bal === null ? '…' : total === 0 ? (
+          'Buy one in /me to put a backstage project on stage'
+        ) : (
+          <>
+            {bal.free_remaining > 0 && <><span style={{ color: 'var(--cream)' }}>{bal.free_remaining} free</span></>}
+            {bal.free_remaining > 0 && bal.paid_credit > 0 && <span style={{ color: 'var(--text-faint)' }}> · </span>}
+            {bal.paid_credit > 0 && <><span style={{ color: 'var(--cream)' }}>{bal.paid_credit} paid</span></>}
+            <span style={{ color: 'var(--text-muted)' }}> · spend on backstage projects</span>
+          </>
+        )}
+      </div>
+    </NavLink>
+  )
+}
+
 function MyProductsCallout({ onSelect }: { onSelect: () => void }) {
   const { user } = useAuth()
   const [counts, setCounts] = useState<{ total: number; encore: number; best: number | null }>({ total: 0, encore: 0, best: null })
