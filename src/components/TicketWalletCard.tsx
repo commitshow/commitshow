@@ -18,6 +18,7 @@
 // backstage project they want.
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { fetchFounderStatus, REGISTRATION_PRICE_CENTS, FOUNDER_PRICE_FALLBACK_CENTS, type FounderStatus } from '../lib/pricing'
 
@@ -36,7 +37,8 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
   const [founder,  setFounder]  = useState<FounderStatus | null>(null)
   const [busy,     setBusy]     = useState(false)
   const [error,    setError]    = useState<string | null>(null)
-  const [quantity, setQuantity] = useState<number>(1)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [quantity,   setQuantity]   = useState<number>(1)
 
   useEffect(() => {
     let alive = true
@@ -157,63 +159,29 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
         </div>
       )}
 
-      {/* Quantity selector · bulk purchase. Founder price applies
-          per-ticket so total scales linearly. */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
-          QTY
-        </span>
-        {QUANTITY_PRESETS.map(q => {
-          const active = quantity === q
-          return (
-            <button
-              key={q}
-              type="button"
-              onClick={() => setQuantity(q)}
-              className="px-2.5 py-1 font-mono text-[11px] tabular-nums transition-all"
-              style={{
-                background:   active ? 'rgba(240,192,64,0.18)' : 'transparent',
-                color:        active ? 'var(--gold-500)'      : 'var(--text-secondary)',
-                border:       `1px solid ${active ? 'rgba(240,192,64,0.5)' : 'rgba(248,245,238,0.15)'}`,
-                borderRadius: '2px',
-                cursor:       'pointer',
-              }}
-            >
-              {q}
-            </button>
-          )
-        })}
-        <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          {quantity === 1 ? 'ticket' : 'tickets'}
-        </span>
-      </div>
-
       <div className="flex items-center gap-3 flex-wrap">
         <button
           type="button"
-          onClick={handleBuy}
-          disabled={!canBuy || busy}
+          onClick={() => { setQuantity(1); setError(null); setDialogOpen(true) }}
+          disabled={!canBuy}
           className="px-4 py-2 text-xs font-medium tracking-wide transition-all inline-flex items-center gap-1.5"
           style={{
             background:   canBuy ? 'var(--gold-500)' : 'rgba(240,192,64,0.18)',
             color:        canBuy ? 'var(--navy-900)' : 'var(--text-muted)',
             border:       'none',
             borderRadius: '2px',
-            cursor:       !canBuy ? 'not-allowed' : busy ? 'wait' : 'pointer',
+            cursor:       !canBuy ? 'not-allowed' : 'pointer',
             fontFamily:   'DM Mono, monospace',
-            opacity:      busy ? 0.55 : 1,
           }}
         >
-          {busy ? (
-            'OPENING STRIPE…'
-          ) : founderActive ? (
+          {founderActive ? (
             <>
-              <span>BUY {quantity} TICKET{quantity === 1 ? '' : 'S'} ·</span>
-              <s style={{ opacity: 0.55, textDecorationThickness: '1.5px' }}>${(parseInt(standardDollars) * quantity)}</s>
-              <strong>${(parseInt(priceDollars) * quantity)}</strong>
+              <span>BUY TICKETS · from</span>
+              <s style={{ opacity: 0.55, textDecorationThickness: '1.5px' }}>${standardDollars}</s>
+              <strong>${priceDollars}</strong>
             </>
           ) : (
-            <span>BUY {quantity} TICKET{quantity === 1 ? '' : 'S'} · ${(parseInt(priceDollars) * quantity)}</span>
+            <span>BUY TICKETS · from ${priceDollars}</span>
           )}
         </button>
 
@@ -228,6 +196,213 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
         Tickets don't expire · use any time on a backstage project. Payment goes through Stripe ·
         Encore credit recoupable when the project crosses score 85+.
       </p>
+
+      {dialogOpen && createPortal(
+        <BuyTicketsDialog
+          quantity={quantity}
+          setQuantity={setQuantity}
+          unitDollars={parseInt(priceDollars)}
+          standardUnitDollars={parseInt(standardDollars)}
+          founderActive={founderActive}
+          founderRemaining={founder?.remaining ?? null}
+          busy={busy}
+          error={error}
+          onConfirm={handleBuy}
+          onClose={() => { if (!busy) setDialogOpen(false) }}
+        />,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+// ── BuyTicketsDialog ────────────────────────────────────────────────────────
+// Modal triggered by the wallet's BUY TICKETS button. Lets the user pick
+// quantity (1 / 3 / 5 / 10) and confirm. Shows the running total with the
+// founder strikethrough preserved · clicking confirm opens Stripe Checkout
+// (handled by parent's handleBuy).
+function BuyTicketsDialog({
+  quantity, setQuantity, unitDollars, standardUnitDollars, founderActive, founderRemaining,
+  busy, error, onConfirm, onClose,
+}: {
+  quantity: number
+  setQuantity: (q: number) => void
+  unitDollars: number
+  standardUnitDollars: number
+  founderActive: boolean
+  founderRemaining: number | null
+  busy: boolean
+  error: string | null
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const total         = unitDollars * quantity
+  const standardTotal = standardUnitDollars * quantity
+  const ticketWord    = quantity === 1 ? 'ticket' : 'tickets'
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'rgba(6,12,26,0.85)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '1.5rem',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="card-navy w-full max-w-md p-6"
+        style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}
+      >
+        <div className="flex items-baseline justify-between mb-4">
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+            // BUY AUDITION TICKETS
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="font-mono text-xs"
+            style={{
+              background:   'transparent',
+              border:       'none',
+              color:        'var(--text-muted)',
+              cursor:       busy ? 'wait' : 'pointer',
+            }}
+            aria-label="Close"
+          >
+            ESC ✕
+          </button>
+        </div>
+
+        <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.65)', lineHeight: 1.6 }}>
+          Each ticket auditions one backstage project onto the live ladder. Tickets don't expire.
+          {founderActive && (
+            <> <span style={{ color: 'var(--gold-500)' }}>Founder pricing — locked in for as long as the window stays open.</span></>
+          )}
+        </p>
+
+        {/* Quantity selector */}
+        <div className="mb-5">
+          <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-label)' }}>
+            HOW MANY?
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {QUANTITY_PRESETS.map(q => {
+              const active = quantity === q
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuantity(q)}
+                  disabled={busy}
+                  className="py-3 font-display font-bold tabular-nums transition-all"
+                  style={{
+                    fontSize:     '1.25rem',
+                    background:   active ? 'var(--gold-500)' : 'transparent',
+                    color:        active ? 'var(--navy-900)' : 'var(--cream)',
+                    border:       `1px solid ${active ? 'var(--gold-500)' : 'rgba(248,245,238,0.18)'}`,
+                    borderRadius: '2px',
+                    cursor:       busy ? 'wait' : 'pointer',
+                  }}
+                >
+                  {q}
+                </button>
+              )
+            })}
+          </div>
+          <div className="font-mono text-[10px] mt-1.5 text-center" style={{ color: 'var(--text-muted)' }}>
+            {quantity === 1
+              ? 'a single audition'
+              : `${quantity} auditions in one go`}
+          </div>
+        </div>
+
+        {/* Total breakdown */}
+        <div className="mb-5 px-4 py-3" style={{
+          background: 'rgba(240,192,64,0.06)',
+          border: '1px solid rgba(240,192,64,0.22)',
+          borderRadius: '2px',
+        }}>
+          <div className="grid grid-cols-[1fr_auto] gap-y-1 font-mono text-[12px]">
+            <span style={{ color: 'var(--text-secondary)' }}>
+              {quantity} × {founderActive ? `founder $${unitDollars}` : `$${unitDollars}`} per ticket
+            </span>
+            <span className="tabular-nums" style={{ color: 'var(--cream)' }}>
+              ${total}
+            </span>
+            {founderActive && (
+              <>
+                <span style={{ color: 'var(--text-muted)' }}>regular</span>
+                <span className="tabular-nums">
+                  <s style={{ opacity: 0.5, color: 'var(--text-muted)' }}>${standardTotal}</s>
+                </span>
+              </>
+            )}
+            <span style={{ borderTop: '1px solid rgba(240,192,64,0.25)', paddingTop: 4, color: 'var(--gold-500)' }}>Total</span>
+            <span className="tabular-nums" style={{ borderTop: '1px solid rgba(240,192,64,0.25)', paddingTop: 4, color: 'var(--gold-500)', fontWeight: 700 }}>
+              ${total}
+            </span>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 px-3 py-2 font-mono text-[11px]" style={{
+            background: 'rgba(200,16,46,0.08)',
+            border: '1px solid rgba(200,16,46,0.4)',
+            borderRadius: '2px',
+            color: 'var(--scarlet)',
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="flex-1 px-4 py-2.5 text-xs font-medium tracking-wide"
+            style={{
+              background:   'transparent',
+              color:        'var(--cream)',
+              border:       '1px solid rgba(248,245,238,0.2)',
+              borderRadius: '2px',
+              cursor:       busy ? 'wait' : 'pointer',
+              fontFamily:   'DM Mono, monospace',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-[2] px-4 py-2.5 text-xs font-medium tracking-wide"
+            style={{
+              background:   'var(--gold-500)',
+              color:        'var(--navy-900)',
+              border:       'none',
+              borderRadius: '2px',
+              cursor:       busy ? 'wait' : 'pointer',
+              fontFamily:   'DM Mono, monospace',
+              opacity:      busy ? 0.6 : 1,
+            }}
+          >
+            {busy ? 'OPENING STRIPE…' : `Pay $${total} → ${quantity} ${ticketWord}`}
+          </button>
+        </div>
+
+        {founderActive && founderRemaining != null && (
+          <p className="font-mono text-[10px] mt-4 text-center" style={{ color: 'var(--gold-500)' }}>
+            {founderRemaining} founder spots left
+          </p>
+        )}
+        <p className="font-mono text-[10px] mt-2 text-center" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          Card · Apple Pay · Google Pay · processed by Stripe
+        </p>
+      </div>
     </div>
   )
 }
