@@ -67,10 +67,18 @@ Deno.serve(async (req) => {
   const userEmail = userData.user.email ?? null
 
   // Parse body — minimal so we can extend later (library purchases, etc.)
-  let body: { kind?: 'audit_fee'; success_url?: string; cancel_url?: string; audition_target?: string }
+  let body: { kind?: 'audit_fee'; success_url?: string; cancel_url?: string; audition_target?: string; quantity?: number }
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
   const kind = body.kind ?? 'audit_fee'
   if (kind !== 'audit_fee') return json({ error: 'Only audit_fee supported in V1' }, 400)
+
+  // Bulk purchase · 1-10 tickets per checkout. Default 1 keeps legacy
+  // single-ticket clients working unchanged. Caps at 10 so a runaway
+  // input doesn't $990+ a card by accident.
+  const requestedQty = typeof body.quantity === 'number' && Number.isFinite(body.quantity)
+    ? Math.floor(body.quantity)
+    : 1
+  const quantity = Math.max(1, Math.min(10, requestedQty))
 
   // audition_target — when caller wants the post-payment flow to
   // auto-promote a specific backstage project to 'active'. Plumbed
@@ -138,7 +146,9 @@ Deno.serve(async (req) => {
     : AUDIT_FEE_CENTS
   const productDescription = founderActive
     ? `Founder pricing · audition ${founder!.paid_count + 1} of ${founder!.cap} · Encore credit recoupable on Diploma`
-    : 'One additional audit · Encore credit recoupable on Diploma'
+    : quantity === 1
+      ? 'One additional audit · Encore credit recoupable on Diploma'
+      : `${quantity} audition tickets · Encore credit recoupable on Diploma`
 
   // Build Stripe session.
   const stripe = new Stripe(STRIPE_SECRET, { apiVersion: '2024-09-30.acacia' })
@@ -168,9 +178,11 @@ Deno.serve(async (req) => {
   //   v1 → original payment_method_types: ['card'] · test mode era
   //   v2 → 2026-05-09 dynamic payment methods · day-bucket idempotency
   //   v3 → 2026-05-09 5-min bucket idempotency · post-refund retry fix
-  const CONFIG_VERSION = 'v3'
+  const CONFIG_VERSION = 'v4'
   const fiveMinBucket  = Math.floor(Date.now() / 300_000)   // 5 min · UNIX-floor
-  const idempotencyKey = `audit-fee:${CONFIG_VERSION}:${userId}:${fiveMinBucket}:${unitAmount}`
+  // v4 adds quantity to the key so different bulk sizes from the same
+  // user in the same 5-min bucket don't collide on a single session.
+  const idempotencyKey = `audit-fee:${CONFIG_VERSION}:${userId}:${fiveMinBucket}:${unitAmount}:${quantity}`
 
   let session
   try {
@@ -186,7 +198,7 @@ Deno.serve(async (req) => {
       customer_email: userEmail ?? undefined,
       client_reference_id: userId,
       line_items: [{
-        quantity: 1,
+        quantity,
         price_data: {
           currency: 'usd',
           unit_amount: unitAmount,
@@ -202,6 +214,7 @@ Deno.serve(async (req) => {
         is_founder_price: founderActive ? 'true' : 'false',
         founder_paid_count: founder ? String(founder.paid_count) : '',
         audition_target: auditionTarget ?? '',
+        quantity:        String(quantity),
       },
       success_url: successUrl,
       cancel_url:  cancelUrl,
@@ -212,12 +225,14 @@ Deno.serve(async (req) => {
   }
 
   // Pending payments row · webhook flips status when Stripe confirms.
+  // amount_cents = unit price × quantity for accurate accounting.
   const { error: insertErr } = await admin
     .from('payments')
     .insert([{
       member_id:                userId,
       kind:                     'audit_fee',
-      amount_cents:             unitAmount,
+      amount_cents:             unitAmount * quantity,
+      quantity,
       currency:                 'USD',
       stripe_session_id:        session.id,
       stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : null,
@@ -227,6 +242,8 @@ Deno.serve(async (req) => {
         prior_count:        used,
         is_founder_price:   founderActive,
         founder_paid_count: founder?.paid_count ?? null,
+        unit_amount:        unitAmount,
+        quantity,
       },
     }])
   if (insertErr) {

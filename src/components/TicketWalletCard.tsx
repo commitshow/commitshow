@@ -29,11 +29,14 @@ interface TicketBalance {
   prior_active:   number
 }
 
+const QUANTITY_PRESETS = [1, 3, 5, 10] as const
+
 export function TicketWalletCard({ memberId }: { memberId: string }) {
   const [balance,  setBalance]  = useState<TicketBalance | null>(null)
   const [founder,  setFounder]  = useState<FounderStatus | null>(null)
   const [busy,     setBusy]     = useState(false)
   const [error,    setError]    = useState<string | null>(null)
+  const [quantity, setQuantity] = useState<number>(1)
 
   useEffect(() => {
     let alive = true
@@ -75,6 +78,7 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
         // success_url falls back to /me so the user lands here after.
         body: JSON.stringify({
           kind: 'audit_fee',
+          quantity,
           success_url: `${window.location.origin}/me?payment=success`,
           cancel_url:  `${window.location.origin}/me?payment=canceled`,
         }),
@@ -99,11 +103,6 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
   // quota or paid credit remaining. audition_project RPC spends free
   // first then paid, so additional buys just stack.
   const canBuy = true
-  const stackHint = balance.free_remaining > 0
-    ? 'Stack on top of your free tickets'
-    : balance.paid_credit > 0
-      ? 'Stack on top of your paid ticket'
-      : null
 
   return (
     <div className="card-navy p-5 mb-6" style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}>
@@ -158,6 +157,37 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
         </div>
       )}
 
+      {/* Quantity selector · bulk purchase. Founder price applies
+          per-ticket so total scales linearly. */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-label)' }}>
+          QTY
+        </span>
+        {QUANTITY_PRESETS.map(q => {
+          const active = quantity === q
+          return (
+            <button
+              key={q}
+              type="button"
+              onClick={() => setQuantity(q)}
+              className="px-2.5 py-1 font-mono text-[11px] tabular-nums transition-all"
+              style={{
+                background:   active ? 'rgba(240,192,64,0.18)' : 'transparent',
+                color:        active ? 'var(--gold-500)'      : 'var(--text-secondary)',
+                border:       `1px solid ${active ? 'rgba(240,192,64,0.5)' : 'rgba(248,245,238,0.15)'}`,
+                borderRadius: '2px',
+                cursor:       'pointer',
+              }}
+            >
+              {q}
+            </button>
+          )
+        })}
+        <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {quantity === 1 ? 'ticket' : 'tickets'}
+        </span>
+      </div>
+
       <div className="flex items-center gap-3 flex-wrap">
         <button
           type="button"
@@ -178,24 +208,16 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
             'OPENING STRIPE…'
           ) : founderActive ? (
             <>
-              <span>BUY 1 TICKET ·</span>
-              <s style={{ opacity: 0.55, textDecorationThickness: '1.5px' }}>${standardDollars}</s>
-              <strong>${priceDollars}</strong>
+              <span>BUY {quantity} TICKET{quantity === 1 ? '' : 'S'} ·</span>
+              <s style={{ opacity: 0.55, textDecorationThickness: '1.5px' }}>${(parseInt(standardDollars) * quantity)}</s>
+              <strong>${(parseInt(priceDollars) * quantity)}</strong>
             </>
           ) : (
-            <span>BUY 1 TICKET · ${priceDollars}</span>
+            <span>BUY {quantity} TICKET{quantity === 1 ? '' : 'S'} · ${(parseInt(priceDollars) * quantity)}</span>
           )}
         </button>
 
-        {!canBuy && (
-          <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-            {buyableReason === 'use_free_first'
-              ? 'Use your free tickets first'
-              : 'Use your existing paid ticket first'}
-          </span>
-        )}
-
-        {founderActive && canBuy && (
+        {founderActive && (
           <span className="font-mono text-[10px]" style={{ color: 'var(--gold-500)' }}>
             {founder!.remaining} founder spots left
           </span>
