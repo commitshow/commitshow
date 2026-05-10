@@ -521,13 +521,27 @@ export function PitchPage() {
         <SectionH>Who's building, what we're raising</SectionH>
         <div className="grid md:grid-cols-2 gap-5 mt-2">
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
-            <div className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: GOLD }}>Team</div>
-            <div className="font-light" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-              <p className="mb-3">Founding team builds end-to-end — same hands write the audit engine, the React surface, the Stripe integration, the GitHub Action, and the CLI. No scaling-via-headcount required to ship V1.</p>
-              <p style={{ color: 'var(--text-muted)' }}>
-                Detailed founder bios available on request — we keep them off the public page until first conversation.
-              </p>
-            </div>
+            <div className="font-mono text-[10px] tracking-widest uppercase mb-4" style={{ color: GOLD }}>Founders</div>
+            <FounderCard
+              name="Han Kim"
+              role="Founder"
+              photo="/team/han.jpg"
+              initial="H"
+              linkedin="https://www.linkedin.com/in/han-seok-kim-0057121aa/"
+              bio="Builds end-to-end across product, engineering, and brand. Wrote the audit engine, the React surface, the Stripe integration, and the CLI."
+            />
+            <div style={{ height: 12 }} />
+            <FounderCard
+              name="CJ Kim"
+              role="Founder"
+              photo="/team/cj.jpg"
+              initial="C"
+              linkedin="https://www.linkedin.com/in/chanjoonkim/"
+              bio="Drives go-to-market, partnerships, and the ecosystem outreach pipeline. Operates the Tool-maker relationships that anchor V1.5 Library Marketplace supply."
+            />
+            <p className="font-mono text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
+              No outside hires shipped V1. Same hands write the engine, the deck, and this page.
+            </p>
           </div>
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: `1px solid ${GOLD}50`, borderRadius: '2px' }}>
             <div className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: GOLD }}>The ask</div>
@@ -593,6 +607,40 @@ function Divider() {
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-8 lg:px-16">
       <div style={{ height: 1, background: 'rgba(240,192,64,0.12)' }} />
+    </div>
+  )
+}
+
+function FounderCard({ name, role, photo, initial, linkedin, bio }: {
+  name: string; role: string; photo: string; initial: string; linkedin: string; bio: string;
+}) {
+  const [imgFailed, setImgFailed] = useState(false)
+  return (
+    <div className="flex gap-4 items-start">
+      <div className="flex-shrink-0 flex items-center justify-center font-display font-black overflow-hidden"
+           style={{
+             width: 64, height: 64,
+             background: imgFailed ? GOLD : 'var(--navy-800)',
+             border: '1px solid rgba(240,192,64,0.35)',
+             borderRadius: '2px',
+             color: NAVY_950, fontSize: 28,
+           }}>
+        {imgFailed
+          ? initial
+          : <img src={photo} alt={name} className="w-full h-full" style={{ objectFit: 'cover' }} onError={() => setImgFailed(true)} />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+          <div className="font-display font-bold text-base" style={{ color: 'var(--cream)' }}>{name}</div>
+          <div className="font-mono text-[10px] tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{role}</div>
+        </div>
+        <p className="font-light text-sm mb-1.5" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>{bio}</p>
+        <a href={linkedin} target="_blank" rel="noopener noreferrer"
+           className="inline-block font-mono text-[11px]"
+           style={{ color: GOLD, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+          LinkedIn ↗
+        </a>
+      </div>
     </div>
   )
 }

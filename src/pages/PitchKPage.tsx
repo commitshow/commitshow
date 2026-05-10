@@ -119,6 +119,40 @@ function PillarCard({ tone, title, weight, lead, items }: { tone: string; title:
   )
 }
 
+function FounderCard({ name, role, photo, initial, linkedin, bio }: {
+  name: string; role: string; photo: string; initial: string; linkedin: string; bio: string;
+}) {
+  const [imgFailed, setImgFailed] = useState(false)
+  return (
+    <div className="flex gap-4 items-start">
+      <div className="flex-shrink-0 flex items-center justify-center font-display font-black overflow-hidden"
+           style={{
+             width: 64, height: 64,
+             background: imgFailed ? GOLD : 'var(--navy-800)',
+             border: '1px solid rgba(240,192,64,0.35)',
+             borderRadius: '2px',
+             color: NAVY_950, fontSize: 28,
+           }}>
+        {imgFailed
+          ? initial
+          : <img src={photo} alt={name} className="w-full h-full" style={{ objectFit: 'cover' }} onError={() => setImgFailed(true)} />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+          <div className="font-display font-bold text-base" style={{ color: 'var(--cream)' }}>{name}</div>
+          <div className="font-mono text-[10px] tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>{role}</div>
+        </div>
+        <p className="font-light text-sm mb-1.5" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>{bio}</p>
+        <a href={linkedin} target="_blank" rel="noopener noreferrer"
+           className="inline-block font-mono text-[11px]"
+           style={{ color: GOLD, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+          LinkedIn ↗
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function GradeCell({ color, name, cond }: { color: string; name: string; cond: string }) {
   return (
     <div className="px-3 py-2.5"
@@ -606,13 +640,27 @@ export function PitchKPage() {
         <SectionH>누가 만드는가, 무엇을 모으는가</SectionH>
         <div className="grid md:grid-cols-2 gap-5 mt-2">
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '2px' }}>
-            <div className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: GOLD }}>팀</div>
-            <div className="font-light" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.7 }}>
-              <p className="mb-3">파운딩 팀이 end-to-end 빌드합니다 — 감사 엔진 · React surface · Stripe 연동 · GitHub Action · CLI 까지 동일한 손이 작성합니다. V1 출시까지 헤드카운트 확장 없이 도달했습니다.</p>
-              <p style={{ color: 'var(--text-muted)' }}>
-                창업자 상세 이력은 첫 미팅에서 공유드립니다. 공개 페이지에는 보존하지 않습니다.
-              </p>
-            </div>
+            <div className="font-mono text-[10px] tracking-widest uppercase mb-4" style={{ color: GOLD }}>창업자</div>
+            <FounderCard
+              name="Han Kim"
+              role="Founder"
+              photo="/team/han.jpg"
+              initial="H"
+              linkedin="https://www.linkedin.com/in/han-seok-kim-0057121aa/"
+              bio="제품 · 엔지니어링 · 브랜드를 end-to-end 로 빌드합니다. 감사 엔진 · React surface · Stripe 연동 · CLI 를 직접 작성했습니다."
+            />
+            <div style={{ height: 12 }} />
+            <FounderCard
+              name="CJ Kim"
+              role="Founder"
+              photo="/team/cj.jpg"
+              initial="C"
+              linkedin="https://www.linkedin.com/in/chanjoonkim/"
+              bio="GTM · 파트너십 · 도구 생태계 outreach 를 이끕니다. V1.5 Library 마켓플레이스 공급의 anchor 가 될 Tool maker 관계를 운영합니다."
+            />
+            <p className="font-mono text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
+              V1 까지 외부 채용 없이 출시했습니다. 엔진과 deck 와 이 페이지를 같은 손이 씁니다.
+            </p>
           </div>
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: `1px solid ${GOLD}50`, borderRadius: '2px' }}>
             <div className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: GOLD }}>라운드</div>
