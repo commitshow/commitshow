@@ -111,14 +111,15 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
   return (
     <div className="card-navy p-7 mb-6" style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}>
       <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-        // BACKSTAGE · NOT ON THE LEAGUE YET
+        // AUDIT COMPLETE · NEXT STEP
       </div>
       <div className="font-display font-bold text-2xl mb-2" style={{ color: 'var(--cream)' }}>
-        Take this on the audition stage?
+        Want eyes on this build?
       </div>
       <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.6 }}>
-        Your audit is sitting backstage · only you can see it. Audition to put it on the league —
-        Scouts can forecast, the project enters the ladder, and a score of 85+ earns the Encore badge.
+        Your audit is done — right now only you can see it (we call this <em style={{ color: 'var(--cream)', fontStyle: 'normal' }}>backstage</em>).
+        Audition to put it on the league: Scouts forecast your trajectory, the project lands on the ladder,
+        and a score of 85+ earns the permanent Encore badge.
         {scoreTotal != null && scoreTotal >= 85 && (
           <> <span style={{ color: 'var(--gold-500)' }}>You're already at {scoreTotal} — Encore territory the moment you go on stage.</span></>
         )}
