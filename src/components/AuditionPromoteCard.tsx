@@ -94,9 +94,9 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
 
   const ticketLine = balance
     ? balance.free_remaining > 0
-      ? `${balance.free_remaining} free ticket${balance.free_remaining === 1 ? '' : 's'} remaining${balance.paid_credit > 0 ? ` · +${balance.paid_credit} paid credit` : ''}`
+      ? `${balance.free_remaining} free ticket${balance.free_remaining === 1 ? '' : 's'} remaining${balance.paid_credit > 0 ? ` · +${balance.paid_credit} paid ticket${balance.paid_credit === 1 ? '' : 's'}` : ''}`
       : balance.paid_credit > 0
-        ? `${balance.paid_credit} paid credit available`
+        ? `${balance.paid_credit} paid ticket${balance.paid_credit === 1 ? '' : 's'} available`
         : 'No tickets · audition fee applies'
     : 'Loading tickets…'
 
@@ -104,7 +104,7 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
     ? balance.free_remaining > 0
       ? `Audition with free ticket →`
       : balance.paid_credit > 0
-        ? `Audition with paid credit →`
+        ? `Audition with paid ticket →`
         : `Audition with payment →`
     : 'Audition →'
 

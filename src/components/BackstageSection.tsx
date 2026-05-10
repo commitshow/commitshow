@@ -86,9 +86,9 @@ export function BackstageSection({ memberId }: { memberId: string }) {
           // YOUR TICKETS
         </div>
         <div className="font-mono text-[12px]" style={{ color: 'var(--cream)' }}>
-          {balance.free_remaining > 0 && <>{balance.free_remaining} free</>}
+          {balance.free_remaining > 0 && <>{balance.free_remaining} free ticket{balance.free_remaining === 1 ? '' : 's'}</>}
           {balance.free_remaining > 0 && balance.paid_credit > 0 && <> · </>}
-          {balance.paid_credit > 0 && <>{balance.paid_credit} paid credit</>}
+          {balance.paid_credit > 0 && <>{balance.paid_credit} paid ticket{balance.paid_credit === 1 ? '' : 's'}</>}
         </div>
       </div>
     )
@@ -107,7 +107,7 @@ export function BackstageSection({ memberId }: { memberId: string }) {
           <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--gold-500)' }}>
             {balance.free_remaining > 0 && <>{balance.free_remaining} free ticket{balance.free_remaining === 1 ? '' : 's'}</>}
             {balance.free_remaining > 0 && balance.paid_credit > 0 && <> · </>}
-            {balance.paid_credit > 0 && <>+{balance.paid_credit} paid credit</>}
+            {balance.paid_credit > 0 && <>+{balance.paid_credit} paid ticket{balance.paid_credit === 1 ? '' : 's'}</>}
           </div>
         )}
       </div>
