@@ -175,6 +175,10 @@ export function PitchPage() {
                 style={{ border: '1px solid rgba(255,255,255,0.18)', color: 'var(--cream)', borderRadius: '2px' }}>
             Read the scoring rulebook
           </Link>
+          <Link to="/pitch-k" className="inline-block px-5 py-2.5 font-mono text-[12px] tracking-widest uppercase"
+                style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'var(--text-muted)', borderRadius: '2px' }}>
+            한국어 →
+          </Link>
         </div>
 
         {/* Live traction strip */}
