@@ -384,6 +384,8 @@ export function PitchPage() {
               body="Same engine exposed as a metered REST endpoint. Buyers: portfolio acceleration teams, code-review SaaS adding a 'shipping readiness' module, ATS vendors stamping candidate repos. $0.05–$0.50 per audit, volume tiers." />
             <RevenueRow tone={PURPLE} title="GitHub Marketplace Action"
               body="commitshow/audit-action ships PR-gating now. Free tier for OSS; paid tier ($X/seat/mo) for private monorepos with unlimited PR audits + custom rule overlays. Already published on GitHub Marketplace." />
+            <RevenueRow tone={PURPLE} title="MCP server (Cursor · Claude · Windsurf)"
+              body="commitshow-mcp on npm — installs into Claude Desktop · Cursor · Cline · Windsurf via 3-line config. The audit engine runs as a tool the host model can call mid-conversation. Distribution channel is the same one that funnels Tool Challenge sponsors and recruiter buyers." />
             <RevenueRow tone={PURPLE} title="Recruiter access"
               body="ATS-style tier for hiring teams: filter graduated Creators by Audit pillar, Stack Fingerprint, Scout endorsements. Per-seat subscription. Bridges the 'GitHub stars are wrong signal' problem identified in §01." />
             <RevenueRow tone={PURPLE} title="Tool sponsorship + Sponsored Showcases"
@@ -410,6 +412,7 @@ export function PitchPage() {
               'Season Zero open to public',
               'GitHub Action published on Marketplace',
               'CLI on npm — npx commitshow@latest audit',
+              'MCP server on npm — Claude Desktop / Cursor / Cline / Windsurf',
             ]} />
           <RoadCol tone={PURPLE} phase="V1.5 · Q3 2026" title="Library Marketplace"
             items={[
@@ -429,11 +432,11 @@ export function PitchPage() {
             ]} />
           <RoadCol tone={BLUE} phase="V2 · 2027" title="Ecosystem layer"
             items={[
-              'MCP server (Claude Desktop / Cursor / Windsurf integration)',
               'Open Bounty hosting (sponsor-funded)',
               'Acquisition / Fund-of-Funds discovery surface',
               'Multi-region calibration',
               'White-label for code-review vendors',
+              'Anthropic-registry MCP listing + Cursor partner placement',
             ]} />
         </div>
 

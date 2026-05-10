@@ -497,6 +497,8 @@ export function PitchKPage() {
               body="동일 엔진을 metered REST 엔드포인트로 노출. 타깃 — VC 의 포트폴리오 검토팀, 코드 리뷰 SaaS 의 'shipping readiness' 모듈, ATS 벤더의 후보자 저장소 검증. $0.05~$0.50 per audit · 볼륨 티어." />
             <RevenueRow tone={PURPLE} title="GitHub Marketplace Action"
               body="commitshow/audit-action 이 PR-gating 을 이미 제공 중입니다. OSS 는 무료, 프라이빗 monorepo 는 시트당 월정액 (무제한 PR 감사 + 커스텀 룰 오버레이). 이미 GitHub Marketplace 에 등록 완료." />
+            <RevenueRow tone={PURPLE} title="MCP 서버 (Cursor · Claude · Windsurf)"
+              body="commitshow-mcp 가 npm 에 배포되어 있어 Claude Desktop · Cursor · Cline · Windsurf 에 3줄 설정만으로 설치됩니다. 감사 엔진이 호스트 모델의 대화 중 호출 가능한 tool 로 작동합니다. 동일한 유통 채널이 Tool Challenge 스폰서와 채용 구매자로도 흐릅니다." />
             <RevenueRow tone={PURPLE} title="채용사 액세스"
               body="채용팀을 위한 ATS 형 티어. 졸업 Creator 를 Audit pillar · Stack Fingerprint · Scout 추천 등으로 필터링합니다. 시트당 구독 — §01 의 'GitHub stars 는 잘못된 신호' 문제를 직접 해결합니다." />
             <RevenueRow tone={PURPLE} title="툴 스폰서십 + Sponsored Showcase"
@@ -523,6 +525,7 @@ export function PitchKPage() {
               'Season Zero 일반 공개 임박',
               'GitHub Action Marketplace 등록 완료',
               'CLI npm 배포 — npx commitshow@latest audit',
+              'MCP 서버 npm 배포 — Claude Desktop / Cursor / Cline / Windsurf',
             ]} />
           <RoadCol tone={PURPLE} phase="V1.5 · 2026 Q3" title="Library 마켓플레이스"
             items={[
@@ -542,11 +545,11 @@ export function PitchKPage() {
             ]} />
           <RoadCol tone={BLUE} phase="V2 · 2027" title="생태계 레이어"
             items={[
-              'MCP 서버 (Claude Desktop · Cursor · Windsurf 통합)',
               'Open Bounty 호스팅 (스폰서 펀딩)',
               '인수 / Fund-of-Funds 디스커버리 surface',
               '다지역 보정',
               '코드리뷰 벤더용 white-label',
+              'Anthropic 공식 MCP 레지스트리 등재 + Cursor 파트너 배치',
             ]} />
         </div>
 

@@ -1695,7 +1695,7 @@ V1 (완료 2026-04-25)  · packages/cli/ 구현 · v0.1 read-only (audit · stat
 V1 후반      · `/cli/link` 웹 페이지 + device-flow 서버 엔드포인트 (Edge Function)
 V1.5 런칭    · @commitshow/cli v0.2 npm 공개 · login · submit · --watch · CI 게이팅
               · X 런칭 포스트 실탄 (터미널 스크린샷 3장) · README 에 `npx commitshow audit` demo GIF
-V1.5 후      · `install <pack>` 구현 · MCP 서버 버전 (§15-C.6 future)
+V1.5 후      · `install <pack>` 구현 (MCP 서버는 V1 에 이미 라이브 · §15-C.6 참조)
 
 V1.5 전환 조건:
   ☐ Season-end 엔진 (P8) 완료 — 랭킹이 실시간 의미를 가지려면 필요
@@ -1740,11 +1740,13 @@ band=$(echo "$json" | jq -r .score.band)
 # 에이전트 가 concerns[0].bullet 읽고 edit → re-audit → band 체크 반복
 ```
 
-### 15-C.6 Future (post V1.5)
+### 15-C.6 MCP 서버 (V1 라이브 · 2026-05-10)
 
-- **MCP 서버** — Claude Desktop / Cursor 가 commit.show 를 tool 로 호출 ("run audit on this repo" · "fetch my standings"). 우리 Library 자체가 MCP Config 아티팩트를 많이 가지고 있어 생태계 정합 강함
-- **공개 REST API** — CLI/MCP 위의 공통 레이어. rate-limit + auth + metered billing 설계 필요 (V2+)
-- **Watch mode** — `commitshow audit --watch` · 파일 변경 감지 → commit → audit 자동 반복 (개발 루프 순환 가속)
+- ✅ **MCP 서버 라이브** — `commitshow-mcp@0.1.0` npm 배포 완료 · `npx -y commitshow-mcp@latest` · 3 tools: `audit_repo` (live audit · md/json), `project_status` (cached snapshot), `fetch_docs` (llms.txt). Claude Desktop · Cursor · Cline · Windsurf 모두 3-line `mcpServers` config 로 설치. stdio shim · `https://api.commit.show/audit` REST 위에 얇게 얹힘. 소스: `/Users/hans1/commitshow-cli/mcp/`
+- ✅ **공개 REST API** — `https://api.commit.show/audit` 라이브 · CLI · MCP · 외부 통합 (Gemini · ChatGPT · n8n · Zapier · curl) 공통 레이어
+- ☐ **Watch mode** — `commitshow audit --watch` · 파일 변경 감지 → commit → audit 자동 반복 (V1.5+)
+- ☐ **Anthropic 공식 MCP 레지스트리 등재** — modelcontextprotocol/servers 커뮤니티 리스트 PR (V1 launch press 패키지)
+- ☐ **Cursor 공식 파트너 배치** — Cursor Directory MCP 추천 슬롯 (V2)
 
 ---
 
@@ -2064,7 +2066,7 @@ Brand verb 전역 교체 (P5)
   ☐ Season Partner (툴사 스폰서십 — Cursor · Claude · Lovable 등)
   ☐ Community post Comment 시스템 (B)
   ☐ ProfilePage Community 피드 탭 통합 (B)
-  ☐ MCP 서버 (§15-C.6 · post V1.5)
+  ✅ MCP 서버 (§15-C.6 · V1 라이브 · 2026-05-10 · commitshow-mcp@0.1.0 npm)
 ```
 
 ---
