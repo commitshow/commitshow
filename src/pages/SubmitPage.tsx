@@ -20,13 +20,13 @@ export function SubmitPage() {
       <div className="max-w-2xl mx-auto pt-8">
         <div className="text-center mb-12">
           <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>
-            // AUDITION YOUR PROJECT
+            // AUDIT YOUR PROJECT
           </div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-3">
-            Get on the ladder
+            Free audit · audition when you're ready
           </h2>
           <p className="font-light" style={{ color: 'rgba(248,245,238,0.4)' }}>
-            Four steps · engine-extracted brief · multi-axis audit in ~90s · ranked the moment it finishes
+            Engine-extracted brief · multi-axis audit in ~90s · sits backstage until you put it on the league
           </p>
         </div>
 
@@ -47,10 +47,10 @@ export function SubmitPage() {
               FULL AUDIT · ACTIVE
             </div>
             <div className="font-display font-bold text-lg mb-1" style={{ color: 'var(--cream)' }}>
-              Repo + Brief → ladder
+              Repo + Brief → backstage → audition
             </div>
             <p className="font-mono text-xs" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              Full audit · graduation track · auto-share at score ≥ 85
+              Free full audit · audition any time · 3 free tickets per member · score 85+ on stage earns Encore
             </p>
           </div>
 

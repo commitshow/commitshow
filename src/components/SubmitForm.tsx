@@ -570,7 +570,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           color: '#00D4AA',
           borderRadius: '2px',
         }}>
-          FREE AUDITION · {eligibility.remainingFree} of {eligibility.freeQuota} remaining
+          AUDIT IS FREE · {eligibility.remainingFree} of {eligibility.freeQuota} audition tickets remaining
         </div>
       )}
 
