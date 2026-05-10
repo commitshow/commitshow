@@ -617,9 +617,21 @@ export function PitchKPage() {
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: `1px solid ${GOLD}50`, borderRadius: '2px' }}>
             <div className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: GOLD }}>라운드</div>
             <div className="font-light" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.7 }}>
-              <p className="mb-3">Pre-seed 라운드입니다. 자금 용도 — V1 공개 출시 → V1.5 Library 마켓플레이스 출시 → V1.8 Audit API 티어 가동.</p>
-              <p className="mb-3">자금 배분: <span style={{ color: 'var(--cream)' }}>40% 엔지니어링</span> (3명 채용) · <span style={{ color: 'var(--cream)' }}>30% 그로스</span> (도구 생태계 outreach + 스폰서십 파이프라인) · <span style={{ color: 'var(--cream)' }}>20% 보정</span> (Claude API 스케일 + 평가 인프라) · <span style={{ color: 'var(--cream)' }}>10% 법무 · 운영</span>.</p>
-              <p style={{ color: 'var(--text-muted)' }}>라운드 사이즈와 밸류에이션은 첫 미팅에서 논의드립니다.</p>
+              <div className="mb-4 pb-3" style={{ borderBottom: `1px solid ${GOLD}20` }}>
+                <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-1" style={{ color: 'var(--text-muted)' }}>목표 모집액</div>
+                <div className="font-display font-black tabular-nums" style={{ color: GOLD, fontSize: '2rem', lineHeight: 1.1 }}>USD 500K</div>
+                <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Pre-seed · 18개월 runway</div>
+              </div>
+              <p className="mb-3">자금 용도 — V1 공개 출시 → V1.5 Library 마켓플레이스 출시 → V1.8 Audit API 티어 가동.</p>
+              <p className="mb-1" style={{ color: 'var(--cream)', fontWeight: 600 }}>자금 배분</p>
+              <ul className="space-y-1.5 mb-3 list-none">
+                <li>· <span style={{ color: 'var(--cream)' }}>30% 마케팅 · 브랜드</span> — 유료 획득 · 런칭 캠페인 · 크리에이터 파트너십 · X · Discord · YouTube 콘텐츠</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>25% 엔지니어링</span> — 시니어 1명 채용 (Library 마켓플레이스 · API 티어)</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>20% 생태계 · BD</span> — 도구 파트너 outreach (Cursor · Anthropic · Vercel) · 스폰서십 파이프라인</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>15% 보정 · 인프라</span> — Claude API 스케일 · 평가 인프라 · CF Browser Rendering</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>10% 법무 · 운영</span> — 외부 카운슬 · 회계 · SOC 2 준비</li>
+              </ul>
+              <p style={{ color: 'var(--text-muted)' }}>밸류에이션과 instrument 구조는 첫 미팅에서 논의드립니다.</p>
             </div>
           </div>
         </div>

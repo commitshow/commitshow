@@ -532,9 +532,21 @@ export function PitchPage() {
           <div className="px-5 py-5" style={{ background: 'rgba(15,32,64,0.55)', border: `1px solid ${GOLD}50`, borderRadius: '2px' }}>
             <div className="font-mono text-[10px] tracking-widest uppercase mb-3" style={{ color: GOLD }}>The ask</div>
             <div className="font-light" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-              <p className="mb-3">Pre-seed round to take V1 public, ship the Library Marketplace (V1.5), and stand up the Audit API tier (V1.8).</p>
-              <p className="mb-3">Use of funds: <span style={{ color: 'var(--cream)' }}>40% engineering</span> (3 hires) · <span style={{ color: 'var(--cream)' }}>30% growth</span> (Tool ecosystem outreach + sponsorship pipeline) · <span style={{ color: 'var(--cream)' }}>20% calibration</span> (Claude API at scale, evaluation infra) · <span style={{ color: 'var(--cream)' }}>10% legal & ops</span>.</p>
-              <p style={{ color: 'var(--text-muted)' }}>Round size and valuation discussed in first conversation.</p>
+              <div className="mb-4 pb-3" style={{ borderBottom: `1px solid ${GOLD}20` }}>
+                <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Target raise</div>
+                <div className="font-display font-black tabular-nums" style={{ color: GOLD, fontSize: '2rem', lineHeight: 1.1 }}>$500K</div>
+                <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Pre-seed · 18-month runway</div>
+              </div>
+              <p className="mb-3">Funds take V1 public, ship the Library Marketplace (V1.5), and stand up the Audit API tier (V1.8).</p>
+              <p className="mb-1" style={{ color: 'var(--cream)', fontWeight: 600 }}>Use of funds</p>
+              <ul className="space-y-1.5 mb-3 list-none">
+                <li>· <span style={{ color: 'var(--cream)' }}>30% Marketing &amp; brand</span> — paid acquisition · launch campaign · creator partnerships · X · Discord · YouTube content</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>25% Engineering</span> — one senior hire (Library Marketplace · API tier)</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>20% Ecosystem &amp; BD</span> — Tool-partner outreach (Cursor · Anthropic · Vercel) · sponsorship pipeline</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>15% Calibration &amp; infra</span> — Claude API at scale · evaluation infra · CF Browser Rendering</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>10% Legal &amp; ops</span> — counsel · accounting · SOC 2 prep</li>
+              </ul>
+              <p style={{ color: 'var(--text-muted)' }}>Valuation and instrument structure discussed in first conversation.</p>
             </div>
           </div>
         </div>
