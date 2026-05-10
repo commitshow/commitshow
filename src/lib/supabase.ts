@@ -9,7 +9,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 export type ScoutTier = 'Bronze' | 'Silver' | 'Gold' | 'Platinum'
 export type CreatorGrade = 'Rookie' | 'Builder' | 'Maker' | 'Architect' | 'Vibe Engineer' | 'Legend'
-export type ProjectStatus = 'active' | 'graduated' | 'valedictorian' | 'retry' | 'preview'
+export type ProjectStatus = 'active' | 'graduated' | 'valedictorian' | 'retry' | 'preview' | 'backstage'
 export type GraduationGrade = 'valedictorian' | 'honors' | 'graduate'
 export type SeasonStatus = 'upcoming' | 'active' | 'applaud' | 'completed'
 export type HealthStatus = 'healthy' | 'degraded' | 'down' | 'unknown'
