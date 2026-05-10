@@ -93,6 +93,7 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
   const founderActive = !!(founder && founder.windowOpen && founder.remaining > 0)
   const priceCents    = founderActive ? founder.priceCents : REGISTRATION_PRICE_CENTS
   const priceDollars  = (priceCents / 100).toFixed(0)
+  const standardDollars = (REGISTRATION_PRICE_CENTS / 100).toFixed(0)
 
   // Stockpiling allowed (2026-05-11) — buy any time, even with free
   // quota or paid credit remaining. audition_project RPC spends free
@@ -162,7 +163,7 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
           type="button"
           onClick={handleBuy}
           disabled={!canBuy || busy}
-          className="px-4 py-2 text-xs font-medium tracking-wide transition-all"
+          className="px-4 py-2 text-xs font-medium tracking-wide transition-all inline-flex items-center gap-1.5"
           style={{
             background:   canBuy ? 'var(--gold-500)' : 'rgba(240,192,64,0.18)',
             color:        canBuy ? 'var(--navy-900)' : 'var(--text-muted)',
@@ -173,10 +174,17 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
             opacity:      busy ? 0.55 : 1,
           }}
         >
-          {busy ? 'OPENING STRIPE…'
-               : founderActive
-                 ? `BUY 1 TICKET · $${priceDollars} (founder)`
-                 : `BUY 1 TICKET · $${priceDollars}`}
+          {busy ? (
+            'OPENING STRIPE…'
+          ) : founderActive ? (
+            <>
+              <span>BUY 1 TICKET ·</span>
+              <s style={{ opacity: 0.55, textDecorationThickness: '1.5px' }}>${standardDollars}</s>
+              <strong>${priceDollars}</strong>
+            </>
+          ) : (
+            <span>BUY 1 TICKET · ${priceDollars}</span>
+          )}
         </button>
 
         {!canBuy && (
