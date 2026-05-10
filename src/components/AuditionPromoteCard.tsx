@@ -118,10 +118,10 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
       </div>
       <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.6 }}>
         Your audit is done — right now only you can see it (we call this <em style={{ color: 'var(--cream)', fontStyle: 'normal' }}>backstage</em>).
-        Audition to put it on the league: Scouts forecast your trajectory, the project lands on the ladder,
-        and a score of 85+ earns the permanent Encore badge.
+        Audition to put it on stage and get real feedback from other builders. The project goes public,
+        lands on its category ladder, and earns the permanent Encore badge at score 85+.
         {scoreTotal != null && scoreTotal >= 85 && (
-          <> <span style={{ color: 'var(--gold-500)' }}>You're already at {scoreTotal} — Encore territory the moment you go on stage.</span></>
+          <> <span style={{ color: 'var(--gold-500)' }}>You're already at {scoreTotal} — Encore lands the moment you go public.</span></>
         )}
       </p>
 

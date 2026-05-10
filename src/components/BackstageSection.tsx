@@ -180,7 +180,7 @@ export function BackstageSection({ memberId }: { memberId: string }) {
       </div>
 
       <p className="font-mono text-[10px] mt-3" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
-        Audition puts a project on the league · Scouts forecast, ladder ranks, score 85+ earns Encore.
+        Audition opens the project to feedback from other builders · lands on the live ladder · Encore at score 85+.
       </p>
     </div>
   )
