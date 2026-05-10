@@ -244,8 +244,8 @@ export function PitchPage() {
             tone={PURPLE}
             num="03"
             title="Member Audition"
-            sub="Full audit · 3-week season"
-            body="Creator submits product + Build Brief, the Audit engine runs deep checks, Scouts (graded forecasters) cast vote tickets, Community engagement signals close the loop. Seasons are 3 weeks. Top 20% graduate with permanent Hall of Fame entries."
+            sub="Full audit · permanent ladder + events"
+            body="Creator submits product + Build Brief. The Audit engine runs deep checks, Scouts (graded forecasters) cast vote tickets, and the project enters the permanent Ladder — real-time ranking by category and time window (today / week / month / all-time). Six event templates run on top: Quarterly Season (3-week, top 20% graduate to Hall of Fame), Tool Challenge, Theme Sprint, Quality Bar, Sponsored Showcase, Open Bounty."
           />
         </div>
       </section>
@@ -318,8 +318,8 @@ export function PitchPage() {
           <FlowCard
             tone={GOLD}
             label="Creator"
-            edges="Audited & ranked → permanent Hall of Fame entry"
-            body="Solo builder ships a product. Audit engine scores it. Top 20% graduate. The graduation badge is the first portable credential built specifically for AI-native builders."
+            edges="Audited → live ladder rank → streaks + milestones"
+            body="Solo builder ships a product. The Audit engine scores it and the project enters the permanent Ladder — ranked in real time per category × time window. Streaks (100 days top-50) and milestones (first top-10, all-categories top-50) accumulate as durable badges. Quarterly Season events layer on top for cohort-based graduation and Hall of Fame entry."
           />
           <FlowCard
             tone={PURPLE}

@@ -316,8 +316,8 @@ export function PitchKPage() {
             tone={PURPLE}
             num="03"
             title="Member Audition"
-            sub="풀 감사 · 3주 시즌"
-            body="Creator 가 제품과 Build Brief 를 제출하고, 감사 엔진이 정밀 측정을 수행하며, Scout (등급제 예측가) 가 투표권을 행사하고, Community 반응으로 마무리됩니다. 시즌은 3주이며 상위 20% 는 영구 Hall of Fame 에 등재됩니다."
+            sub="풀 감사 · 영구 Ladder + Events"
+            body="Creator 가 제품과 Build Brief 를 제출합니다. 감사 엔진이 정밀 측정을 수행하고 Scout (등급제 예측가) 가 투표권을 행사하면, 프로젝트가 영구 Ladder 에 진입합니다 — 카테고리와 시간 윈도우 (오늘 · 이번 주 · 이번 달 · 누적) 별로 실시간 랭킹. 그 위에 6 종 이벤트 템플릿이 작동합니다: Quarterly Season (3주 · 상위 20% Hall of Fame 졸업), Tool Challenge, Theme Sprint, Quality Bar, Sponsored Showcase, Open Bounty."
           />
         </div>
       </section>
@@ -387,8 +387,8 @@ export function PitchKPage() {
           <FlowCard
             tone={GOLD}
             label="Creator"
-            edges="감사 + 랭킹 → 영구 Hall of Fame 등재"
-            body="1인 빌더가 제품을 출시합니다. 엔진이 점수를 매기고, 상위 20% 가 졸업합니다. 이 졸업 배지가 AI 네이티브 빌더를 위해 처음으로 만들어진 이동 가능한 자격 증명입니다."
+            edges="감사 → 라이브 Ladder 랭킹 → 스트릭 + 마일스톤"
+            body="1인 빌더가 제품을 출시하면, 감사 엔진이 점수를 매기고 프로젝트가 영구 Ladder 에 진입합니다 — 카테고리 × 시간 윈도우별로 실시간 랭킹. 스트릭 (Top 50 100일 유지) 과 마일스톤 (첫 Top 10 진입 · 전 카테고리 Top 50 동시 점유) 이 영구 배지로 누적됩니다. 그 위에 Quarterly Season 이벤트가 코호트 기반 졸업과 Hall of Fame 등재를 제공합니다."
           />
           <FlowCard
             tone={PURPLE}
