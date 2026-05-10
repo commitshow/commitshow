@@ -42,6 +42,7 @@ const ProjectSlugRedirect     = lazy(() => import('./pages/ProjectSlugRedirect')
 const NotFoundPage            = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
 const MyProductsPage          = lazy(() => import('./pages/MyProductsPage').then(m => ({ default: m.MyProductsPage })))
 const TokenLeaderboardPage    = lazy(() => import('./pages/TokenLeaderboardPage').then(m => ({ default: m.TokenLeaderboardPage })))
+const PitchPage               = lazy(() => import('./pages/PitchPage').then(m => ({ default: m.PitchPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -106,6 +107,7 @@ export default function App() {
           <Route path="/privacy"          element={<PrivacyPage />} />
           <Route path="/backstage"        element={<BackstagePage />} />
           <Route path="/audit"            element={<AuditPage />} />
+          <Route path="/pitch"            element={<PitchPage />} />
           <Route path="/admin"            element={<AdminPage />} />
           <Route path="/admin/cmo"        element={<CmoPreviewPage />} />
           <Route path="/admin/emails"     element={<AdminEmailsPage />} />
