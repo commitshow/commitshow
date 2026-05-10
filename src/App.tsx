@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react'
 import { Nav } from './components/Nav'
 import { ScrollToTop } from './components/ScrollToTop'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { TicketGiftCelebration } from './components/TicketGiftCelebration'
 import { LandingPage } from './pages/LandingPage'  // eager — first paint target
 import './index.css'
 
@@ -63,6 +64,10 @@ export default function App() {
     <div className="relative min-h-screen md:pl-[200px]">
       <ScrollToTop />
       <Nav />
+      {/* Center-screen celebration · fires when the recipient logs in
+          (or is already online) and has an unread 'ticket_gift'
+          notification. No-op for everyone else. */}
+      <TicketGiftCelebration />
 
       <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
