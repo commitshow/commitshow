@@ -21,6 +21,7 @@ import {
 } from '../lib/pricing'
 import { resolvePreviewClaim } from '../lib/projectQueries'
 import { PaymentResultModal } from './PaymentResultModal'
+import { AuditionPromoteCard } from './AuditionPromoteCard'
 
 // Steps:
 //   1 · basic info (name / URL / screenshots)
@@ -229,14 +230,10 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     // even when a retry succeeds and lands on step 4.
     setError('')
 
-    // Re-check gate at submit time (someone may have opened two tabs).
-    if (user?.id) {
-      const recheck = await checkRegistrationEligibility(user.id)
-      if (!recheck.ok) {
-        setEligibility(recheck)
-        return
-      }
-    }
+    // Audit-then-audition split (§16.2 · 2026-05-11): the audit always
+    // runs free into 'backstage' state. The eligibility/Stripe gate has
+    // moved to the post-result Audition Promote card (step 5). No
+    // pre-submit gate here · everyone gets to see their report first.
 
     setStep(3)
 
@@ -267,7 +264,10 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       live_url:     form.url,
       description:  form.desc,
       images,
-      status:       'active' as const,
+      // 'backstage' = audit done, owner-private, not on the league.
+      // Audition Promote card at step 5 flips this to 'active' once the
+      // user spends a ticket / pays. See migration 20260511_backstage_status.sql.
+      status:       'backstage' as const,
       season:       'season_zero' as const,
       // 7-cat ladder placement (§11-NEW.1.1) · empty = let auto-detector
       // suggest at audit time, user can confirm/override on the project page.
@@ -321,22 +321,9 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     }
     const inserted = { id: insertedId }
 
-    // Redeem the paid audit credit if the eligibility we checked at modal-
-    // open time landed on the paid_credit branch. Free-quota auditions skip
-    // this entirely (the RPC is a no-op anyway when paid_audits_credit is 0,
-    // but skipping saves a round-trip). Failure here is non-fatal — the
-    // audit itself still runs; credit just doesn't decrement and the next
-    // checkout will be blocked by the same gate, which is a recoverable
-    // state, not a lost audit.
-    if (user?.id && eligibility?.ok && eligibility.reason === 'paid_credit') {
-      const { error: redeemErr } = await supabase.rpc('redeem_audit_credit', {
-        p_member_id:  user.id,
-        p_project_id: insertedId,
-      })
-      if (redeemErr) {
-        console.warn('[submit] redeem_audit_credit failed', redeemErr.message)
-      }
-    }
+    // Ticket redemption moved to audition_project RPC (step 5 promotion).
+    // Audits themselves are free now — credit only decrements when the
+    // user actually promotes the project onto the audition stage.
 
     // Step 2 — Persist full brief (Phase 1 + Phase 2). Use upsert so a
     // claim flow doesn't collide with whatever brief the CLI/preview path
@@ -422,16 +409,33 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     )
   }
 
-  // ── PAYMENT GATE (permanent policy: first 3 free per member, 4th+ = $99) ──
-  // While we're still polling for the post-checkout webhook, render a confirming
-  // panel instead of PaymentGate — otherwise the user paid and immediately sees
-  // "Pay $99" again because the credit hasn't landed yet (webhook is async,
-  // typically 20-40s end-to-end). We also enter this state when paymentResult
-  // is 'success' before the first eligibility fetch resolves, so the form never
-  // flashes between mount and the first poll tick.
+  // ── PAYMENT GATE (audit-then-audition split · 2026-05-11) ──
+  // The full-page payment block is gone. Audits always run free into
+  // 'backstage' state · the Stripe gate now lives inside the Audition
+  // Promote card at step 5, where the user has already seen their
+  // report and is making an informed decision to put it on the league.
+  //
+  // Two narrow cases still need a temporary screen takeover:
+  //   1. Just returned from Stripe with ?payment=success and a specific
+  //      audition_target — we poll for the credit + auto-promote that
+  //      project to 'active' once the webhook lands.
+  //   2. Returned with success but no audition_target (legacy / direct
+  //      Stripe link) — we just confirm the credit, then show the form.
+  const auditionTarget = searchParams.get('audition_target')
   const inPostCheckoutWait =
     paymentPolling || (paymentResult === 'success' && eligibility === null)
-  if (inPostCheckoutWait || (eligibility && !eligibility.ok && paymentResult === 'success')) {
+  if (inPostCheckoutWait && auditionTarget) {
+    return (
+      <PostPaymentAuditionPromote
+        targetProjectId={auditionTarget}
+        attempt={paymentPollAttempt}
+        recheckStatus={recheckStatus}
+        onRecheck={recheckEligibility}
+        polling={paymentPolling}
+      />
+    )
+  }
+  if (inPostCheckoutWait) {
     return (
       <div className="max-w-xl mx-auto text-center card-navy p-10" style={{ borderRadius: '2px' }}>
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
@@ -442,7 +446,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
         </h3>
         <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
           Stripe is sending the receipt to our server (usually 20-40 seconds).
-          This page will switch to the audition form automatically.
+          Once it lands, your ticket is ready · audition any backstage project.
         </p>
         <div className="inline-block w-6 h-6 mb-6" style={{
           border: '2px solid rgba(240,192,64,0.3)',
@@ -470,29 +474,10 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
             <p className="font-mono text-[11px] mt-2" style={{ color: 'rgba(248,245,238,0.35)' }}>
               attempt {paymentPollAttempt} / 45
             </p>
-            {recheckStatus === 'no-credit' && (
-              <p className="font-mono text-[11px] mt-2" style={{ color: 'rgba(248,245,238,0.55)' }}>
-                webhook hasn't landed yet · keep waiting or refresh in 30s
-              </p>
-            )}
-            {recheckStatus === 'error' && (
-              <p className="font-mono text-[11px] mt-2" style={{ color: 'var(--scarlet)' }}>
-                connection error · hard refresh (⌘⇧R) and try again
-              </p>
-            )}
           </div>
-        )}
-        {!paymentPolling && (
-          <p className="font-light mt-4 text-sm" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            Webhook took longer than expected. Click above to refresh — your
-            payment is safe and the receipt is in your email.
-          </p>
         )}
       </div>
     )
-  }
-  if (eligibility && !eligibility.ok) {
-    return <PaymentGate eligibility={eligibility} />
   }
 
   // ── STEP LABELS ──
@@ -733,21 +718,28 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
         />
       )}
 
-      {step === 5 && result && (
-        <AnalysisResultCard
-          result={result}
-          projectId={lastProjectId ?? undefined}
-          onReanalyzed={(next) => { setResult(next); onComplete?.(lastProjectId) }}
-          onReset={() => {
-            setStep(1)
-            setResult(null)
-            setForm({ name: '', email: user?.email ?? '', github: '', url: '', desc: '', category: '' })
-            setBrief(null)
-            setBriefRaw('')
-            setLastProjectId(null)
-            setImages([])
-          }}
-        />
+      {step === 5 && result && lastProjectId && user?.id && (
+        <>
+          <AuditionPromoteCard
+            projectId={lastProjectId}
+            memberId={user.id}
+            scoreTotal={result.score_total ?? null}
+          />
+          <AnalysisResultCard
+            result={result}
+            projectId={lastProjectId}
+            onReanalyzed={(next) => { setResult(next); onComplete?.(lastProjectId) }}
+            onReset={() => {
+              setStep(1)
+              setResult(null)
+              setForm({ name: '', email: user?.email ?? '', github: '', url: '', desc: '', category: '' })
+              setBrief(null)
+              setBriefRaw('')
+              setLastProjectId(null)
+              setImages([])
+            }}
+          />
+        </>
       )}
 
       <style>{`
@@ -910,6 +902,111 @@ function PaymentGate({ eligibility }: { eligibility: Extract<RegistrationEligibi
       <p className="mt-4 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
         Card · Apple Pay · Google Pay · processed by Stripe.
       </p>
+    </div>
+  )
+}
+
+// ── PostPaymentAuditionPromote ─────────────────────────────────────────────
+// Shown when user returns from Stripe with ?payment=success&audition_target=X.
+// Polls for the credit, calls audition_project once it lands, then redirects
+// to /projects/<id> (now on the league as 'active').
+function PostPaymentAuditionPromote({
+  targetProjectId, attempt, recheckStatus, onRecheck, polling,
+}: {
+  targetProjectId: string
+  attempt: number
+  recheckStatus: 'idle' | 'busy' | 'no-credit' | 'error'
+  onRecheck: () => void
+  polling: boolean
+}) {
+  const [autoState, setAutoState] = useState<'waiting' | 'promoting' | 'done' | 'failed'>('waiting')
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null)
+
+  // Once polling indicates credit is in (parent flips paymentPolling false
+  // after a successful poll), we trigger audition_project once.
+  useEffect(() => {
+    if (autoState !== 'waiting') return
+    if (polling) return  // still waiting on webhook
+    let cancelled = false
+    ;(async () => {
+      setAutoState('promoting')
+      try {
+        const { data, error: e } = await supabase.rpc('audition_project', { p_project_id: targetProjectId })
+        if (cancelled) return
+        if (e) throw new Error(e.message)
+        const result = data as { ok: boolean; reason?: string }
+        if (!result.ok) throw new Error(result.reason ?? 'Audition failed')
+        setAutoState('done')
+        setTimeout(() => { window.location.assign(`/projects/${targetProjectId}`) }, 700)
+      } catch (err) {
+        if (cancelled) return
+        setAutoState('failed')
+        setErrorMsg((err as Error).message)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [polling, autoState, targetProjectId])
+
+  return (
+    <div className="max-w-xl mx-auto text-center card-navy p-10" style={{ borderRadius: '2px' }}>
+      <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+        // {autoState === 'done' ? 'ON STAGE' : autoState === 'failed' ? 'NEEDS ATTENTION' : 'AUDITIONING…'}
+      </div>
+      <h3 className="font-display font-bold text-2xl mb-3" style={{ color: 'var(--cream)' }}>
+        {autoState === 'done'      ? 'Auditioning now · redirecting'
+       : autoState === 'failed'    ? 'Payment landed · audition failed'
+       : autoState === 'promoting' ? 'Putting it on stage'
+       :                             'Payment received · finalizing'}
+      </h3>
+      <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
+        {autoState === 'done'   ? 'You will land on the project page in a moment.'
+       : autoState === 'failed' ? errorMsg ?? 'Try auditioning the project from your /me page.'
+       :                         'Stripe webhook usually lands in 20-40 seconds. Once your ticket arrives we put the project on the audition stage automatically.'}
+      </p>
+      {autoState !== 'done' && autoState !== 'failed' && (
+        <div className="inline-block w-6 h-6 mb-6" style={{
+          border: '2px solid rgba(240,192,64,0.3)',
+          borderTopColor: 'var(--gold-500)',
+          borderRadius: '50%',
+          animation: 'spin 0.9s linear infinite',
+        }} />
+      )}
+      {autoState === 'waiting' && attempt >= 4 && (
+        <div className="mt-4">
+          <button
+            onClick={onRecheck}
+            disabled={recheckStatus === 'busy'}
+            className="px-5 py-2 font-mono text-xs font-medium tracking-wide transition-all"
+            style={{
+              background: 'transparent',
+              color: 'var(--gold-500)',
+              border: '1px solid rgba(240,192,64,0.5)',
+              borderRadius: '2px',
+              cursor: recheckStatus === 'busy' ? 'wait' : 'pointer',
+              opacity: recheckStatus === 'busy' ? 0.55 : 1,
+            }}
+          >
+            {recheckStatus === 'busy' ? 'CHECKING…' : "I'VE ALREADY PAID · CHECK NOW"}
+          </button>
+          <p className="font-mono text-[11px] mt-2" style={{ color: 'rgba(248,245,238,0.35)' }}>
+            attempt {attempt} / 45
+          </p>
+        </div>
+      )}
+      {autoState === 'failed' && (
+        <button
+          onClick={() => { window.location.assign('/me') }}
+          className="px-5 py-2 font-mono text-xs font-medium tracking-wide"
+          style={{
+            background: 'transparent',
+            color: 'var(--gold-500)',
+            border: '1px solid rgba(240,192,64,0.5)',
+            borderRadius: '2px',
+          }}
+        >
+          GO TO /me
+        </button>
+      )}
     </div>
   )
 }

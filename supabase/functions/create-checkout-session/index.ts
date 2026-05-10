@@ -67,20 +67,35 @@ Deno.serve(async (req) => {
   const userEmail = userData.user.email ?? null
 
   // Parse body — minimal so we can extend later (library purchases, etc.)
-  let body: { kind?: 'audit_fee'; success_url?: string; cancel_url?: string }
+  let body: { kind?: 'audit_fee'; success_url?: string; cancel_url?: string; audition_target?: string }
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON body' }, 400) }
   const kind = body.kind ?? 'audit_fee'
   if (kind !== 'audit_fee') return json({ error: 'Only audit_fee supported in V1' }, 400)
 
+  // audition_target — when caller wants the post-payment flow to
+  // auto-promote a specific backstage project to 'active'. Plumbed
+  // through Stripe metadata + success_url so /submit's
+  // PostPaymentAuditionPromote can pick it up after redirect.
+  // UUID-shaped or skip · we never trust the value beyond echoing it
+  // back to the same authed user via the success URL.
+  const auditionTarget = typeof body.audition_target === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.audition_target)
+      ? body.audition_target
+      : null
+
   // Eligibility re-check on the server. Client could be lying about
   // priorCount; the only trust line is auth.users + projects.creator_id.
   // Free quota is read live from app_settings so admin can flip the promo
-  // without redeploying this function.
+  // without redeploying this function. After the audit-then-audition
+  // split (2026-05-11), only AUDITIONED projects (status='active' or
+  // graduated tiers) count toward the free quota — backstage rows are
+  // pre-audition and don't burn a ticket.
   const [{ count: priorCount }, { data: memberRow }, { data: freeQuotaJson }, { data: founderRows }] = await Promise.all([
     admin
       .from('projects')
       .select('id', { count: 'exact', head: true })
-      .eq('creator_id', userId),
+      .eq('creator_id', userId)
+      .in('status', ['active', 'graduated', 'valedictorian', 'retry']),
     admin
       .from('members')
       .select('paid_audits_credit')
@@ -130,7 +145,13 @@ Deno.serve(async (req) => {
   // Build Stripe session.
   const stripe = new Stripe(STRIPE_SECRET, { apiVersion: '2024-09-30.acacia' })
   const origin = req.headers.get('origin') ?? 'https://commit.show'
-  const successUrl = body.success_url ?? `${origin}/submit?payment=success&session_id={CHECKOUT_SESSION_ID}`
+  // audition_target rides on the success URL so the post-payment SubmitForm
+  // (PostPaymentAuditionPromote) knows which backstage project to flip to
+  // 'active' once the credit lands.
+  const successQs = auditionTarget
+    ? `payment=success&session_id={CHECKOUT_SESSION_ID}&audition_target=${auditionTarget}`
+    : `payment=success&session_id={CHECKOUT_SESSION_ID}`
+  const successUrl = body.success_url ?? `${origin}/submit?${successQs}`
   const cancelUrl  = body.cancel_url  ?? `${origin}/submit?payment=canceled`
 
   // Idempotency-Key — Stripe collapses identical create() calls within 24h
@@ -182,6 +203,7 @@ Deno.serve(async (req) => {
         kind:            'audit_fee',
         is_founder_price: founderActive ? 'true' : 'false',
         founder_paid_count: founder ? String(founder.paid_count) : '',
+        audition_target: auditionTarget ?? '',
       },
       success_url: successUrl,
       cancel_url:  cancelUrl,
