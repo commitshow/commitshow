@@ -525,7 +525,7 @@ export function PitchKPage() {
               'Season Zero 일반 공개 임박',
               'GitHub Action Marketplace 등록 완료',
               'CLI npm 배포 — npx commitshow@latest audit',
-              'MCP 서버 npm 배포 — Claude Desktop / Cursor / Cline / Windsurf',
+              'MCP 서버 npm 배포 + Anthropic 공식 MCP Registry 등재',
             ]} />
           <RoadCol tone={PURPLE} phase="V1.5 · 2026 Q3" title="Library 마켓플레이스"
             items={[
@@ -549,7 +549,7 @@ export function PitchKPage() {
               '인수 / Fund-of-Funds 디스커버리 surface',
               '다지역 보정',
               '코드리뷰 벤더용 white-label',
-              'Anthropic 공식 MCP 레지스트리 등재 + Cursor 파트너 배치',
+              'Cursor Directory 파트너 배치 + 유료 MCP 티어 (private repo)',
             ]} />
         </div>
 

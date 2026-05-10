@@ -251,6 +251,65 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ── SURFACES · §15-E + §15-C + §15-C.6 ──
+          Four ways to invoke the same audit engine. Order is
+          acquisition-funnel descending (web zero-friction → MCP power
+          user). Each tile is a one-liner + an action line so the user
+          can evaluate fit without leaving the page. */}
+      <section className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.25)' }}>
+        <div className="max-w-5xl mx-auto">
+          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// FOUR SURFACES</div>
+          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">Run the audit anywhere</h2>
+          <p className="font-light max-w-xl mb-10" style={{ color: 'rgba(248,245,238,0.45)' }}>
+            One scoring engine. Pick the runtime that fits how you build — paste a URL, run a terminal command, gate a pull request, or call it as a tool from Claude Desktop or Cursor.
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                tag:    'WEB',
+                title:  'URL Fast Lane',
+                body:   'Paste a deployed URL. Mobile + desktop Lighthouse, multi-route, post-hydration probe. 30 seconds.',
+                action: 'Try the homepage hook ↑',
+                href:   '#',
+              },
+              {
+                tag:    'CLI',
+                title:  'npx commitshow audit',
+                body:   'One terminal command. Writes .commitshow/audit.{md,json} so the next AI turn can read the result.',
+                action: 'commitshow on npm ↗',
+                href:   'https://www.npmjs.com/package/commitshow',
+              },
+              {
+                tag:    'CI',
+                title:  'GitHub Action',
+                body:   'Sticky PR comment with score + delta on every pull request. Already on GitHub Marketplace.',
+                action: 'commit-show-audit ↗',
+                href:   'https://github.com/marketplace/actions/commit-show-audit',
+              },
+              {
+                tag:    'MCP',
+                title:  'Claude · Cursor · Cline',
+                body:   'Three-line config and the audit engine becomes a tool the host model can call mid-conversation.',
+                action: 'commitshow-mcp on npm ↗',
+                href:   'https://www.npmjs.com/package/commitshow-mcp',
+              },
+            ].map(({ tag, title, body, action, href }) => (
+              <a key={tag} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer"
+                 className="card-navy p-5 transition-all hover:border-gold-500/30"
+                 style={{ textDecoration: 'none', display: 'block' }}>
+                <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-2" style={{ color: 'var(--gold-500)' }}>{tag}</div>
+                <div className="font-display font-bold text-base mb-2" style={{ color: 'var(--cream)' }}>{title}</div>
+                <div className="text-[12.5px] font-light mb-3" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.55 }}>{body}</div>
+                <div className="font-mono text-[11px]" style={{ color: 'var(--gold-500)' }}>{action}</div>
+              </a>
+            ))}
+          </div>
+          <div className="mt-6 font-mono text-[11px]" style={{ color: 'rgba(248,245,238,0.35)' }}>
+            Listed on the official <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.commitshow/audit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-500)' }}>Anthropic MCP Registry</a> as <code style={{ color: 'var(--cream)' }}>io.github.commitshow/audit</code>.
+          </div>
+        </div>
+      </section>
+
       {/* ── GRADES ── */}
       <section id="grades" className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)' }}>
         <div className="max-w-5xl mx-auto">

@@ -412,7 +412,7 @@ export function PitchPage() {
               'Season Zero open to public',
               'GitHub Action published on Marketplace',
               'CLI on npm — npx commitshow@latest audit',
-              'MCP server on npm — Claude Desktop / Cursor / Cline / Windsurf',
+              'MCP server on npm + listed on Anthropic MCP Registry',
             ]} />
           <RoadCol tone={PURPLE} phase="V1.5 · Q3 2026" title="Library Marketplace"
             items={[
@@ -436,7 +436,7 @@ export function PitchPage() {
               'Acquisition / Fund-of-Funds discovery surface',
               'Multi-region calibration',
               'White-label for code-review vendors',
-              'Anthropic-registry MCP listing + Cursor partner placement',
+              'Cursor Directory partner placement + paid MCP tier (private repos)',
             ]} />
         </div>
 
