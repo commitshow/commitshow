@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { usePretendardFont } from '../lib/pretendardFont'
 
 const NAVY_950   = '#060C1A'
 const NAVY_800   = '#0F2040'
@@ -218,11 +219,12 @@ function Divider() {
 // ──────────────────────────────────────────────────────────────────────
 
 export function PitchKPage() {
+  usePretendardFont()
   const stats = usePitchStats()
   const fmt = (n: number | null) => n == null ? '—' : n.toLocaleString()
 
   return (
-    <main className="relative z-10 min-h-screen pb-20">
+    <main className="pitch-deck-root relative z-10 min-h-screen pb-20">
       {/* ─── Hero ─── */}
       <section className="px-4 md:px-8 lg:px-16 pt-24 pb-20 max-w-6xl mx-auto">
         <SectionEyebrow n="00" label="Investor Brief · Pre-Seed · 한국어" accent={GOLD} />
