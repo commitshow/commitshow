@@ -41,7 +41,12 @@ export function BackstageSection({ memberId }: { memberId: string }) {
     if (!balRes.error) setBalance(balRes.data as TicketBalance)
   }, [memberId])
 
-  useEffect(() => { void loadAll() }, [loadAll])
+  useEffect(() => {
+    void loadAll()
+    const onUpdate = () => { void loadAll() }
+    window.addEventListener('commitshow:tickets-updated', onUpdate)
+    return () => window.removeEventListener('commitshow:tickets-updated', onUpdate)
+  }, [loadAll])
 
   const handleAudition = async (projectId: string) => {
     setBusyId(projectId)
@@ -51,6 +56,10 @@ export function BackstageSection({ memberId }: { memberId: string }) {
       if (e) throw new Error(e.message)
       const result = data as { ok: boolean; reason?: string }
       if (result.ok) {
+        // Broadcast for other ticket-balance surfaces (Nav callout,
+        // /me wallet card) before our own reload so they all refresh
+        // off the same successful flip.
+        window.dispatchEvent(new CustomEvent('commitshow:tickets-updated'))
         // Reload list + balance · the auditioned row drops off backstage.
         await loadAll()
         return

@@ -117,15 +117,13 @@ Deno.serve(async (req) => {
     ? Math.floor(parsedQuota)
     : FREE_AUDITS_FALLBACK_DEFAULT
 
-  // Don't sell a credit to someone who still has free or paid budget.
-  // The UI shouldn't even surface the checkout button in that state, but
-  // we double-check on the server.
-  if (used < freeQuota) {
-    return json({ error: 'Free audits still available · no payment needed' }, 400)
-  }
-  if (credit > 0) {
-    return json({ error: 'Existing paid credit unused · use it before buying another' }, 400)
-  }
+  // Stockpiling allowed (2026-05-11) — users can buy tickets ahead
+  // even with free quota or paid credit remaining. audition_project
+  // RPC always spends free first, then paid, so a user with 3 free
+  // and N paid simply stacks; nothing wasted. Use cases: lock in
+  // founder pricing before the window closes · top up before a
+  // batch of submissions.
+  void used; void freeQuota; void credit  // intentionally unused
 
   // Founder pricing window · re-checked server-side off the live counter
   // (race-resistant: another buyer landing the 1000th sale between this

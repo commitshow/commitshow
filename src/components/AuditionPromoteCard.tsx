@@ -59,6 +59,10 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
       if (e) throw new Error(e.message)
       const result = data as { ok: boolean; reason?: string; used?: 'free' | 'credit'; tickets_remaining?: number }
       if (result.ok) {
+        // Notify all ticket-balance surfaces so they refetch · keeps
+        // TicketWalletCard, AuditionTicketsCallout, BackstageSection
+        // in sync without prop-drilling.
+        window.dispatchEvent(new CustomEvent('commitshow:tickets-updated'))
         setDone(true)
         // Brief pause so the success state lands visually, then redirect.
         setTimeout(() => navigate(`/projects/${projectId}`), 900)

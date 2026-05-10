@@ -638,11 +638,19 @@ function AuditionTicketsCallout({ onSelect }: { onSelect: () => void }) {
   useEffect(() => {
     if (!user) return
     let alive = true
-    void supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
-      if (!alive || error) return
-      setBal(data as { free_remaining: number; paid_credit: number; total_tickets: number })
-    })
-    return () => { alive = false }
+    const load = () => {
+      void supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
+        if (!alive || error) return
+        setBal(data as { free_remaining: number; paid_credit: number; total_tickets: number })
+      })
+    }
+    load()
+    const onUpdate = () => load()
+    window.addEventListener('commitshow:tickets-updated', onUpdate)
+    return () => {
+      alive = false
+      window.removeEventListener('commitshow:tickets-updated', onUpdate)
+    }
   }, [user])
 
   const accent = 'var(--gold-500)'

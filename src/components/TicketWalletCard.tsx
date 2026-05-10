@@ -37,15 +37,26 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
 
   useEffect(() => {
     let alive = true
-    void Promise.all([
-      supabase.rpc('ticket_balance', { p_member_id: memberId }),
-      fetchFounderStatus(),
-    ]).then(([bal, fnd]) => {
-      if (!alive) return
-      if (!bal.error) setBalance(bal.data as TicketBalance)
-      setFounder(fnd)
-    })
-    return () => { alive = false }
+    const load = () => {
+      void Promise.all([
+        supabase.rpc('ticket_balance', { p_member_id: memberId }),
+        fetchFounderStatus(),
+      ]).then(([bal, fnd]) => {
+        if (!alive) return
+        if (!bal.error) setBalance(bal.data as TicketBalance)
+        setFounder(fnd)
+      })
+    }
+    load()
+    // Refresh on the global tickets-updated event · dispatched after a
+    // successful audition_project RPC anywhere in the app so this card
+    // (and the Nav callout) stay in sync without prop-drilling.
+    const onUpdate = () => load()
+    window.addEventListener('commitshow:tickets-updated', onUpdate)
+    return () => {
+      alive = false
+      window.removeEventListener('commitshow:tickets-updated', onUpdate)
+    }
   }, [memberId])
 
   const handleBuy = async () => {
@@ -83,12 +94,15 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
   const priceCents    = founderActive ? founder.priceCents : REGISTRATION_PRICE_CENTS
   const priceDollars  = (priceCents / 100).toFixed(0)
 
-  // Buy is gated on the same rules create-checkout-session enforces
-  // server-side · keep the UI honest so we never surface a 400'ing CTA.
-  const buyableReason = balance.free_remaining > 0 ? 'use_free_first'
-                      : balance.paid_credit   > 0 ? 'use_existing_first'
-                      :                              'ok'
-  const canBuy = buyableReason === 'ok'
+  // Stockpiling allowed (2026-05-11) — buy any time, even with free
+  // quota or paid credit remaining. audition_project RPC spends free
+  // first then paid, so additional buys just stack.
+  const canBuy = true
+  const stackHint = balance.free_remaining > 0
+    ? 'Stack on top of your free tickets'
+    : balance.paid_credit > 0
+      ? 'Stack on top of your paid ticket'
+      : null
 
   return (
     <div className="card-navy p-5 mb-6" style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}>
