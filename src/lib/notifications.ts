@@ -7,7 +7,7 @@
 
 import { supabase } from './supabase'
 
-export type NotificationKind = 'applaud' | 'forecast' | 'comment' | 'reaudit'
+export type NotificationKind = 'applaud' | 'forecast' | 'comment' | 'reaudit' | 'ticket_gift'
 
 export interface NotificationRow {
   id:                    string
@@ -72,6 +72,9 @@ export async function markAllRead(recipientId: string): Promise<void> {
 
 /** Where clicking a notification should land. Returns null for no-op. */
 export function destinationFor(n: NotificationRow): string | null {
+  // Ticket gifts route to /me where the wallet card shows the
+  // updated balance · projects link doesn't apply here.
+  if (n.kind === 'ticket_gift') return '/me'
   if (n.project_id) return `/projects/${n.project_id}`
   if (n.target_type === 'comment' && n.project_id) return `/projects/${n.project_id}#activity`
   if (n.community_post_type && n.target_id) {
@@ -126,6 +129,15 @@ export function titleFor(n: NotificationRow): string {
       return `${project} just re-audited · ${score}/100`
     }
     return `${project} just re-audited`
+  }
+  if (n.kind === 'ticket_gift') {
+    const meta = (n.metadata as { quantity?: number; message?: string } | null) ?? {}
+    const qty  = meta.quantity ?? 1
+    const ticketWord = qty === 1 ? 'an audition ticket' : `${qty} audition tickets`
+    if (meta.message) {
+      return `🎁 ${actor} gifted you ${ticketWord} — "${truncate(meta.message, 60)}"`
+    }
+    return `🎁 ${actor} gifted you ${ticketWord}`
   }
   return `${actor} interacted with your content`
 }

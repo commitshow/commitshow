@@ -448,7 +448,7 @@ export function ProjectDetailPage() {
                 textDecoration: 'none',
               }}
             >
-              AUDITION →
+              PUT ON AUDITION STAGE →
             </a>
           </div>
         )}
