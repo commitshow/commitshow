@@ -302,12 +302,21 @@ Deno.serve(async (req) => {
     return json({ skipped: true, reason: 'score_below_threshold', score, threshold: SCORE_THRESHOLD })
   }
 
-  // Gate 2 · only platform-auditioned projects (consent implicit · the
-  // creator submitted via web). CLI walk-ons (status='preview') are
-  // anonymous third-party audits — no consent to be on the brand stage,
-  // so they get a score reveal in the terminal but stay off X.
-  if (project.status === 'preview') {
-    return json({ skipped: true, reason: 'walk_on_no_consent', status: project.status })
+  // Gate 2 · only on-stage auditioned projects. The creator must
+  // have explicitly auditioned the project onto the league for it to
+  // hit the official @commitshow timeline.
+  //
+  // Two off-stage states get skipped:
+  //   · 'preview'    · anonymous URL fast lane / CLI walk-on · no creator consent
+  //   · 'backstage'  · audit done, owner-private, creator hasn't promoted yet
+  //                    · auto-tweeting it would leak a private state
+  //                    (audit-then-audition split · 2026-05-11)
+  //
+  // 'active' / 'graduated' / 'valedictorian' / 'retry' all carry implicit
+  // consent: the creator paid (or used a free ticket) to put it on stage.
+  const ON_STAGE_STATUSES = ['active', 'graduated', 'valedictorian', 'retry']
+  if (!ON_STAGE_STATUSES.includes(project.status)) {
+    return json({ skipped: true, reason: 'off_stage_no_consent', status: project.status })
   }
 
   // Gate 3 · cooldown · 14 days

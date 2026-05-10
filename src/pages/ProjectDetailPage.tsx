@@ -417,6 +417,42 @@ export function ProjectDetailPage() {
           />
         )}
 
+        {/* ── Backstage banner · status='backstage' (owner-only · RLS) ──
+              Audit-then-audition split (§16.2). Owners viewing their
+              own backstage project get an explicit reminder that it's
+              not on the league yet, plus a one-click promote affordance
+              that lands them on /me where BackstageSection handles the
+              audition flow with full ticket visibility. */}
+        {project.status === 'backstage' && isOwner && (
+          <div className="mb-4 p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
+            background: 'rgba(240,192,64,0.07)',
+            border: '1px solid rgba(240,192,64,0.35)',
+            borderRadius: '2px',
+          }}>
+            <div>
+              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+                // BACKSTAGE · ONLY YOU CAN SEE
+              </div>
+              <div className="font-mono text-[11px] mt-1" style={{ color: 'rgba(248,245,238,0.65)' }}>
+                Audit done. Audition this to put it on the league — Scouts forecast, ladder ranks, score 85+ earns Encore.
+              </div>
+            </div>
+            <a
+              href="/me"
+              className="px-4 py-2 font-mono text-xs font-medium tracking-wide whitespace-nowrap"
+              style={{
+                background: 'var(--gold-500)',
+                color: 'var(--navy-900)',
+                border: 'none',
+                borderRadius: '2px',
+                textDecoration: 'none',
+              }}
+            >
+              AUDITION →
+            </a>
+          </div>
+        )}
+
         {/* ── Compact Hero (description moved to Overview pullquote) ── */}
         <header className="card-navy overflow-hidden mb-4 relative" style={{ borderRadius: '2px' }}>
           {/* Top-right cluster · Open Live (everyone) + owner controls

@@ -212,7 +212,11 @@ export async function fetchRecentAuditDemos(): Promise<AuditDemo[]> {
       .from('analysis_snapshots')
       .select(baseSelect)
       .gte('score_total', SCORE_FLOOR)
-      .neq('projects.status', 'preview')
+      // On-stage auditioned projects only. Backstage rows are
+      // owner-private and would also be hidden by RLS, but we filter
+      // explicitly so any future RLS relaxation doesn't accidentally
+      // leak them into the public showcase.
+      .in('projects.status', ['active', 'graduated', 'valedictorian', 'retry'])
       .gte('projects.audit_count', 2)   // §re-audit privacy · round-1 only
                                           // projects don't surface in showcase
                                           // until creator re-audits
