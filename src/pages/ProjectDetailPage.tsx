@@ -43,6 +43,7 @@ import { ShareOnXMenu, type ShareOption } from '../components/ShareOnXMenu'
 import { MILESTONE_LABELS, type MilestoneRow } from '../components/MilestoneShareDropdown'
 import { GraduationStanding } from '../components/GraduationStanding'
 import { BadgeSnippet } from '../components/BadgeSnippet'
+import { MCPInstallBlock } from '../components/MCPInstallBlock'
 import { useAuth } from '../lib/auth'
 import { computeSeasonProgress, loadCurrentSeason } from '../lib/season'
 import type { Season } from '../lib/supabase'
@@ -60,6 +61,15 @@ function relativeTimeShort(iso: string): string {
   if (day < 30)  return `${Math.floor(day / 7)}w ago`
   if (day < 365) return `${Math.floor(day / 30)}mo ago`
   return `${Math.floor(day / 365)}y ago`
+}
+
+// "owner/repo" extracted from a github_url for the MCPInstallBlock
+// snippets. Returns null for URL fast-lane projects (no repo) so the
+// block can degrade to MCP-only.
+function ownerRepoSlug(url: string | null | undefined): string | null {
+  if (!url) return null
+  const m = url.match(/github\.com[:/]([^/\s?#]+)\/([^/\s?#]+?)(?:\.git)?\/?(?:[?#]|$)/i)
+  return m ? `${m[1]}/${m[2]}` : null
 }
 
 export function ProjectDetailPage() {
@@ -1078,6 +1088,13 @@ export function ProjectDetailPage() {
           seasonPhase={seasonPhase}
           onForecastClick={() => setForecastOpen(true)}
         />
+
+        {/* "Audit this from your tools" — surfaces the MCP / CLI /
+            GitHub Action distribution to the people most likely to
+            use them: someone already looking at an audit page. Slug
+            extracted inline from project.github_url; URL fast-lane
+            projects (no repo) fall back to MCP-only install. */}
+        <MCPInstallBlock slug={ownerRepoSlug(project.github_url)} />
       </div>
 
       {forecastOpen && (
