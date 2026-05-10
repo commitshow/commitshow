@@ -71,28 +71,9 @@ export function BackstageSection({ memberId }: { memberId: string }) {
   // shows skeleton state via its own loading prop chain).
   if (backstage === null) return null
 
-  // Common case: nothing backstage. Don't take up vertical space —
-  // render only the ticket-balance pill if there's anything notable
-  // (paid credit > 0 or first-time visitor with full free quota).
-  if (backstage.length === 0) {
-    if (!balance || balance.total_tickets === 0) return null
-    return (
-      <div className="mb-6 px-3 py-2.5 flex items-baseline justify-between gap-3 flex-wrap" style={{
-        background: 'rgba(240,192,64,0.04)',
-        border: '1px solid rgba(240,192,64,0.18)',
-        borderRadius: '2px',
-      }}>
-        <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--gold-500)' }}>
-          // YOUR TICKETS
-        </div>
-        <div className="font-mono text-[12px]" style={{ color: 'var(--cream)' }}>
-          {balance.free_remaining > 0 && <>{balance.free_remaining} free ticket{balance.free_remaining === 1 ? '' : 's'}</>}
-          {balance.free_remaining > 0 && balance.paid_credit > 0 && <> · </>}
-          {balance.paid_credit > 0 && <>{balance.paid_credit} paid ticket{balance.paid_credit === 1 ? '' : 's'}</>}
-        </div>
-      </div>
-    )
-  }
+  // No backstage projects · render nothing. Ticket balance is now
+  // owned by TicketWalletCard on /me, so we don't duplicate it here.
+  if (backstage.length === 0) return null
 
   return (
     <div className="mb-8">
@@ -103,13 +84,6 @@ export function BackstageSection({ memberId }: { memberId: string }) {
             {backstage.length} audit{backstage.length === 1 ? '' : 's'} ready · only you can see
           </div>
         </div>
-        {balance && balance.total_tickets > 0 && (
-          <div className="font-mono text-[11px] tracking-wide" style={{ color: 'var(--gold-500)' }}>
-            {balance.free_remaining > 0 && <>{balance.free_remaining} free ticket{balance.free_remaining === 1 ? '' : 's'}</>}
-            {balance.free_remaining > 0 && balance.paid_credit > 0 && <> · </>}
-            {balance.paid_credit > 0 && <>+{balance.paid_credit} paid ticket{balance.paid_credit === 1 ? '' : 's'}</>}
-          </div>
-        )}
       </div>
 
       {error && (

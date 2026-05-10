@@ -10,6 +10,7 @@ import { IconGraduation, IconWand } from '../components/icons'
 import { VerifiedIdentities } from '../components/VerifiedIdentities'
 import { ShareUserTemplateButton } from '../components/ShareUserTemplateButton'
 import { BackstageSection } from '../components/BackstageSection'
+import { TicketWalletCard } from '../components/TicketWalletCard'
 
 const TIER_COLOR: Record<ScoutTier, string> = {
   Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
@@ -281,6 +282,14 @@ export function ProfilePage() {
                   color="var(--cream)"
                   hint="Your Scout tier determines how many Forecasts you can cast each month."
                 />
+
+                {/* ── Audition tickets · separate balance (free + paid) ── */}
+                {user?.id && (
+                  <div className="pt-2">
+                    <TicketWalletCard memberId={user.id} />
+                  </div>
+                )}
+
                 {/* Early Spotter share · only when the most recent correct
                     Forecast points at a product that earned Encore. Slot fills:
                     project_name + grade + days_before + scout tier +
