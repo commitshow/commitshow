@@ -360,28 +360,71 @@ export function ProfilePage() {
             </div>
           )}
           {!loading && applications.length > 0 && (
-            <Link
-              to="/me/products"
-              className="block card-navy p-4 transition-colors"
-              style={{
-                background:     'rgba(255,255,255,0.02)',
-                border:         '1px solid rgba(255,255,255,0.06)',
-                borderRadius:   '2px',
-                textDecoration: 'none',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.4)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)')}
-            >
-              <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                <div className="font-mono text-xs" style={{ color: 'var(--cream)' }}>
-                  {applications.slice(0, 3).map(p => p.project_name).join(' · ')}
-                  {applications.length > 3 ? ` · +${applications.length - 3} more` : ''}
-                </div>
-                <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  Open portfolio →
-                </span>
-              </div>
-            </Link>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {applications.slice(0, 6).map(p => (
+                <Link
+                  key={p.id}
+                  to={`/projects/${p.id}`}
+                  className="block transition-all"
+                  style={{
+                    background:     'rgba(255,255,255,0.02)',
+                    border:         '1px solid rgba(255,255,255,0.06)',
+                    borderRadius:   '2px',
+                    textDecoration: 'none',
+                    overflow:       'hidden',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.4)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)')}
+                >
+                  <div className="relative" style={{ aspectRatio: '16 / 9', background: 'var(--navy-800)' }}>
+                    {p.thumbnail_url ? (
+                      <img
+                        src={p.thumbnail_url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
+                        no preview
+                      </div>
+                    )}
+                    {p.score_total != null && (
+                      <span className="absolute top-1 right-1 px-1.5 py-0.5 font-mono text-[10px] tabular-nums" style={{
+                        background: 'rgba(6,12,26,0.85)',
+                        color:      p.score_total >= 85 ? 'var(--gold-500)' : 'var(--cream)',
+                        borderRadius: '2px',
+                      }}>
+                        {p.score_total}
+                      </span>
+                    )}
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <div className="font-mono text-[11px] truncate" style={{ color: 'var(--cream)' }}>
+                      {p.project_name}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+              {applications.length > 6 && (
+                <Link
+                  to="/me/products"
+                  className="flex items-center justify-center font-mono text-xs"
+                  style={{
+                    background:     'rgba(240,192,64,0.05)',
+                    border:         '1px dashed rgba(240,192,64,0.3)',
+                    borderRadius:   '2px',
+                    textDecoration: 'none',
+                    color:          'var(--gold-500)',
+                    aspectRatio:    '16 / 9',
+                  }}
+                >
+                  +{applications.length - 6} more →
+                </Link>
+              )}
+            </div>
           )}
         </div>
 
