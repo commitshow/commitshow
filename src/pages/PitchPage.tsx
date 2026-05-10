@@ -255,10 +255,27 @@ export function PitchPage() {
       {/* ─── Scoring ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="03" label="Scoring methodology" accent={GOLD} />
-        <SectionH>50 · 30 · 20 — published, defensible, calibrated</SectionH>
+        <SectionH>The Creator tier · plus 50 · 30 · 20 per project</SectionH>
         <SectionLead>
-          The rubric is fully public at <code style={{ color: GOLD, fontFamily: 'DM Mono, monospace' }}>/rulebook</code>. Calibration baseline: a held-out reference set of 5 production-tier OSS repos (supabase, cal.com, shadcn-ui, vercel/ai) the engine must score in the upper band. Re-tested every prompt change.
+          Two ledgers run in parallel. Each <strong>project</strong> gets a 100-point score (Audit 50 + Scout 30 + Community 20). Each <strong>Creator</strong> carries a tier that compounds across all their audited projects — graduations promote it, average score shapes it. New builders join at Rookie; the rare ones reach Legend over years of audited shipping. The tier is the portable credential, the per-project score is the live measurement.
         </SectionLead>
+
+        {/* Creator grade ladder · §8 */}
+        <div className="px-5 py-5 mb-10"
+             style={{ background: 'rgba(15,32,64,0.45)', border: `1px solid ${GOLD}30`, borderRadius: '2px' }}>
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-3" style={{ color: GOLD }}>Creator tiers · the actor identity</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            <GradeCell color="#6B7280" name="Rookie"        cond="1+ audited · 0 grads" />
+            <GradeCell color="#60A5FA" name="Builder"       cond="1 graduation · avg 60+" />
+            <GradeCell color="#00D4AA" name="Maker"         cond="2 grads · avg 70+" />
+            <GradeCell color="#A78BFA" name="Architect"     cond="3 grads · avg 75+ · tech diversity" />
+            <GradeCell color="#F0C040" name="Vibe Engineer" cond="5 grads · avg 80+ · 20+ applauds" />
+            <GradeCell color="#C8102E" name="Legend"        cond="10+ grads · community leader" />
+          </div>
+          <div className="font-light text-sm mt-4" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Tier unlocks platform privileges (Library publishing limits · Office Hours hosting · Hall of Fame eligibility · Scout tier OR-path). It travels with the Creator across audits — each shipped project compounds the next one's frame.
+          </div>
+        </div>
 
         <div className="grid md:grid-cols-3 gap-4 mb-10">
           <PillarCard tone={GOLD} title="Audit" weight="50">
@@ -564,6 +581,16 @@ function Divider() {
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-8 lg:px-16">
       <div style={{ height: 1, background: 'rgba(240,192,64,0.12)' }} />
+    </div>
+  )
+}
+
+function GradeCell({ color, name, cond }: { color: string; name: string; cond: string }) {
+  return (
+    <div className="px-3 py-2.5"
+         style={{ background: `${color}10`, border: `1px solid ${color}40`, borderRadius: '2px' }}>
+      <div className="font-display font-bold text-sm mb-0.5" style={{ color }}>{name}</div>
+      <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)', lineHeight: 1.45 }}>{cond}</div>
     </div>
   )
 }

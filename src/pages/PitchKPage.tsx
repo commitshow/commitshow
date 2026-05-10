@@ -119,6 +119,16 @@ function PillarCard({ tone, title, weight, lead, items }: { tone: string; title:
   )
 }
 
+function GradeCell({ color, name, cond }: { color: string; name: string; cond: string }) {
+  return (
+    <div className="px-3 py-2.5"
+         style={{ background: `${color}10`, border: `1px solid ${color}40`, borderRadius: '2px' }}>
+      <div className="font-display font-bold text-sm mb-0.5" style={{ color }}>{name}</div>
+      <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>{cond}</div>
+    </div>
+  )
+}
+
 function ProblemCard({ tone, title, body }: { tone: string; title: string; body: string }) {
   return (
     <div className="px-5 py-5" style={{ background: `${tone}08`, border: `1px solid ${tone}30`, borderRadius: '2px' }}>
@@ -327,10 +337,27 @@ export function PitchKPage() {
       {/* ─── Scoring ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="03" label="평가 방법론" accent={GOLD} />
-        <SectionH>50 · 30 · 20 — 공개되고, 방어 가능하며, 보정된 기준</SectionH>
+        <SectionH>Creator 등급 · 그리고 프로젝트당 50 · 30 · 20</SectionH>
         <SectionLead>
-          루브릭 전체가 <code style={{ color: GOLD, fontFamily: 'DM Mono, monospace' }}>/rulebook</code> 페이지에서 공개됩니다. 보정 베이스라인은 supabase · cal.com · shadcn-ui · vercel/ai 등 프로덕션급 오픈소스 5개입니다. 엔진이 이들을 매번 상위권에 위치시키는지 prompt 변경마다 자동 검증합니다.
+          두 개의 장부가 동시에 돌아갑니다. <strong>프로젝트</strong>마다 100점이 매겨지고 (Audit 50 + Scout 30 + Community 20), <strong>Creator</strong> 본인은 모든 감사된 프로젝트 위에서 누적되는 등급을 보유합니다 — 졸업이 등급을 올리고, 평균 점수가 등급을 정의합니다. 새 빌더는 Rookie 로 시작하며, 수년간 감사된 출시를 누적한 소수만 Legend 에 도달합니다. <strong>등급은 이동 가능한 자격증명, 점수는 매 출시마다의 라이브 측정값</strong>입니다.
         </SectionLead>
+
+        {/* Creator grade ladder · §8 */}
+        <div className="px-5 py-5 mb-10"
+             style={{ background: 'rgba(15,32,64,0.45)', border: `1px solid ${GOLD}30`, borderRadius: '2px' }}>
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-3" style={{ color: GOLD }}>Creator 등급 · 행위자 정체성</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            <GradeCell color="#6B7280" name="Rookie"        cond="감사 1회+ · 졸업 0" />
+            <GradeCell color="#60A5FA" name="Builder"       cond="졸업 1개 · 평균 60+" />
+            <GradeCell color="#00D4AA" name="Maker"         cond="졸업 2개 · 평균 70+" />
+            <GradeCell color="#A78BFA" name="Architect"     cond="졸업 3개 · 평균 75+ · 기술 다양성" />
+            <GradeCell color="#F0C040" name="Vibe Engineer" cond="졸업 5개 · 평균 80+ · 박수 20+" />
+            <GradeCell color="#C8102E" name="Legend"        cond="졸업 10개+ · 커뮤니티 영향력" />
+          </div>
+          <div className="font-light text-sm mt-4" style={{ color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+            등급은 플랫폼 권한을 잠금 해제합니다 (Library 출판 한도 · Office Hours 호스팅 · Hall of Fame 자격 · Scout 등급 OR-path). 모든 감사 결과가 다음 출시의 frame 으로 복리 누적되어 Creator 와 함께 이동합니다.
+          </div>
+        </div>
 
         <div className="grid md:grid-cols-3 gap-4 mb-10">
           <PillarCard tone={GOLD} title="Audit (감사)" weight="50"
@@ -412,7 +439,7 @@ export function PitchKPage() {
         <SectionEyebrow n="05" label="비즈니스 모델" accent={GOLD} />
         <SectionH>B2C 는 가동 중 · B2B 는 같은 데이터 위에 적층</SectionH>
         <SectionLead>
-          감사 엔진이 진입 쐐기입니다. 동일한 평가 인프라가 소비자 자격증명 레이어 (현재) 와 엔터프라이즈 / 채용 / 스폰서십 레이어 (V1.5+) 를 동시에 가동시킵니다. 파이프라인 하나, 매출 surface 네 개입니다.
+          감사 엔진이 시장 진입의 시작점입니다. 동일한 평가 인프라가 소비자 자격증명 레이어 (현재) 와 엔터프라이즈 / 채용 / 스폰서십 레이어 (V1.5+) 를 동시에 가동시킵니다. 파이프라인 하나, 매출 surface 네 개입니다.
         </SectionLead>
 
         <div className="grid md:grid-cols-2 gap-5 mt-4">
@@ -449,7 +476,7 @@ export function PitchKPage() {
       {/* ─── Roadmap ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="06" label="로드맵" accent={GOLD} />
-        <SectionH>쐐기에서 생태계까지 18개월</SectionH>
+        <SectionH>제품에서 생태계까지 18개월</SectionH>
         <SectionLead>
           현재 V1 빌드 마무리 단계입니다. 공개 출시는 주 단위가 아니라 일 단위로 임박해 있습니다. 이번 라운드 자금은 아래 4단계에 사용됩니다.
         </SectionLead>
