@@ -92,8 +92,9 @@ export function MakerIntroBanner({ projectId, projectName, ownerMemberId, onPubl
       aiTools:       brief.ai_tools,
       businessModel: brief.business_model,
       stage:         brief.stage,
+      seed:          projectId,   // stable per-project variant pick
     })
-  }, [brief, projectName])
+  }, [brief, projectName, projectId])
 
   // Seed editable text when draft is ready and user hasn't typed anything.
   useEffect(() => {
@@ -232,7 +233,7 @@ export function MakerIntroBanner({ projectId, projectName, ownerMemberId, onPubl
             cursor:       'pointer',
           }}
         >
-          {editing ? 'Preview' : 'Edit text'}
+          {editing ? 'Save' : 'Edit text'}
         </button>
         <button
           type="button"

@@ -17,6 +17,87 @@ interface IntroSources {
   aiTools:        string | null   // free text
   businessModel:  string | null
   stage:          string | null
+  /** Stable seed for deterministic variant selection (typically project_id).
+      Same project → same draft. Different projects → different variants. */
+  seed?:          string
+}
+
+// ── Variant pools ────────────────────────────────────────────────
+// Same input → same output (seeded). Across projects, each surface
+// shuffles which line gets picked so the feed isn't 50 'Hey commit.show 👋'
+// posts in a row.
+
+const GREETING_POOL = [
+  `Hey commit.show 👋`,
+  `gm commit.show ☀️`,
+  `Hi everyone 👋`,
+  `What's up commit.show`,
+  `Long-time lurker, first time poster 👋`,
+  `New around here · saying hi 👋`,
+] as const
+
+const ONELINER_TEMPLATES = [
+  (name: string, oneLiner: string) => `I'm building **${name}** — ${oneLiner}`,
+  (name: string, oneLiner: string) => `Just shipped **${name}** · ${oneLiner}`,
+  (name: string, oneLiner: string) => `Putting **${name}** up for audit today · ${oneLiner}`,
+  (name: string, oneLiner: string) => `Working on **${name}** for the last few weeks. ${oneLiner}`,
+] as const
+
+const PROBLEM_TEMPLATES = [
+  (name: string, problem: string) => `I'm building **${name}** to solve this: ${problem}`,
+  (name: string, problem: string) => `**${name}** is my take on this: ${problem}`,
+  (name: string, problem: string) => `Started **${name}** because: ${problem}`,
+] as const
+
+const NO_BRIEF_TEMPLATES = [
+  (name: string) => `I just shipped **${name}** and dropped it on commit.show for an audit.`,
+  (name: string) => `Putting **${name}** up here for an honest audit.`,
+  (name: string) => `**${name}** is live · curious what folks here think.`,
+] as const
+
+const WHY_PREFIX = [
+  `**Why I built it:**`,
+  `**The why:**`,
+  `**Backstory:**`,
+  `**What sparked it:**`,
+] as const
+
+const FEATURES_PREFIX = [
+  `**What it does today:**`,
+  `**Current features:**`,
+  `**What's working now:**`,
+  `**What's in v1:**`,
+] as const
+
+const TOOLS_TEMPLATES = [
+  (tools: string) => `Built with ${tools}.`,
+  (tools: string) => `Made with ${tools}.`,
+  (tools: string) => `Stack: ${tools}.`,
+  (tools: string) => `Mostly built with ${tools}.`,
+] as const
+
+const CLOSING_POOL = [
+  `Happy to answer anything — what should we audit deeper next?`,
+  `Open to honest feedback · what looks off?`,
+  `Roast it gently · what's the weakest spot?`,
+  `Where would you push back?`,
+  `What would make this 10× better?`,
+  `What's the first thing you'd change?`,
+] as const
+
+// djb2 hash · same algo we use elsewhere · ASCII-safe.
+function djb2(s: string): number {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) + s.charCodeAt(i)
+    h |= 0
+  }
+  return Math.abs(h)
+}
+
+function pick<T>(seed: string, salt: string, pool: readonly T[]): T {
+  const idx = djb2(seed + ':' + salt) % pool.length
+  return pool[idx]
 }
 
 const STAGE_LINES: Record<string, string> = {
@@ -69,18 +150,25 @@ function topTools(raw: string | null, max = 3): string[] {
 }
 
 export function generateMakerIntro(s: IntroSources): string {
+  // Seed defaults to projectName so callers without project_id still
+  // get a stable draft (different across projects with different names).
+  const seed = s.seed || s.projectName
   const lines: string[] = []
 
-  lines.push(`Hey commit.show 👋`)
+  // Greeting · pick from the pool deterministically.
+  lines.push(pick(seed, 'greet', GREETING_POOL))
   lines.push('')
 
   // Opening · what it is, who it's for.
   if (s.oneLiner) {
-    lines.push(`I'm building **${s.projectName}** — ${firstSentence(s.oneLiner, 180)}`)
+    const tmpl = pick(seed, 'oneliner', ONELINER_TEMPLATES)
+    lines.push(tmpl(s.projectName, firstSentence(s.oneLiner, 180)))
   } else if (s.problem) {
-    lines.push(`I'm building **${s.projectName}** to solve this: ${firstSentence(s.problem, 200)}`)
+    const tmpl = pick(seed, 'problem', PROBLEM_TEMPLATES)
+    lines.push(tmpl(s.projectName, firstSentence(s.problem, 200)))
   } else {
-    lines.push(`I just shipped **${s.projectName}** and dropped it on commit.show for an audit.`)
+    const tmpl = pick(seed, 'nobrief', NO_BRIEF_TEMPLATES)
+    lines.push(tmpl(s.projectName))
   }
 
   if (s.targetUser) {
@@ -91,14 +179,14 @@ export function generateMakerIntro(s: IntroSources): string {
   // Why · pulled from problem if no one_liner used it.
   if (s.problem && s.oneLiner) {
     lines.push('')
-    lines.push(`**Why I built it:** ${firstSentence(s.problem, 240)}`)
+    lines.push(`${pick(seed, 'why', WHY_PREFIX)} ${firstSentence(s.problem, 240)}`)
   }
 
   // What it does · bullets.
   const feats = topFeatures(s.features, 3)
   if (feats.length > 0) {
     lines.push('')
-    lines.push(`**What it does today:**`)
+    lines.push(pick(seed, 'feats', FEATURES_PREFIX))
     for (const f of feats) {
       lines.push(`- ${f}`)
     }
@@ -120,12 +208,12 @@ export function generateMakerIntro(s: IntroSources): string {
   const tools = topTools(s.aiTools, 4)
   if (tools.length > 0) {
     lines.push('')
-    lines.push(`Built with ${tools.join(', ')}.`)
+    lines.push(pick(seed, 'tools', TOOLS_TEMPLATES)(tools.join(', ')))
   }
 
   // Closing CTA · invite for feedback.
   lines.push('')
-  lines.push(`Happy to answer anything — what should we audit deeper next?`)
+  lines.push(pick(seed, 'close', CLOSING_POOL))
 
   return lines.join('\n').trim()
 }

@@ -822,8 +822,10 @@ export function ProjectDetailPage() {
               from brief + market position. Hides itself once the owner
               has commented on the project (or explicitly dismisses).
               Sits above the comments preview so the published intro
-              becomes the first thing anyone sees in the thread. */}
-        {isOwner && project.creator_id && (
+              becomes the first thing anyone sees in the thread.
+              Hidden on backstage rows — there's no audience to launch
+              to until the creator auditions onto the stage. */}
+        {isOwner && project.creator_id && project.status !== 'backstage' && (
           <MakerIntroBanner
             projectId={project.id}
             projectName={project.project_name}
