@@ -108,12 +108,56 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
         : `Audition with payment →`
     : 'Audition →'
 
+  // Visual band based on score · matches the four-band convention used
+  // elsewhere (encore 85+ · strong 70-84 · building 50-69 · early <50).
+  const scoreBand = scoreTotal == null ? 'unknown'
+                  : scoreTotal >= 85   ? 'encore'
+                  : scoreTotal >= 70   ? 'strong'
+                  : scoreTotal >= 50   ? 'building'
+                  :                       'early'
+  const bandColor = scoreBand === 'encore'   ? 'var(--gold-500)'
+                  : scoreBand === 'strong'   ? '#00D4AA'
+                  : scoreBand === 'building' ? '#60A5FA'
+                  : scoreBand === 'early'    ? 'var(--scarlet)'
+                  :                            'var(--text-muted)'
+  const bandLabel = scoreBand === 'encore'   ? 'ENCORE TERRITORY'
+                  : scoreBand === 'strong'   ? 'STRONG'
+                  : scoreBand === 'building' ? 'BUILDING'
+                  : scoreBand === 'early'    ? 'EARLY DAYS'
+                  :                            'AUDIT COMPLETE'
+
   return (
-    <div className="card-navy p-7 mb-6" style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}>
-      <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-        // AUDIT COMPLETE · NEXT STEP
+    <div className="card-navy p-7 mb-6" style={{ borderRadius: '2px', borderLeft: `3px solid ${bandColor}` }}>
+      <div className="font-mono text-xs tracking-widest mb-3" style={{ color: bandColor }}>
+        // {bandLabel} · NEXT STEP
       </div>
-      <div className="font-display font-bold text-2xl mb-2" style={{ color: 'var(--cream)' }}>
+
+      {/* Big total-score badge · always visible regardless of band so the
+          user sees their number before reading anything else. The pillar
+          mini-line below decomposes Audit / Scout / Community for context
+          (Scout · Community will be 0 for a fresh backstage audit since
+          nobody's seen it yet — labelled accordingly). */}
+      {scoreTotal != null && (
+        <div className="flex items-baseline gap-3 mb-4 flex-wrap">
+          <div className="font-display font-black tabular-nums leading-none" style={{
+            fontSize: '3.25rem',
+            color: bandColor,
+          }}>
+            {scoreTotal}
+            <span className="font-mono font-normal" style={{
+              fontSize: '1rem',
+              color: 'var(--text-muted)',
+              marginLeft: '0.25rem',
+            }}>/ 100</span>
+          </div>
+          <div className="font-mono text-[10px] tracking-wide" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            audit pillar live<br />
+            scout · community open up once you publish
+          </div>
+        </div>
+      )}
+
+      <div className="font-display font-bold text-xl mb-2" style={{ color: 'var(--cream)' }}>
         Want eyes on this build?
       </div>
       <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.6 }}>
@@ -121,7 +165,7 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
         Audition to put it on stage and get real feedback from other builders. The project goes public,
         lands on its category ladder, and earns the permanent Encore badge at score 85+.
         {scoreTotal != null && scoreTotal >= 85 && (
-          <> <span style={{ color: 'var(--gold-500)' }}>You're already at {scoreTotal} — Encore lands the moment you go public.</span></>
+          <> <span style={{ color: 'var(--gold-500)' }}>You're already there — Encore lands the moment you go public.</span></>
         )}
       </p>
 
