@@ -9,6 +9,7 @@ import { loadEffectiveStack } from '../lib/memberStack'
 import { IconGraduation, IconWand } from '../components/icons'
 import { VerifiedIdentities } from '../components/VerifiedIdentities'
 import { ShareUserTemplateButton } from '../components/ShareUserTemplateButton'
+import { BackstageSection } from '../components/BackstageSection'
 
 const TIER_COLOR: Record<ScoutTier, string> = {
   Bronze: '#B98B4E', Silver: '#D1D5DB', Gold: '#F0C040', Platinum: '#A78BFA',
@@ -45,7 +46,12 @@ export function ProfilePage() {
     ;(async () => {
       const [statsRes, appsRes, libRes] = await Promise.all([
         supabase.from('member_stats').select('*').eq('id', user.id).maybeSingle(),
-        supabase.from('projects').select(PUBLIC_PROJECT_COLUMNS).eq('creator_id', user.id).order('created_at', { ascending: false }),
+        // Auditioned projects only · backstage rows are surfaced by
+        // BackstageSection (audit done, not on the league yet).
+        supabase.from('projects').select(PUBLIC_PROJECT_COLUMNS)
+          .eq('creator_id', user.id)
+          .in('status', ['active', 'graduated', 'valedictorian', 'retry'])
+          .order('created_at', { ascending: false }),
         supabase.from('md_library').select('*').eq('creator_id', user.id).order('created_at', { ascending: false }),
       ])
       setStats((statsRes.data as MemberStats | null) ?? null)
@@ -311,6 +317,9 @@ export function ProfilePage() {
 
         {/* ── Graduation explainer ── */}
         <GraduationExplainer currentGrade={grade} graduatedCount={stats?.graduated_count ?? 0} />
+
+        {/* ── BACKSTAGE · audited but not yet on the league ── */}
+        {user?.id && <BackstageSection memberId={user.id} />}
 
         {/* ── My Products · summary card · full grid moved to /me/products ── */}
         <div className="mb-8">
