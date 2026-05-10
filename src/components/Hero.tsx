@@ -43,23 +43,13 @@ interface HeroProps {
 
 export function Hero(_props: HeroProps) {
   const navigate = useNavigate()
-  // Primary CTA = free audit (URL Fast Lane · §15-E). Scrolls to the
-  // homepage URL hook so anonymous visitors get value before any paywall.
-  // Audition (paid league entry) is a step-2 promotion offered AFTER the
-  // audit result lands — the ResultCard inside HeroUrlHook surfaces that
-  // upgrade. Driving Hero primary into /submit directly conflated the two
-  // and friction-loaded the entry.
-  const onAuditClick = () => {
-    const el = document.getElementById('url-hook')
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      const input = document.querySelector('#url-hook input[type="text"]') as HTMLInputElement | null
-      setTimeout(() => input?.focus(), 600)
-    } else {
-      navigate('/#url-hook')
-    }
-  }
-  const onAuditionClick = () => navigate('/submit')
+  // Single entry: "Audit your project" → /submit. The first 3 auditions
+  // are free (eligibility.freeQuota), so new visitors don't hit a paywall
+  // and we don't need to expose the audit-vs-audition distinction in the
+  // hero. Members on their 4th+ audition encounter the Stripe gate inside
+  // SubmitForm — by then they understand what audition means.
+  const onSubmitClick = () => navigate('/submit')
+  const onFeedClick = () => navigate('/projects')
 
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40 pt-20 pb-16 overflow-hidden">
@@ -108,12 +98,12 @@ export function Hero(_props: HeroProps) {
             className="stagger-3 max-w-lg mb-10 font-light"
             style={{ color: 'rgba(248,245,238,0.55)', fontSize: '1.05rem', lineHeight: 1.65 }}
           >
-            Free audit on any GitHub repo. Audition once it's ready for the stage.
+            We catch what your prompts forgot. First 3 audits are free.
           </p>
 
           <div className="stagger-4 flex gap-4 justify-center lg:justify-start flex-wrap">
             <button
-              onClick={onAuditClick}
+              onClick={onSubmitClick}
               className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
               style={{
                 background: 'var(--gold-500)',
@@ -128,10 +118,10 @@ export function Hero(_props: HeroProps) {
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-400)'; e.currentTarget.style.boxShadow = '0 0 60px rgba(240,192,64,0.35)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(240,192,64,0.2)'; }}
             >
-              Run your audit · free →
+              Audit your project →
             </button>
             <button
-              onClick={onAuditionClick}
+              onClick={onFeedClick}
               className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
               style={{
                 background: 'transparent',
@@ -145,7 +135,7 @@ export function Hero(_props: HeroProps) {
               onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
               onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
             >
-              Audition your build →
+              Browse projects →
             </button>
           </div>
         </div>
