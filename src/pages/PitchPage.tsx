@@ -557,7 +557,7 @@ export function PitchPage() {
             We are at Season Zero. Audits are running. The CLI is on npm. The Action is on Marketplace. Stripe is live. The product works today and the moat compounds with every snapshot. We'd like to talk to investors who see the wave the same way.
           </p>
           <div className="flex flex-wrap gap-3">
-            <a href="mailto:hans@commit.show?subject=Investor%20intro%20%C2%B7%20commit.show"
+            <a href="mailto:han@commit.show?subject=Investor%20intro%20%C2%B7%20commit.show"
                className="inline-block px-5 py-2.5 font-mono text-[12px] tracking-widest uppercase"
                style={{ background: GOLD, color: NAVY_950, borderRadius: '2px' }}>
               Email the founders →

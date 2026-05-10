@@ -642,7 +642,7 @@ export function PitchKPage() {
             현재 Season Zero 입니다. 감사가 가동 중이며, CLI 가 npm 에 배포되어 있고, GitHub Action 이 Marketplace 에 등록되었으며, Stripe 가 라이브입니다. 제품은 오늘 작동하고, 진입장벽은 매 스냅샷마다 복리로 강화됩니다. 같은 파동을 보고 계신 투자자분들과 대화하고 싶습니다.
           </p>
           <div className="flex flex-wrap gap-3">
-            <a href="mailto:hans@commit.show?subject=Investor%20intro%20%C2%B7%20commit.show%20(KR)"
+            <a href="mailto:han@commit.show?subject=Investor%20intro%20%C2%B7%20commit.show%20(KR)"
                className="inline-block px-5 py-2.5 font-mono text-[12px] tracking-widest uppercase"
                style={{ background: GOLD, color: NAVY_950, borderRadius: '2px' }}>
               파운더에게 이메일 →
