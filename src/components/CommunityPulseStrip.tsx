@@ -39,12 +39,12 @@ export function CommunityPulseStrip({ projectId }: Props) {
   // Optimistic view increment on mount · cleared once real fetch lands.
   const [viewBoost, setViewBoost] = useState(0)
 
-  const fetchStats = (): Promise<void> =>
-    supabase.rpc('project_pulse_stats', { p_project_id: projectId }).then(({ data, error }) => {
-      if (error) return
-      setStats(data as PulseStats)
-      setViewBoost(0)  // real fetch took over the optimistic boost
-    })
+  const fetchStats = async (): Promise<void> => {
+    const { data, error } = await supabase.rpc('project_pulse_stats', { p_project_id: projectId })
+    if (error) return
+    setStats(data as PulseStats)
+    setViewBoost(0)  // real fetch took over the optimistic boost
+  }
 
   useEffect(() => {
     let alive = true
