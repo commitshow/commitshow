@@ -1115,11 +1115,13 @@ export function ProjectDetailPage() {
             id="backstage"
             label="BACKSTAGE"
             hint="Failures · decisions · delegation · the data nobody else captures."
-            summary={(project.score_total ?? 0) >= 84
-              ? '✓ Unlocked · Phase 2 brief visible'
-              : 'Sealed until Encore'}
+            summary={scoreHidden
+              ? 'Locked until re-audit'
+              : (project.score_total ?? 0) >= 84
+                ? '✓ Unlocked · Phase 2 brief visible'
+                : 'Sealed until Encore'}
           >
-            <BackstagePanel project={project} />
+            <BackstagePanel project={project} scoreHidden={scoreHidden} />
           </CollapsibleSection>
 
           {/* BRIEF · owner only · 3 tools as tabs (Brief edit · README badge · Token receipt) */}

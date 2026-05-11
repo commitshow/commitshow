@@ -16,6 +16,11 @@ import { supabase, type BuildBrief, type Project } from '../lib/supabase'
 
 interface Props {
   project: Project
+  /** §re-audit privacy · forces locked state for non-owner viewers
+   *  even when score_total >= 84. Without this gate the panel would
+   *  flip to unlocked on first-round encore hits and reveal score
+   *  semantics to visitors. */
+  scoreHidden?: boolean
 }
 
 // 2026-05-05 rebrand · was status-based ('graduated'/'valedictorian'/...).
@@ -24,7 +29,7 @@ interface Props {
 // reveal, consistent with the rest of the rebrand.
 import { isEncoreScore } from '../lib/encore'
 
-export function BackstagePanel({ project }: Props) {
+export function BackstagePanel({ project, scoreHidden = false }: Props) {
   const [brief, setBrief] = useState<BuildBrief | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -52,7 +57,10 @@ export function BackstagePanel({ project }: Props) {
   const totalDocumented = failures.length + decisions.length + delegation.length
   if (totalDocumented === 0 && !brief.next_blocker) return null
 
-  const unlocked = isEncoreScore(project.score_total)
+  // §re-audit privacy · force locked when the score is hidden from
+  // the viewer, otherwise the Encore unlock state leaks "this project
+  // is above the 84 line" even when the number itself is masked.
+  const unlocked = !scoreHidden && isEncoreScore(project.score_total)
 
   return (
     <div
