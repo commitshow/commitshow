@@ -840,16 +840,16 @@ export function ProjectDetailPage() {
           />
         )}
 
-        {/* ── Comments preview · standalone box right under the score area ──
-              YouTube-mobile pattern applied to ALL viewports: collapsed by
-              default with up to 3 recent comments, tap anywhere to open
-              the full thread in a modal (full-screen on phones, centered
-              dialog on desktop). Lives outside the section grid so it's
-              not buried under tabs.
-              Anchor id="comments" lets CommunityPulseStrip scroll here. */}
-        <div className="mt-4 mb-6" id="comments">
-          <ProjectComments projectId={project.id} viewerMemberId={member?.id ?? null} />
-        </div>
+        {/* ── ProjectComments mounts the right-side drawer + #comments
+              hash listener · the inline preview card is hidden
+              (hidePreview) because CommunityPulseStrip's COMMENTS
+              tile is the single entry point now. Drawer still opens
+              when the tile is clicked (sets hash '#comments'). */}
+        <ProjectComments
+          projectId={project.id}
+          viewerMemberId={member?.id ?? null}
+          hidePreview
+        />
 
         {/* ── Recent activity timeline · last 8 applauds/comments/forecasts
               mixed and time-ordered. Reads BEFORE the deep audit body so the

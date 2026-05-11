@@ -33,12 +33,18 @@ interface CommentRow {
 interface ProjectCommentsProps {
   projectId:      string
   viewerMemberId: string | null   // null = unauth
+  /** When true, the preview card is hidden — only the right-side
+      Drawer + hash listener remain active. Used when another
+      surface (e.g. CommunityPulseStrip COMMENTS tile) owns the
+      'open drawer' affordance and the inline preview would be
+      visually redundant. */
+  hidePreview?:   boolean
 }
 
 const MAX_LEN = 1000
 const PREVIEW_COUNT = 3
 
-export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsProps) {
+export function ProjectComments({ projectId, viewerMemberId, hidePreview = false }: ProjectCommentsProps) {
   const [rows, setRows] = useState<CommentRow[]>([])
   const [loading, setLoading] = useState(true)
   // Auto-open the modal when the URL hash is #comments. Lets external
@@ -92,7 +98,10 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
 
   // Top-level rows are the thread skeleton; replies hang under their parent.
   const topLevel = useMemo(() => rows.filter(r => !r.parent_id), [rows])
-  const count = topLevel.length
+  // Count rule (v4 · 2026-05-11): every row counts as one interaction
+  // (replies + system bots included). Matches project_pulse_stats RPC v4
+  // so the pulse tile and any visible header read the same number.
+  const count = rows.length
   const previews = topLevel.slice(0, PREVIEW_COUNT)
   const repliesByParent = useMemo(() => {
     const m = new Map<string, CommentRow[]>()
@@ -117,6 +126,7 @@ export function ProjectComments({ projectId, viewerMemberId }: ProjectCommentsPr
 
   return (
     <>
+      {!hidePreview && (
       <div
         role="button"
         tabIndex={0}
