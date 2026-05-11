@@ -43,6 +43,10 @@ export function LeaderboardPage() {
         .from('projects')
         .select('id, project_name, score_auto, score_forecast, score_total, status')
         .in('status', ['active', 'graduated', 'valedictorian', 'retry'])
+        // §re-audit privacy · round-1 only projects don't plot on the
+        // scatter (would reveal score via position even if number is
+        // hidden elsewhere). Reveals after first re-audit.
+        .gte('audit_count', 2)
       setRows((data ?? []) as ProjectDotRaw[])
       setLoading(false)
     })()

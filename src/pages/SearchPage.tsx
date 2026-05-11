@@ -22,6 +22,7 @@ interface ProjectHit {
   thumbnail_url: string | null
   status:        string
   score_total:   number | null
+  audit_count:   number | null
 }
 
 interface LibraryHit {
@@ -70,7 +71,7 @@ export function SearchPage() {
     Promise.all([
       supabase
         .from('projects')
-        .select('id, project_name, description, creator_name, thumbnail_url, status, score_total')
+        .select('id, project_name, description, creator_name, thumbnail_url, status, score_total, audit_count')
         .or(`project_name.ilike.${pat},description.ilike.${pat},creator_name.ilike.${pat}`)
         .in('status', ['active', 'graduated', 'valedictorian'])
         .limit(15),
@@ -180,8 +181,9 @@ export function SearchPage() {
                     </div>
                   </div>
                   {p.score_total != null && (
-                    <div className="font-display font-bold tabular-nums text-lg flex-shrink-0" style={{ color: 'var(--gold-500)' }}>
-                      {p.score_total}
+                    <div className="font-display font-bold tabular-nums text-lg flex-shrink-0" style={{ color: 'var(--gold-500)' }}
+                         title={(p.audit_count ?? 0) <= 1 ? 'Score hidden until creator re-audits.' : undefined}>
+                      {(p.audit_count ?? 0) <= 1 ? '—' : p.score_total}
                     </div>
                   )}
                 </Link>
