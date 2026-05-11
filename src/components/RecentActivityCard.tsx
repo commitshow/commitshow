@@ -1,6 +1,15 @@
-// RecentActivityCard · timeline of recent applauds + comments + votes
-// for a project. Renders above the deep audit details so the social
-// pulse of the page reads BEFORE the technical breakdown.
+// RecentActivityCard · timeline of recent applauds + forecasts for a
+// project. Renders above the deep audit details so the social pulse
+// reads BEFORE the technical breakdown.
+//
+// v2 (2026-05-11): comments were removed from the timeline. Reasons:
+//   1. ProjectComments preview already renders comments right above
+//      this card — surfacing them again created visual duplication.
+//   2. System-bot comments (member_id IS NULL) showed as "Someone
+//      commented..." because the LEFT JOIN returned null — broken
+//      attribution.
+// Comments stay in their dedicated surface; this card is now the
+// "WHO'S REACTING" feed (applauds + forecasts only).
 //
 // Hides itself when there's zero activity (fresh audits with no
 // community interaction yet).
@@ -10,11 +19,11 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 interface ActivityRow {
-  kind:            'applaud' | 'comment' | 'forecast'
+  kind:            'applaud' | 'forecast'
   actor_id:        string | null
   actor_name:      string | null
   actor_avatar:    string | null
-  preview:         string | null
+  preview:         string | null   // unused in v2 · kept for back-compat with RPC shape
   vote_count:      number | null
   predicted_score: number | null
   created_at:      string
@@ -58,7 +67,7 @@ export function RecentActivityCard({ projectId, limit = 8 }: Props) {
   return (
     <div className="mb-6" id="recent-activity">
       <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
-        // RECENT ACTIVITY
+        // WHO'S REACTING
       </div>
       <div className="card-navy" style={{ borderRadius: '2px' }}>
         {rows.map((r, i) => (
@@ -73,13 +82,11 @@ function ActivityRowView({ row, last }: { row: ActivityRow; last: boolean }) {
   const initial = (row.actor_name ?? '?').slice(0, 1).toUpperCase()
   const tone =
     row.kind === 'applaud'   ? 'var(--gold-500)' :
-    row.kind === 'comment'   ? '#A78BFA'         :
     row.kind === 'forecast'  ? '#60A5FA'         :
                                'var(--text-muted)'
 
   const label =
     row.kind === 'applaud'  ? 'applauded'
-  : row.kind === 'comment'  ? 'commented'
   : row.kind === 'forecast' ? (
       row.predicted_score != null
         ? `forecasted ${row.predicted_score}/100${row.vote_count && row.vote_count > 1 ? ` (×${row.vote_count})` : ''}`
