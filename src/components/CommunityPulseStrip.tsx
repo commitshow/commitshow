@@ -22,11 +22,12 @@ import { supabase } from '../lib/supabase'
 import { PulseListModal } from './PulseListModal'
 
 interface PulseStats {
-  applauds:     number
-  comments:     number
-  forecasts:    number
-  forecast_avg: number | null
-  views:        number
+  applauds:        number
+  comments:        number
+  forecasts:       number
+  forecast_avg:    number | null
+  views:           number
+  viewer_involved: boolean
 }
 
 interface Props {
@@ -128,12 +129,15 @@ export function CommunityPulseStrip({ projectId, isOwner = false }: Props) {
 
   const displayedViews = stats === null ? '—' : stats.views
 
-  // Notification dot · COMMENTS tile · owner-only. Visitors don't
-  // get this signal — they have no skin in the thread, the dot is
-  // pure noise. Owner sees it when stats.comments > the last count
-  // they saw (localStorage-tracked per project). Cleared when the
-  // owner clicks the tile (drawer opens).
-  const hasNewComments = isOwner && stats !== null && stats.comments > seenComments
+  // Notification dot · COMMENTS tile · owner + thread-involved.
+  // The dot fires when:
+  //   · viewer is the project owner, OR
+  //   · viewer has at least one comment on this project (involved
+  //     means "I might have a reply waiting")
+  // AND new comments have arrived since the localStorage seen count.
+  // Random visitors with no involvement see a clean tile · no noise.
+  const eligibleForDot = isOwner || (stats?.viewer_involved ?? false)
+  const hasNewComments = eligibleForDot && stats !== null && stats.comments > seenComments
 
   const tiles: Array<{
     label:  string
