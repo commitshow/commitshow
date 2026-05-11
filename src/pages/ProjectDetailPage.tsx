@@ -25,7 +25,6 @@ import { MarketPositionForm } from '../components/MarketPositionForm'
 import { AboutProjectSection } from '../components/AboutProjectSection'
 import { MakerIntroBanner } from '../components/MakerIntroBanner'
 import { CommunityPulseStrip } from '../components/CommunityPulseStrip'
-import { RecentActivityCard } from '../components/RecentActivityCard'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -851,11 +850,11 @@ export function ProjectDetailPage() {
           hidePreview
         />
 
-        {/* ── Recent activity timeline · last 8 applauds/comments/forecasts
-              mixed and time-ordered. Reads BEFORE the deep audit body so the
-              social pulse lands first. Hides itself on fresh audits with
-              zero interaction yet. */}
-        <RecentActivityCard projectId={project.id} />
+        {/* RecentActivityCard removed 2026-05-11 · the pulse strip's
+            APPLAUDS / FORECASTS tile modals already surface the same
+            info on demand, so the always-rendered timeline below it
+            felt premature for current volumes. Component file kept
+            in src/components/ for future re-introduction. */}
 
         {/* ── Sticky section nav (scroll-spy) ── */}
         <SectionNav
