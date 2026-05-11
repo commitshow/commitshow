@@ -200,6 +200,7 @@ export function ProjectComments({ projectId, viewerMemberId, hidePreview = false
           </ul>
         )}
       </div>
+      )}
 
       {modalOpen && createPortal(
         <Drawer
