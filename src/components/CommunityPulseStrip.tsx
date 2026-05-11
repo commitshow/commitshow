@@ -31,6 +31,11 @@ interface PulseStats {
 
 interface Props {
   projectId: string
+  /** Owner sees the COMMENTS notification dot when new comments
+   *  arrive; visitors don't (noise · they have no skin in the
+   *  thread). Default false so the cleaner state is the
+   *  conservative one if a caller forgets to pass. */
+  isOwner?: boolean
 }
 
 // localStorage key for the "last seen comment count" per project ·
@@ -52,7 +57,7 @@ function writeSeen(projectId: string, count: number): void {
   try { window.localStorage.setItem(SEEN_KEY(projectId), String(count)) } catch {}
 }
 
-export function CommunityPulseStrip({ projectId }: Props) {
+export function CommunityPulseStrip({ projectId, isOwner = false }: Props) {
   const [stats, setStats] = useState<PulseStats | null>(null)
   const [modal, setModal] = useState<'applauds' | 'forecasts' | null>(null)
   const [seenComments, setSeenComments] = useState<number>(() => readSeen(projectId))
@@ -123,10 +128,12 @@ export function CommunityPulseStrip({ projectId }: Props) {
 
   const displayedViews = stats === null ? '—' : stats.views
 
-  // Notification dot · COMMENTS tile only · fires when the current
-  // count exceeds what the viewer last saw (localStorage-tracked per
-  // project). Cleared when the user clicks the tile (drawer opens).
-  const hasNewComments = stats !== null && stats.comments > seenComments
+  // Notification dot · COMMENTS tile · owner-only. Visitors don't
+  // get this signal — they have no skin in the thread, the dot is
+  // pure noise. Owner sees it when stats.comments > the last count
+  // they saw (localStorage-tracked per project). Cleared when the
+  // owner clicks the tile (drawer opens).
+  const hasNewComments = isOwner && stats !== null && stats.comments > seenComments
 
   const tiles: Array<{
     label:  string

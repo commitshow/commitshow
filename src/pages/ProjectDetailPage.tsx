@@ -759,8 +759,10 @@ export function ProjectDetailPage() {
 
         {/* ── Community pulse · 4-tile mini stats (applauds · comments ·
               forecasts · views). Surfaces social signal weight before
-              the deep audit body. Each tile scrolls to its section. */}
-        <CommunityPulseStrip projectId={project.id} />
+              the deep audit body. Each tile scrolls to its section.
+              isOwner gates the COMMENTS notification dot · visitors
+              don't get it (no skin in the thread). */}
+        <CommunityPulseStrip projectId={project.id} isOwner={isOwner} />
 
         {/* ── Scan strip · at-a-glance metrics ── */}
         <ScanStrip
