@@ -208,6 +208,7 @@ export function ProjectComments({ projectId, viewerMemberId, hidePreview = false
           viewerMemberId={viewerMemberId}
           topLevel={topLevel}
           repliesByParent={repliesByParent}
+          totalCount={rows.length}
           loading={loading}
           onClose={() => setModalOpen(false)}
           onPosted={handlePosted}
@@ -221,13 +222,18 @@ export function ProjectComments({ projectId, viewerMemberId, hidePreview = false
 
 // ── Drawer · slides in from the right · width-capped on desktop ─────
 function Drawer({
-  projectId, viewerMemberId, topLevel, repliesByParent, loading,
+  projectId, viewerMemberId, topLevel, repliesByParent, totalCount, loading,
   onClose, onPosted, onDeleted,
 }: {
   projectId:       string
   viewerMemberId:  string | null
   topLevel:        CommentRow[]
   repliesByParent: Map<string, CommentRow[]>
+  /** Aligned with pulse-tile count · all comment rows (top-level +
+   *  replies + system bots). Drawer header was rendering topLevel.length
+   *  which excluded replies and gave a different number than the
+   *  pulse tile above. */
+  totalCount:      number
   loading:         boolean
   onClose:         () => void
   onPosted:        (row: CommentRow) => void
@@ -290,7 +296,7 @@ function Drawer({
           style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'var(--navy-900)' }}
         >
           <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--text-secondary)' }}>
-            COMMENTS · <span className="tabular-nums" style={{ color: 'var(--cream)' }}>{topLevel.length}</span>
+            COMMENTS · <span className="tabular-nums" style={{ color: 'var(--cream)' }}>{totalCount}</span>
           </div>
           <button
             type="button"
