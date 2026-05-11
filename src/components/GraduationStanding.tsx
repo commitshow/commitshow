@@ -30,9 +30,12 @@ interface FirstSpotterRow {
 interface Props {
   projectId: string
   viewerMode?: 'owner' | 'visitor'
+  /** §re-audit privacy · when true, blanks out the score · progress bar ·
+   *  pillar breakdown · Encore serial. Owner always sees their own. */
+  scoreHidden?: boolean
 }
 
-export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props) {
+export function GraduationStanding({ projectId, viewerMode = 'visitor', scoreHidden = false }: Props) {
   const [s, setS] = useState<ProjectStanding | null>(null)
   const [encores, setEncores] = useState<EncoreRow[]>([])
   const [supporterCount, setSupporterCount] = useState<number>(0)
@@ -87,6 +90,26 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor' }: Props)
   const otherEncores     = encores.filter(e => e.kind !== 'production')
 
   if (loading || !s) return null
+
+  // §re-audit privacy · render a stripped-down card with score · bar ·
+  // pillar · Encore serial all blanked. Owner side keeps full detail.
+  if (scoreHidden) {
+    return (
+      <div className="card-navy" style={{ borderRadius: '2px' }}>
+        <div className="p-5">
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--text-muted)' }}>
+            // ENCORE STANDING · HIDDEN
+          </div>
+          <div className="font-display font-bold text-lg mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
+            <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>—/100</span>
+          </div>
+          <p className="font-light text-sm mt-3" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Score is hidden from the public until the creator re-audits. Lets builders iterate before the public reveal.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const score      = s.score_total ?? 0
   const isEncore   = isEncoreScore(score)

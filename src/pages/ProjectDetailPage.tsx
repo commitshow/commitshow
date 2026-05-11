@@ -1054,9 +1054,16 @@ export function ProjectDetailPage() {
                 conclusion. Lives at the END of ANALYSIS so the user has
                 already seen what's wrong + what's right + the score
                 breakdown before this card tells them how close they are
-                to the Encore line. */}
+                to the Encore line.
+                scoreHidden mirrors the ScanStrip privacy rule · initial-
+                only audits (audit_count <= 1) blank the score from
+                non-owners. */}
             <div className="mt-6">
-              <GraduationStanding projectId={project.id} viewerMode={isOwner ? 'owner' : 'visitor'} />
+              <GraduationStanding
+                projectId={project.id}
+                viewerMode={isOwner ? 'owner' : 'visitor'}
+                scoreHidden={scoreHidden}
+              />
             </div>
           </section>
 
