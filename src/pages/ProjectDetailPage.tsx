@@ -767,8 +767,6 @@ export function ProjectDetailPage() {
           score={project.score_total}
           roundCount={roundCount}
           roundDelta={roundDelta}
-          forecasts={project.score_forecast ?? 0}
-          applauds={applauds.length}
           dayNumber={seasonProgress?.dayNumber ?? null}
           totalDays={seasonProgress?.totalDays ?? 28}
           phaseLabel={seasonProgress?.phaseLabel ?? ''}
@@ -1236,14 +1234,12 @@ function ActivityRow({ primary, detail, secondary, time }: {
 
 // ── Scan strip · 5-6 metric pills in one row ────────────────────
 function ScanStrip({
-  score, roundCount, roundDelta, forecasts, applauds, dayNumber, totalDays, phaseLabel,
+  score, roundCount, roundDelta, dayNumber, totalDays, phaseLabel,
   scoreHidden,
 }: {
   score: number
   roundCount: number
   roundDelta: number | null
-  forecasts: number
-  applauds: number
   dayNumber: number | null
   totalDays: number
   phaseLabel: string
@@ -1258,7 +1254,7 @@ function ScanStrip({
   const deltaText  = roundDelta == null ? '—' : roundDelta === 0 ? '0' : (roundDelta > 0 ? `+${roundDelta}` : `${roundDelta}`)
   return (
     <div
-      className="mb-4 grid grid-cols-3 md:grid-cols-6 gap-0 overflow-hidden"
+      className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-0 overflow-hidden"
       style={{
         background: 'rgba(255,255,255,0.02)',
         border: '1px solid rgba(255,255,255,0.06)',
@@ -1274,8 +1270,10 @@ function ScanStrip({
       />
       <ScanCell label="Round"     value={roundCount > 0 ? `${roundCount}` : '—'} sub="analyses" color="var(--cream)" />
       <ScanCell label="Δ Round"   value={scoreHidden ? '—' : deltaText}   sub={scoreHidden ? 'hidden' : 'vs last round'} color={scoreHidden ? 'var(--text-muted)' : deltaColor} />
-      <ScanCell label="Forecasts" value={`${forecasts}`}                  sub="cast"         color="var(--cream)" />
-      <ScanCell label="Applauds"  value={`${applauds}`}                   sub="craft award"  color="#A78BFA" />
+      {/* Forecasts + Applauds cells removed 2026-05-11 · duplicated
+          the new CommunityPulseStrip tiles directly above. Score ·
+          Round · Δ Round · Season remain because they're not on the
+          pulse strip. */}
       <ScanCell label="Season"
         value={dayNumber != null ? `D ${dayNumber}/${totalDays}` : '—'}
         sub={phaseLabel || 'schedule'}
