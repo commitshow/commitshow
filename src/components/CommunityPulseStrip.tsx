@@ -12,10 +12,10 @@
 //   · Listens for window 'commitshow:pulse-refresh' for own-action
 //     immediate feedback (dispatched by Forecast/Applaud/Comment
 //     handlers before the realtime echo arrives)
-//   · Optimistic view +1 on mount (the page render itself is the
-//     view event · ctx.waitUntil writes the visitor_hits row
-//     asynchronously, so optimistic increment closes the race)
-//   · Delayed refetch at 2s for view count to settle from middleware
+//   · On mount, calls track_project_view RPC to record this visit
+//     (SPA navigation doesn't trigger CF middleware), then refetches
+//     stats so the views tile reflects the new count. Daily-deduped
+//     server-side.
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -34,28 +34,26 @@ interface Props {
 }
 
 export function CommunityPulseStrip({ projectId }: Props) {
-  const [stats, setStats]     = useState<PulseStats | null>(null)
-  const [modal, setModal]     = useState<'applauds' | 'forecasts' | null>(null)
-  // Optimistic view increment on mount · cleared once real fetch lands.
-  const [viewBoost, setViewBoost] = useState(0)
+  const [stats, setStats] = useState<PulseStats | null>(null)
+  const [modal, setModal] = useState<'applauds' | 'forecasts' | null>(null)
 
   const fetchStats = async (): Promise<void> => {
     const { data, error } = await supabase.rpc('project_pulse_stats', { p_project_id: projectId })
     if (error) return
     setStats(data as PulseStats)
-    setViewBoost(0)  // real fetch took over the optimistic boost
   }
 
   useEffect(() => {
     let alive = true
-    void fetchStats()
-    // Optimistic +1 view from the moment the strip mounts (the page
-    // load is itself a view event · middleware writes the row async).
-    setViewBoost(1)
-    // Real refetch after 2s gives the middleware time to land its
-    // visitor_hits insert; if a bot UA was filtered, we lose the
-    // optimistic +1 here and the count reverts honestly.
-    const settle = window.setTimeout(() => { if (alive) void fetchStats() }, 2000)
+    // Track this view via RPC (SPA nav doesn't trigger CF middleware,
+    // so this is the only way to record /projects/<id> renders that
+    // came from React Router transitions). Daily-deduped server-side.
+    // Chain a refetch right after so the views tile reflects the
+    // freshly-inserted row · single visible update, no flicker.
+    void (async () => {
+      try { await supabase.rpc('track_project_view', { p_project_id: projectId }) } catch {}
+      if (alive) void fetchStats()
+    })()
 
     // Realtime channel · any insert on this project's applauds /
     // comments / votes refetches stats.
@@ -83,7 +81,6 @@ export function CommunityPulseStrip({ projectId }: Props) {
 
     return () => {
       alive = false
-      window.clearTimeout(settle)
       void supabase.removeChannel(channel)
       window.removeEventListener('commitshow:pulse-refresh', onPulseRefresh)
     }
@@ -99,9 +96,7 @@ export function CommunityPulseStrip({ projectId }: Props) {
     window.location.hash = '#comments'
   }
 
-  const displayedViews = stats === null
-    ? '—'
-    : (stats.views + viewBoost)
+  const displayedViews = stats === null ? '—' : stats.views
 
   const tiles: Array<{
     label:  string
