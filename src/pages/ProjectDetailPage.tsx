@@ -24,6 +24,8 @@ import { OwnerNextStepBanner } from '../components/OwnerNextStepBanner'
 import { MarketPositionForm } from '../components/MarketPositionForm'
 import { AboutProjectSection } from '../components/AboutProjectSection'
 import { MakerIntroBanner } from '../components/MakerIntroBanner'
+import { CommunityPulseStrip } from '../components/CommunityPulseStrip'
+import { RecentActivityCard } from '../components/RecentActivityCard'
 import { AnalysisProgressModal } from '../components/AnalysisProgressModal'
 import { ScoreTimeline } from '../components/ScoreTimeline'
 import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
@@ -756,6 +758,11 @@ export function ProjectDetailPage() {
           </div>
         </header>
 
+        {/* ── Community pulse · 4-tile mini stats (applauds · comments ·
+              forecasts · views). Surfaces social signal weight before
+              the deep audit body. Each tile scrolls to its section. */}
+        <CommunityPulseStrip projectId={project.id} />
+
         {/* ── Scan strip · at-a-glance metrics ── */}
         <ScanStrip
           score={project.score_total}
@@ -838,10 +845,17 @@ export function ProjectDetailPage() {
               default with up to 3 recent comments, tap anywhere to open
               the full thread in a modal (full-screen on phones, centered
               dialog on desktop). Lives outside the section grid so it's
-              not buried under tabs. */}
-        <div className="mt-4 mb-6">
+              not buried under tabs.
+              Anchor id="comments" lets CommunityPulseStrip scroll here. */}
+        <div className="mt-4 mb-6" id="comments">
           <ProjectComments projectId={project.id} viewerMemberId={member?.id ?? null} />
         </div>
+
+        {/* ── Recent activity timeline · last 8 applauds/comments/forecasts
+              mixed and time-ordered. Reads BEFORE the deep audit body so the
+              social pulse lands first. Hides itself on fresh audits with
+              zero interaction yet. */}
+        <RecentActivityCard projectId={project.id} />
 
         {/* ── Sticky section nav (scroll-spy) ── */}
         <SectionNav
@@ -1118,14 +1132,18 @@ export function ProjectDetailPage() {
           )}
         </div>
 
-        {/* Casual bottom action row — second chance for visitors to react */}
-        <ProjectActionFooter
-          projectId={project.id}
-          viewerMemberId={user?.id ?? null}
-          isOwner={isOwner}
-          seasonPhase={seasonPhase}
-          onForecastClick={() => setForecastOpen(true)}
-        />
+        {/* Casual bottom action row — second chance for visitors to react.
+              id="forecast" lets CommunityPulseStrip APPLAUDS/FORECASTS
+              tiles scroll here directly. */}
+        <div id="forecast">
+          <ProjectActionFooter
+            projectId={project.id}
+            viewerMemberId={user?.id ?? null}
+            isOwner={isOwner}
+            seasonPhase={seasonPhase}
+            onForecastClick={() => setForecastOpen(true)}
+          />
+        </div>
 
         {/* "Audit this from your tools" — surfaces the MCP / CLI /
             GitHub Action distribution to the people most likely to
