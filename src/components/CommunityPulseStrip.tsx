@@ -33,9 +33,29 @@ interface Props {
   projectId: string
 }
 
+// localStorage key for the "last seen comment count" per project ·
+// drives the COMMENTS tile notification dot. Reset when the user
+// opens the drawer (or any other surface that signals "I've read up
+// to here"). One key per project so dots stay local to each page.
+const SEEN_KEY = (projectId: string) => `commitshow:comments-seen:${projectId}`
+
+function readSeen(projectId: string): number {
+  if (typeof window === 'undefined') return 0
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY(projectId))
+    return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0
+  } catch { return 0 }
+}
+
+function writeSeen(projectId: string, count: number): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(SEEN_KEY(projectId), String(count)) } catch {}
+}
+
 export function CommunityPulseStrip({ projectId }: Props) {
   const [stats, setStats] = useState<PulseStats | null>(null)
   const [modal, setModal] = useState<'applauds' | 'forecasts' | null>(null)
+  const [seenComments, setSeenComments] = useState<number>(() => readSeen(projectId))
 
   const fetchStats = async (): Promise<void> => {
     const { data, error } = await supabase.rpc('project_pulse_stats', { p_project_id: projectId })
@@ -94,9 +114,19 @@ export function CommunityPulseStrip({ projectId }: Props) {
     // already on the same URL.
     window.location.hash = ''
     window.location.hash = '#comments'
+    // Mark current count as seen · dot clears.
+    if (stats !== null) {
+      writeSeen(projectId, stats.comments)
+      setSeenComments(stats.comments)
+    }
   }
 
   const displayedViews = stats === null ? '—' : stats.views
+
+  // Notification dot · COMMENTS tile only · fires when the current
+  // count exceeds what the viewer last saw (localStorage-tracked per
+  // project). Cleared when the user clicks the tile (drawer opens).
+  const hasNewComments = stats !== null && stats.comments > seenComments
 
   const tiles: Array<{
     label:  string
@@ -104,6 +134,7 @@ export function CommunityPulseStrip({ projectId }: Props) {
     sub?:   string
     onClick?: () => void
     accent: string
+    dot?:   boolean
   }> = stats === null
     ? [
         { label: 'APPLAUDS',  value: '—', accent: 'var(--gold-500)' },
@@ -123,6 +154,7 @@ export function CommunityPulseStrip({ projectId }: Props) {
           value:   stats.comments,
           onClick: onCommentsClick,
           accent:  '#A78BFA',
+          dot:     hasNewComments,
         },
         {
           label:   'FORECASTS',
@@ -147,7 +179,7 @@ export function CommunityPulseStrip({ projectId }: Props) {
             type="button"
             onClick={t.onClick}
             disabled={!t.onClick}
-            className="p-3 text-left transition-all"
+            className="relative p-3 text-left transition-all"
             style={{
               background:   'rgba(255,255,255,0.02)',
               border:       `1px solid ${t.accent}20`,
@@ -157,6 +189,22 @@ export function CommunityPulseStrip({ projectId }: Props) {
             onMouseEnter={e => { if (t.onClick) e.currentTarget.style.borderColor = `${t.accent}66` }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = `${t.accent}20` }}
           >
+            {t.dot && (
+              <span
+                aria-label="new"
+                title="New since you last looked"
+                className="absolute"
+                style={{
+                  top:    6,
+                  right:  6,
+                  width:  8,
+                  height: 8,
+                  background:   '#C8102E',
+                  borderRadius: '50%',
+                  boxShadow:    '0 0 0 2px rgba(6,12,26,1)',
+                }}
+              />
+            )}
             <div className="font-mono text-[10px] tracking-widest mb-1.5" style={{ color: t.accent, opacity: 0.85 }}>
               {t.label}
             </div>
