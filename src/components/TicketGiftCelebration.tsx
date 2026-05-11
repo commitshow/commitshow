@@ -43,6 +43,21 @@ export function TicketGiftCelebration() {
     void fetchUnreadGifts(user.id)
   }, [user?.id, fetchUnreadGifts])
 
+  // External re-check trigger · NotificationBell dispatches this when
+  // the user clicks a ticket_gift row in the bell. Bell intentionally
+  // skips markRead for ticket_gift (so the celebration modal owns the
+  // read state) — but the bell click also navigates to /me, which is
+  // a same-route transition that doesn't remount this component. The
+  // event lets us re-fetch + surface the unread gift even when we're
+  // already mounted.
+  useEffect(() => {
+    if (!user?.id) return
+    const memberId = user.id
+    const onCheck = () => { void fetchUnreadGifts(memberId) }
+    window.addEventListener('commitshow:check-gifts', onCheck)
+    return () => window.removeEventListener('commitshow:check-gifts', onCheck)
+  }, [user?.id, fetchUnreadGifts])
+
   // Realtime · push a new gift into the queue when it arrives.
   useEffect(() => {
     if (!user?.id) return

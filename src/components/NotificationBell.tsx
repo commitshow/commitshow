@@ -63,13 +63,23 @@ export function NotificationBell({ recipientId }: Props) {
 
   const onRowClick = async (n: NotificationRow) => {
     setOpen(false)
-    if (!n.read_at) {
+    // Ticket gifts have their own celebration modal (TicketGiftCelebration
+    // mounted in App.tsx). If we mark-read here, the modal sees zero
+    // unread gifts on the next render and never fires — recipient gets
+    // no celebratory moment. Skip the auto-mark and let the modal own
+    // the read state (its handleDismiss calls markRead). Then dispatch
+    // a window event so the modal re-fetches and surfaces this gift
+    // even if it was already mounted (same /me route, no remount).
+    if (n.kind !== 'ticket_gift' && !n.read_at) {
       await markRead(n.id)
       setUnread(c => Math.max(0, c - 1))
       setRows(prev => prev?.map(r => r.id === n.id ? { ...r, read_at: new Date().toISOString() } : r) ?? prev)
     }
     const dest = destinationFor(n)
     if (dest) navigate(dest)
+    if (n.kind === 'ticket_gift') {
+      window.dispatchEvent(new CustomEvent('commitshow:check-gifts'))
+    }
   }
 
   const onMarkAll = async () => {
