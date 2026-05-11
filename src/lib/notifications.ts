@@ -7,7 +7,7 @@
 
 import { supabase } from './supabase'
 
-export type NotificationKind = 'applaud' | 'forecast' | 'comment' | 'reaudit' | 'ticket_gift'
+export type NotificationKind = 'applaud' | 'forecast' | 'comment' | 'reaudit' | 'ticket_gift' | 'ticket_gift_sent'
 
 export interface NotificationRow {
   id:                    string
@@ -72,9 +72,9 @@ export async function markAllRead(recipientId: string): Promise<void> {
 
 /** Where clicking a notification should land. Returns null for no-op. */
 export function destinationFor(n: NotificationRow): string | null {
-  // Ticket gifts route to /me where the wallet card shows the
-  // updated balance · projects link doesn't apply here.
-  if (n.kind === 'ticket_gift') return '/me'
+  // Ticket gifts (both directions) route to /me where the wallet
+  // card shows the updated balance · projects link doesn't apply.
+  if (n.kind === 'ticket_gift' || n.kind === 'ticket_gift_sent') return '/me'
   if (n.project_id) return `/projects/${n.project_id}`
   if (n.target_type === 'comment' && n.project_id) return `/projects/${n.project_id}#activity`
   if (n.community_post_type && n.target_id) {
@@ -138,6 +138,15 @@ export function titleFor(n: NotificationRow): string {
       return `🎁 ${actor} gifted you ${ticketWord} — "${truncate(meta.message, 60)}"`
     }
     return `🎁 ${actor} gifted you ${ticketWord}`
+  }
+  if (n.kind === 'ticket_gift_sent') {
+    // For sender-side notifications actor_id is the RECIPIENT, so
+    // actor_display_name reads as the person who got the gift.
+    const meta = (n.metadata as { quantity?: number; recipient_name?: string } | null) ?? {}
+    const qty  = meta.quantity ?? 1
+    const recipientName = meta.recipient_name ?? actor
+    const ticketWord = qty === 1 ? 'your audition ticket' : `your ${qty} audition tickets`
+    return `🎁 ${recipientName} received ${ticketWord}`
   }
   return `${actor} interacted with your content`
 }

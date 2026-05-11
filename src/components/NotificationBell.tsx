@@ -177,15 +177,17 @@ export function NotificationBell({ recipientId }: Props) {
 
 function NotificationRowView({ n, onClick }: { n: NotificationRow; onClick: () => void }) {
   const unread = !n.read_at
-  const KindIcon = n.kind === 'applaud'      ? IconApplaud
-                 : n.kind === 'comment'      ? IconComment
-                 : n.kind === 'reaudit'      ? IconForecast   // re-uses target icon · close enough
-                 : n.kind === 'ticket_gift'  ? IconApplaud    // celebratory tone matches a gift moment
+  const KindIcon = n.kind === 'applaud'           ? IconApplaud
+                 : n.kind === 'comment'           ? IconComment
+                 : n.kind === 'reaudit'           ? IconForecast   // re-uses target icon · close enough
+                 : n.kind === 'ticket_gift'       ? IconApplaud    // celebratory tone matches a gift moment
+                 : n.kind === 'ticket_gift_sent'  ? IconApplaud
                  : IconForecast
-  const tone     = n.kind === 'applaud'      ? 'var(--gold-500)'
-                 : n.kind === 'comment'      ? 'var(--cream)'
-                 : n.kind === 'reaudit'      ? 'var(--gold-500)'
-                 : n.kind === 'ticket_gift'  ? 'var(--gold-500)'
+  const tone     = n.kind === 'applaud'           ? 'var(--gold-500)'
+                 : n.kind === 'comment'           ? 'var(--cream)'
+                 : n.kind === 'reaudit'           ? 'var(--gold-500)'
+                 : n.kind === 'ticket_gift'       ? 'var(--gold-500)'
+                 : n.kind === 'ticket_gift_sent'  ? '#A78BFA'      // violet · sender-side · different from celebratory gold
                  : '#00D4AA'
   const initial = (n.actor_display_name ?? '?').slice(0, 1).toUpperCase()
 
