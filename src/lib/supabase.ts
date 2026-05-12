@@ -229,7 +229,7 @@ export const PUBLIC_PROJECT_COLUMNS =
   'graduation_grade, season, graduated_at, media_published_at, creator_id, ' +
   'creator_name, season_id, updated_at, project_name, last_analysis_at, ' +
   'thumbnail_url, thumbnail_path, images, ' +
-  'business_category, detected_category, audit_count'
+  'business_category, detected_category, audit_count, form_factor'
 
 export type Member = {
   id: string
@@ -277,12 +277,18 @@ export type MemberStackAuto = {
   stack: string[]
 }
 
+export type ProjectFormFactor = 'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown'
+
 export type Project = {
   id: string
   /** URL slug · canonical path is /projects/<slug>. Derived from
    *  project_name (or github_url for owner/repo style) on insert.
    *  Nullable for legacy rows before the 20260512 migration. */
   slug: string | null
+  /** Denormalized form_factor from latest analysis_snapshots.
+   *  github_signals. Drives Ladder form-filter + score-cell sub-
+   *  label so '85 library' vs '85 app' read as different things. */
+  form_factor: ProjectFormFactor | null
   created_at: string
   updated_at: string
   project_name: string

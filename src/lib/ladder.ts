@@ -75,6 +75,12 @@ export interface LadderRow {
   status:        string
   creator_id:    string | null
   creator_name:  string | null
+  /** Denormalized form_factor from projects.form_factor. Drives the
+   *  Ladder form-filter UI and the inline 'audited as X' tag below
+   *  the score so visitors don't compare a library 85 to an app 85
+   *  without knowing the rubric shifted. */
+  form_factor:   'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown' | null
+  slug:          string | null
   // Streak signal · pulled from ladder_streaks, keyed by (project_id,
   // current viewing time_window). Null when the project isn't currently
   // in Top 50 for that window. `longest_streak_days` is the project's
@@ -137,7 +143,7 @@ export async function fetchLadder(
   const [{ data: pj }, { data: streakRows }] = await Promise.all([
     supabase
       .from('projects')
-      .select('id, project_name, github_url, thumbnail_url, status, creator_id, creator_name')
+      .select('id, project_name, github_url, thumbnail_url, status, creator_id, creator_name, form_factor, slug')
       .in('id', ids),
     supabase
       .from('ladder_streaks')
@@ -149,6 +155,7 @@ export async function fetchLadder(
     id: string; project_name: string; github_url: string | null
     thumbnail_url: string | null; status: string
     creator_id: string | null; creator_name: string | null
+    form_factor: LadderRow['form_factor']; slug: string | null
   }
   type StreakRow = {
     project_id: string
@@ -183,6 +190,8 @@ export async function fetchLadder(
       status:        p?.status ?? 'active',
       creator_id:    p?.creator_id ?? null,
       creator_name:  p?.creator_name ?? null,
+      form_factor:   p?.form_factor ?? null,
+      slug:          p?.slug ?? null,
       current_top_n:        s?.current_top_n        ?? null,
       longest_streak_days:  s?.longest_streak_days  ?? null,
       total_days_in_top_50: s?.total_days_in_top_50 ?? null,

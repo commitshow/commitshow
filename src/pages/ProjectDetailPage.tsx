@@ -87,6 +87,12 @@ export function ProjectDetailPage() {
   // fails X" trap when the scan only saw a sub-app of a big monorepo
   // (apps/studio in supabase/supabase, etc.).
   const [scannedScope, setScannedScope] = useState<string | null>(null)
+  // form_factor (app / library / scaffold / native_app / skill / unknown)
+  // drives the inline 'Audited as X' badge so visitors interpret the
+  // score in context. A library score of 85 ≠ an app score of 85 —
+  // the rubric is form-aware (slot semantics shift) but the absolute
+  // number alone can mislead.
+  const [formFactor, setFormFactor] = useState<'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown' | null>(null)
   const [nativeBreakdown, setNativeBreakdown] = useState<NativeAppBreakdown | null>(null)
   const [nativeFootguns,  setNativeFootguns]  = useState<NativeFootguns | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
@@ -163,6 +169,7 @@ export function ProjectDetailPage() {
       if (latest) {
         const lhRaw = (latest.lighthouse ?? {}) as { performance?: number; accessibility?: number; bestPractices?: number; seo?: number }
         const ghSig = (latest.github_signals ?? {}) as {
+          form_factor?: 'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown'
           vibe_concerns?: unknown
           scanned_scope?: string
           native_permissions_overreach?: NativeFootguns['permissions']
@@ -172,6 +179,7 @@ export function ProjectDetailPage() {
         }
         setVibeConcerns(ghSig.vibe_concerns ?? null)
         setScannedScope(ghSig.scanned_scope ?? null)
+        setFormFactor(ghSig.form_factor ?? null)
         // Native-app distribution + permissions block (only present when
         // form_factor='native_app'). Pulled from rich_analysis.breakdown.
         const richBreakdown = (latest.rich_analysis as { breakdown?: NativeAppBreakdown } | null)?.breakdown ?? null
@@ -782,6 +790,7 @@ export function ProjectDetailPage() {
           totalDays={seasonProgress?.totalDays ?? 28}
           phaseLabel={seasonProgress?.phaseLabel ?? ''}
           scoreHidden={scoreHidden}
+          formFactor={formFactor}
         />
 
         {/* §re-audit privacy banner · public viewers see one line so the
@@ -1249,7 +1258,7 @@ function ActivityRow({ primary, detail, secondary, time }: {
 // ── Scan strip · 5-6 metric pills in one row ────────────────────
 function ScanStrip({
   score, roundCount, roundDelta, dayNumber, totalDays, phaseLabel,
-  scoreHidden,
+  scoreHidden, formFactor,
 }: {
   score: number
   roundCount: number
@@ -1261,7 +1270,19 @@ function ScanStrip({
    *  Owner sees score · public sees "—" + tooltip. Score reveals on
    *  re-audit (audit_count >= 2). */
   scoreHidden?: boolean
+  /** Audited form factor · changes the Score cell's sub-label so
+   *  viewers read 'app · score 85' vs 'library · score 85' as
+   *  different things. Rubric IS form-aware; the absolute number
+   *  needs visible context. */
+  formFactor?: 'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown' | null
 }) {
+  const formLabel =
+    formFactor === 'library'    ? 'audited as library' :
+    formFactor === 'scaffold'   ? 'audited as scaffold' :
+    formFactor === 'native_app' ? 'audited as native app' :
+    formFactor === 'skill'      ? 'audited as skill' :
+    formFactor === 'app'        ? 'audited as web app' :
+                                  'out of 100'
   const scoreColor = score >= 75 ? '#00D4AA' : score >= 50 ? '#F0C040' : '#C8102E'
   const deltaColor = roundDelta == null || roundDelta === 0 ? 'var(--text-muted)'
     : roundDelta > 0 ? '#00D4AA' : '#F88771'
@@ -1278,7 +1299,7 @@ function ScanStrip({
       <ScanCell
         label="Score"
         value={scoreHidden ? '—' : `${score}`}
-        sub={scoreHidden ? 'hidden until re-audit' : 'out of 100'}
+        sub={scoreHidden ? 'hidden until re-audit' : formLabel}
         color={scoreHidden ? 'var(--text-muted)' : scoreColor}
         tooltip={scoreHidden ? 'Score is hidden from public until the creator re-audits. Visible to the owner only.' : undefined}
       />

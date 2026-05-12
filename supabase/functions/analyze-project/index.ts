@@ -391,6 +391,39 @@ function detectFormFactor(
     return 'skill'
   }
 
+  // MCP server indicators (high priority · runs before library/app
+   // branches because an MCP server's deployment shape — bin entry +
+   // stdio transport, no live URL — looks app-like enough to misclassify).
+   // Any single signal flips it to 'library' (which gets the
+   // tests/docs/TS/license substituted slot scoring · the right rubric
+   // for an MCP server). Misclass as 'app' was the bug: app scoring
+   // expected Lighthouse + Live URL · neither applies · neutral midpoint
+   // inflated the score.
+   // Signals (any one):
+   //   1. @modelcontextprotocol/* dependency (most precise)
+   //   2. mcp.json or server.json at root (MCP Registry / Cursor manifest)
+   //   3. package.json.keywords include 'mcp' or 'model-context-protocol'
+   //   4. package.json.bin entry name contains 'mcp' (e.g. 'commitshow-mcp')
+   //   5. package.json.name contains 'mcp' AND bin/main exists
+  const hasMcpDep = Object.keys(allDeps).some(d =>
+    d === '@modelcontextprotocol/sdk' || d.startsWith('@modelcontextprotocol/'))
+  const hasMcpManifest = pathSet.has('mcp.json') || pathSet.has('server.json') || pathSet.has('.mcp.json')
+  const pkgKeywords = (pkg?.keywords ?? []) as unknown[]
+  const hasMcpKeyword = Array.isArray(pkgKeywords) &&
+    pkgKeywords.some(k => typeof k === 'string' && /\b(mcp|model[\s-]?context[\s-]?protocol)\b/i.test(k))
+  const binNames: string[] = (() => {
+    const b = pkg?.bin
+    if (!b) return []
+    if (typeof b === 'string')        return [b]
+    if (typeof b === 'object')        return Object.keys(b as Record<string, unknown>)
+    return []
+  })()
+  const hasMcpBin = binNames.some(n => /\bmcp\b|-mcp$|^mcp-/i.test(n))
+  const nameMentionsMcp = /\bmcp\b|-mcp$|^mcp-/i.test(name) && (hasMain || hasBin)
+  if (hasMcpDep || hasMcpManifest || hasMcpKeyword || hasMcpBin || nameMentionsMcp) {
+    return 'library'
+  }
+
   // Scaffold indicators (highest priority — they often look like libraries)
   const scaffoldName = /^(create-|@.+\/create-)/.test(name) || /\b(starter|template|boilerplate|scaffold|kit)\b/i.test(name)
   const scaffoldReadme = /(use this template|getting started.+(fork|clone|copy this)|click .?use this template)/i.test(readmeHead)
@@ -4890,6 +4923,10 @@ Deno.serve(async (req) => {
     updated_at:        new Date().toISOString(),
     detected_category: detectedCategory,
     audit_count:       audit_count_increment,
+    // Denormalized form_factor · drives Ladder form-filter without
+    // an N+1 join on analysis_snapshots.github_signals. Re-audits
+    // overwrite (creator might've added MCP signals later).
+    form_factor:       form_factor,
   }
   // 2026-04-30 · auto-detector now writes ONLY to detected_category. The
   // user picks the canonical business_category at audit-result time (or
