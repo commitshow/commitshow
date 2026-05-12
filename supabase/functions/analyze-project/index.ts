@@ -246,6 +246,12 @@ interface GitHubInfo {
     has_plugin_manifest:     boolean     // .claude-plugin/marketplace.json or plugin.json
     skill_frontmatter_valid: boolean     // SKILL.md has both `name` and `description` YAML fields
     skill_description_chars: number      // length of `description` field — useful trigger detail
+    // ── Dev-tool sub-form signals (route into business_category='dev_tools') ──
+    // These are structurally library-shaped products that ship via a
+    // non-npm distribution channel. Detection is path / pkg-field driven so
+    // it stays cheap (no extra fetches).
+    has_action_yml:          boolean     // action.yml | action.yaml at repo root → GitHub Action
+    has_vscode_extension:    boolean     // package.json engines.vscode set → VSCode Extension
     // ── Vibe Coder Checklist · 7-category framework (2026-04-28) ──
     // The systematic failure modes that ~70% of AI-coded projects miss
     // and generic linters / Cursor reviews don't catch. Surfaced as
@@ -424,6 +430,13 @@ function detectFormFactor(
     return 'library'
   }
 
+  // GitHub Action · VSCode Extension · etc are NOT separate form_factors.
+  // form_factor captures product structure (app · library · scaffold ·
+  // native_app · skill). Action/VSCode-ext are 'library' shape-wise; what
+  // distinguishes them is business_category (dev_tools), which is detected
+  // separately by classifyBusinessCategory(). See that function for the
+  // action.yml / engines.vscode / mcp signals that route into dev_tools.
+
   // Scaffold indicators (highest priority — they often look like libraries)
   const scaffoldName = /^(create-|@.+\/create-)/.test(name) || /\b(starter|template|boilerplate|scaffold|kit)\b/i.test(name)
   const scaffoldReadme = /(use this template|getting started.+(fork|clone|copy this)|click .?use this template)/i.test(readmeHead)
@@ -537,6 +550,8 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
       has_plugin_manifest: false,
       skill_frontmatter_valid: false,
       skill_description_chars: 0,
+      has_action_yml: false,
+      has_vscode_extension: false,
       vibe_concerns: {
         webhook_idempotency: { handlers_seen: 0, idempotency_signal_seen: 0, gap: false, sample_files: [] },
         rls_gaps:            { tables: 0, policies: 0, writable_table_signals: 0, gap_estimate: 0, has_rls_intent: false },
@@ -920,6 +935,15 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
   const has_skill_canonical = rootPaths.some(p => /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(p))
   const has_skill_md        = rootPathSet.has('SKILL.md') || has_skill_canonical
   const has_plugin_manifest = rootPaths.some(p => /^\.claude-plugin\/(marketplace|plugin)\.json$/.test(p))
+
+  // Dev-tool sub-form signals (route business_category → dev_tools).
+  // Cheap path-only checks · no extra fetches. `action.yml` at repo root
+  // is the GitHub Action manifest · `engines.vscode` in package.json is
+  // the VSCode Extension marker. Both are structurally library-shaped
+  // products so they keep form_factor='library', but classify clearly.
+  const has_action_yml       = rootPathSet.has('action.yml') || rootPathSet.has('action.yaml')
+  const pkgEngines           = (pkgParsed?.engines ?? {}) as Record<string, unknown>
+  const has_vscode_extension = typeof pkgEngines.vscode === 'string'
   // Frontmatter validity: read the canonical or root SKILL.md (whichever we
   // find first) and check for both `name` and `description` YAML fields.
   // description length is surfaced as a separate signal — short descriptions
@@ -1964,6 +1988,8 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
       has_plugin_manifest,
       skill_frontmatter_valid,
       skill_description_chars,
+      has_action_yml,
+      has_vscode_extension,
       vibe_concerns,
     },
     readme_excerpt,
@@ -2754,6 +2780,19 @@ type LadderCategory =
 // these are facts about the artifact, not authorial claims, and should
 // outweigh ambiguous description language.
 
+interface CategoryStackInput {
+  formFactor:     string
+  isSaas:         boolean
+  layers:         Set<string>
+  /** Dev-tool sub-form signals · MCP server / GitHub Action / VSCode
+   *  Extension. Each is form_factor='library'-shape but business-wise
+   *  unambiguously dev_tools, so we route them via the stack rule
+   *  instead of broadening the regex. */
+  isMcpServer?:   boolean
+  isGhAction?:    boolean
+  isVscodeExt?:   boolean
+}
+
 interface CategoryRule {
   cat:        LadderCategory
   /** Pattern that, when matched, gives a strong baseline score (the
@@ -2764,7 +2803,7 @@ interface CategoryRule {
   soft:       RegExp
   /** Form-factor / stack rule that, when true, contributes +2. Used to
    *  break ties when description is mute. */
-  stack?:     (input: { formFactor: string; isSaas: boolean; layers: Set<string> }) => boolean
+  stack?:     (input: CategoryStackInput) => boolean
 }
 
 const CATEGORY_RULES: CategoryRule[] = [
@@ -2786,10 +2825,16 @@ const CATEGORY_RULES: CategoryRule[] = [
   },
   {
     cat:  'dev_tools',
-    hard: /\bcli\b|\bcommand[- ]line\b|\bscaffold(?:ing)?\b|\bstarter\s+(?:kit|template)\b|\bboilerplate\b|\bide\s+(?:plugin|extension)\b|\bsdk\b|\bapi\s+client\b|coding\s+(?:agent|assistant)|\bdebugger\b|\blinter\b|\bbundler\b|\bdevtools?\b|\bcompiler\b/,
-    soft: /\blibrary\b|\bframework\b|\bplugin\b|\btemplate\b|\bdeveloper[s]?\b|\bdev\b|\bopen\s+source\b|\bnpm\b|\bpackage\b|\bgithub\s+action\b|\b개발자\b|\b개발\s*도구\b/,
-    stack: ({ formFactor }) =>
-      formFactor === 'library' || formFactor === 'cli' || formFactor === 'scaffold',
+    hard: /\bcli\b|\bcommand[- ]line\b|\bscaffold(?:ing)?\b|\bstarter\s+(?:kit|template)\b|\bboilerplate\b|\bide\s+(?:plugin|extension)\b|\bsdk\b|\bapi\s+client\b|coding\s+(?:agent|assistant)|\bdebugger\b|\blinter\b|\bbundler\b|\bdevtools?\b|\bcompiler\b|\bmcp\s+server\b|\bvscode\s+extension\b|\bgithub\s+action\b/,
+    soft: /\blibrary\b|\bframework\b|\bplugin\b|\btemplate\b|\bdeveloper[s]?\b|\bdev\b|\bopen\s+source\b|\bnpm\b|\bpackage\b|\bmcp\b|\b개발자\b|\b개발\s*도구\b/,
+    stack: ({ formFactor, isMcpServer, isGhAction, isVscodeExt }) =>
+      formFactor === 'library' || formFactor === 'cli' || formFactor === 'scaffold' ||
+      // dev-tool sub-forms · structurally library but always dev_tools
+      // category-wise. Same +2 weight as the form-factor signal — combined
+      // with even a single 'mcp'/'extension' soft hit this beats the
+      // niche_saas / consumer fallbacks for closed-source AI agent SaaS
+      // that happens to mention 'agent' in its description.
+      isMcpServer === true || isGhAction === true || isVscodeExt === true,
   },
   {
     cat:  'niche_saas',
@@ -2823,6 +2868,13 @@ function detectBusinessCategory(input: {
   techLayers:  string[]
   pkgName:     string
   description: string
+  /** Optional dev-tool sub-form flags. When the analyze-project caller
+   *  has the repo manifest in hand, these flip the dev_tools rule's
+   *  stack contribution so MCP servers, GH Actions, and VSCode
+   *  extensions don't accidentally land in niche_saas / unknown. */
+  isMcpServer?: boolean
+  isGhAction?:  boolean
+  isVscodeExt?: boolean
 }): LadderCategory {
   const desc   = input.description.toLowerCase()
   const name   = input.pkgName.toLowerCase()
@@ -2837,7 +2889,14 @@ function detectBusinessCategory(input: {
     let score = 0
     if (rule.hard && rule.hard.test(blob)) score += 5
     score += countMatches(rule.soft, blob)
-    if (rule.stack && rule.stack({ formFactor: input.formFactor, isSaas: input.isSaas, layers })) {
+    if (rule.stack && rule.stack({
+      formFactor:   input.formFactor,
+      isSaas:       input.isSaas,
+      layers,
+      isMcpServer:  input.isMcpServer,
+      isGhAction:   input.isGhAction,
+      isVscodeExt:  input.isVscodeExt,
+    })) {
       score += 2
     }
     if (score > 0 && (!best || score > best.score)) {
@@ -2858,6 +2917,12 @@ function detectBusinessCategory(input: {
   }
 
   // Stack-only fallbacks (description was thin or mute).
+  if (input.isMcpServer || input.isGhAction || input.isVscodeExt) {
+    // Dev-tool sub-forms · regardless of how thin the description is,
+    // these manifests put us unambiguously in dev_tools (mcp.json /
+    // action.yml / engines.vscode aren't ambiguous signals).
+    return 'dev_tools'
+  }
   if (input.formFactor === 'library' || input.formFactor === 'cli' || input.formFactor === 'scaffold') {
     return 'dev_tools'
   }
@@ -4903,6 +4968,11 @@ Deno.serve(async (req) => {
     techLayers: tech.layers,
     pkgName:    project.project_name ?? '',
     description: (project.description ?? '') + ' ' + (claude.headline ?? ''),
+    // Dev-tool sub-form routing · MCP / GitHub Action / VSCode Extension
+    // all land in dev_tools regardless of description thinness.
+    isMcpServer: gh.signals.mcp_server_files > 0 || gh.signals.uses_mcp_libs.length > 0,
+    isGhAction:  gh.signals.has_action_yml,
+    isVscodeExt: gh.signals.has_vscode_extension,
   })
   const audit_count_increment = (project.audit_count ?? 0) + 1
 
