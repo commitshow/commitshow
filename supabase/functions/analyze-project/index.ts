@@ -814,7 +814,25 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
   const reactComponents = paths.filter(p => /components\/.*\.(tsx|jsx)$/.test(p))
   const pageFiles = paths.filter(p => /(pages|app|routes)\/.*\.(tsx|jsx|vue|svelte)$/.test(p))
   const mcpServerFiles = paths.filter(p => /mcp[_-]?server|mcp\/index|mcp-config/i.test(p))
-  const testFiles = paths.filter(p => /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(p))
+  // Test file scan · covers JS (*.test.* / *.spec.*), Python (test_*.py /
+   // *_test.py / tests/*.py), Go (*_test.go), Rust (#[test] sites live in
+   // tests/ or src/), Ruby (spec/*.rb · test/*_test.rb). Limited to
+   // /tests?|spec/ folders OR explicit name patterns so vendored files
+   // under static/ or node_modules/ don't get picked up.
+   // datasette/2026-05-13 false negative: JS-only regex missed the Python
+   // pytest suite in /tests/test_*.py → test_files=0 → audit gave 0 of
+   // the 8pt Tests slot on a project that has a full test suite.
+  const testFiles = paths.filter(p => {
+    if (/node_modules|\/dist\/|\/build\/|\/static\//.test(p)) return false
+    return (
+      /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(p) ||                  // JS / TS
+      /(^|\/)tests?\//.test(p) && /\.(py|rb|go|rs)$/.test(p) ||             // Python/Ruby/Go/Rust under tests/
+      /(^|\/)spec\//.test(p)   && /\.(rb|js|ts)$/.test(p) ||                // Ruby/JS spec/
+      /(^|\/)test_[^/]+\.py$/.test(p) || /_test\.py$/.test(p) ||            // pytest conventions outside tests/
+      /_test\.go$/.test(p) ||                                                // Go _test.go convention
+      /_test\.rb$/.test(p)                                                   // Ruby _test.rb convention
+    )
+  })
   const hasClaudeMd = paths.some(p => /^CLAUDE\.md$/i.test(p))
   const hasPrdDocs = paths.some(p => /^(docs\/)?(prd|spec|rfc).*\.(md|pdf)$/i.test(p))
 
@@ -1460,9 +1478,17 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
   // ── Extension frames 8-11 (added 2026-04-30) · AI-template-copy footguns
   // We piggyback on apiHandlerFiles + a small additional scan set to keep
   // network cost low. Each frame returns top-3 evidence samples.
+  // datasette/2026-05-13 mock-data false positive: cm-editor-6.0.1.bundle.js
+  // (vendored CodeMirror minified bundle) under datasette/static/ matched
+  // the 'inline array of 3 object literals' regex from the bundle's seed
+  // data and got flagged as 'mock data in prod'. Excluding vendored /
+  // bundled / minified asset paths kills the whole class of FP without
+  // hurting genuine recall (real mock data lives in src/ · pages/ · app/).
   const extScanFiles = paths.filter(p =>
     /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(p) &&
-    !/\b(node_modules|\.next|dist|build|coverage|\.test\.|\.spec\.|__tests__|fixtures?|mocks?|scripts?\/)\b/i.test(p)
+    !/\b(node_modules|\.next|dist|build|coverage|\.test\.|\.spec\.|__tests__|fixtures?|mocks?|scripts?\/|static\/|public\/|vendor\/|assets\/|lib\/vendor\/)\b/i.test(p) &&
+    !/\.(bundle|min|chunk|umd|esm)\.(js|mjs|cjs)$/i.test(p) &&
+    !/\.\d+\.\d+\.\d+\.(js|mjs|cjs)$/i.test(p)   // versioned filenames like cm-editor-6.0.1.bundle.js
   ).slice(0, 30)
 
   // 8. HARDCODED URLs · localhost · 127.0.0.1 · explicit production API
@@ -1501,8 +1527,15 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
     }
     if (mock_data_samples.length < 3) {
       // Pattern: `const <name> = [{ ... }, { ... }, { ... }]` (3+ object literals)
-      const mdMatch = text.match(/const\s+(\w+)\s*=\s*\[\s*\{[^}]+\}\s*,\s*\{[^}]+\}\s*,\s*\{/i)
-      if (mdMatch) mock_data_samples.push({ file: f, collection: mdMatch[1] })
+      // Belt-and-suspenders FP guard · minified bundles routinely have a
+      // single 10k+ char line, which by structure can contain three inline
+      // object literals from seed data. Skip files whose longest line is
+      // > 500 chars (real source rarely crosses that).
+      const longestLine = text.split('\n').reduce((m, l) => l.length > m ? l.length : m, 0)
+      if (longestLine <= 500) {
+        const mdMatch = text.match(/const\s+(\w+)\s*=\s*\[\s*\{[^}]+\}\s*,\s*\{[^}]+\}\s*,\s*\{/i)
+        if (mdMatch) mock_data_samples.push({ file: f, collection: mdMatch[1] })
+      }
     }
     if (cors_perm_samples.length < 3) {
       const corsMatch = text.match(/cors\s*\(\s*\{[^}]*origin\s*:\s*['"]\*['"]/i)
