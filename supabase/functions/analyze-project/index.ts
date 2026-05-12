@@ -5195,12 +5195,58 @@ Deno.serve(async (req) => {
     health,
   })
   } catch (e) {
-    // v4 silent-failure debug · capture the error to a snapshot so we can
-    // see WHERE in the pipeline it crashed without dashboard log access.
+    // v5 silent-failure debug · capture the error WITHOUT destroying any
+    // good snapshot that the try block already wrote. datasette/2026-05-12
+    // hit this path: snapshot 1 INSERT succeeded (79pt) then something
+    // downstream threw, the prior catch wrote a second 0/0 snapshot, and
+    // since projects.score_* are stamped right before return — never run
+    // here — the user saw 0/100 for an 11k-star OSS.
+    //
+    // New behavior: if a good snapshot (score_auto > 0) landed in the last
+    // 5 minutes, stamp projects.score_* from it (so the user sees the
+    // good number) and log the post-snapshot error to the console only.
+    // Otherwise fall through to the legacy error-snapshot path so a true
+    // pipeline crash with no prior good snapshot still leaves a trail.
     const msg = (e as Error)?.message ?? String(e)
     const stack = (e as Error)?.stack ?? ''
     console.error('[analyze-project FATAL]', msg, stack)
     try {
+      const fiveAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      const { data: priorGood } = await admin
+        .from('analysis_snapshots')
+        .select('id, score_auto, score_total, score_forecast, score_community, created_at')
+        .eq('project_id', projectId)
+        .gt('score_auto', 0)
+        .gt('created_at', fiveAgo)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (priorGood) {
+        // Salvage path · stamp projects from the good snapshot so the user
+        // sees the right number. Don't write a second snapshot.
+        console.warn('[analyze-project] post-snapshot crash recovered · stamping projects from snapshot', priorGood.id)
+        await admin
+          .from('projects')
+          .update({
+            score_auto:       priorGood.score_auto,
+            score_total:      priorGood.score_total,
+            score_forecast:   priorGood.score_forecast,
+            score_community:  priorGood.score_community,
+            last_analysis_at: priorGood.created_at,
+            updated_at:       new Date().toISOString(),
+          })
+          .eq('id', projectId)
+        return json({
+          ok: true,
+          partial: true,
+          message: 'Audit completed with a non-fatal post-snapshot error · score stamped from snapshot.',
+          snapshot_id: priorGood.id,
+          score_total: priorGood.score_total,
+          post_error: msg,
+        }, 200)
+      }
+      // No good snapshot · genuine pipeline crash before INSERT. Leave a
+      // debug trail so we can see where it died.
       await admin.from('analysis_snapshots').insert([{
         project_id:    projectId,
         trigger_type:  triggerType,
