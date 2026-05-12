@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { projectSlug, projectShareUrl } from '../lib/projectSlug'
+import { displayScore, laneOf } from '../lib/laneScore'
 import {
   fetchProjectById,
   fetchProjectByIdOrSlug,
@@ -781,9 +782,15 @@ export function ProjectDetailPage() {
               don't get it (no skin in the thread). */}
         <CommunityPulseStrip projectId={project.id} isOwner={isOwner} />
 
-        {/* ── Scan strip · at-a-glance metrics ── */}
+        {/* ── Scan strip · at-a-glance metrics ──
+              URL fast lane projects (preview · no github_url) get the /33
+              polish normalization instead of the platform-lane /50 →
+              score_total. Same number shows on HeroUrlHook so paste-the-URL
+              audits read the same regardless of which surface presented
+              them. See laneScore.ts for the denominator rationale. */}
         <ScanStrip
-          score={project.score_total}
+          score={displayScore(project)}
+          lane={laneOf(project)}
           roundCount={roundCount}
           roundDelta={roundDelta}
           dayNumber={seasonProgress?.dayNumber ?? null}
@@ -1257,10 +1264,14 @@ function ActivityRow({ primary, detail, secondary, time }: {
 
 // ── Scan strip · 5-6 metric pills in one row ────────────────────
 function ScanStrip({
-  score, roundCount, roundDelta, dayNumber, totalDays, phaseLabel,
+  score, lane, roundCount, roundDelta, dayNumber, totalDays, phaseLabel,
   scoreHidden, formFactor,
 }: {
   score: number
+  /** Which audit lane this project ran in · drives the sub-label so
+   *  visitors read URL-only scores as "partial · URL signals only"
+   *  instead of comparing them naively to platform /50 scores. */
+  lane: 'platform' | 'walk_on' | 'url_fast_lane'
   roundCount: number
   roundDelta: number | null
   dayNumber: number | null
@@ -1276,13 +1287,17 @@ function ScanStrip({
    *  needs visible context. */
   formFactor?: 'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown' | null
 }) {
+  // URL lane label overrides form factor — the "partial · URL signals only"
+  // context is more important than form factor for these rows (we never
+  // saw their repo so form factor is 'unknown' anyway).
   const formLabel =
-    formFactor === 'library'    ? 'audited as library' :
-    formFactor === 'scaffold'   ? 'audited as scaffold' :
-    formFactor === 'native_app' ? 'audited as native app' :
-    formFactor === 'skill'      ? 'audited as skill' :
-    formFactor === 'app'        ? 'audited as web app' :
-                                  'out of 100'
+    lane === 'url_fast_lane'   ? 'partial · URL signals only' :
+    formFactor === 'library'   ? 'audited as library' :
+    formFactor === 'scaffold'  ? 'audited as scaffold' :
+    formFactor === 'native_app'? 'audited as native app' :
+    formFactor === 'skill'     ? 'audited as skill' :
+    formFactor === 'app'       ? 'audited as web app' :
+                                 'out of 100'
   const scoreColor = score >= 75 ? '#00D4AA' : score >= 50 ? '#F0C040' : '#C8102E'
   const deltaColor = roundDelta == null || roundDelta === 0 ? 'var(--text-muted)'
     : roundDelta > 0 ? '#00D4AA' : '#F88771'

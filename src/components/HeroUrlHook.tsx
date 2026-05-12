@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { AuthModal } from './AuthModal'
 import { openTweetIntent } from '../lib/shareTweet'
+import { urlLanePolish } from '../lib/laneScore'
 
 interface SnapshotRich {
   // Canonical scout_brief shape · matches recentAudits.ts and the Edge
@@ -589,14 +590,11 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
   //   · Runtime evidence 2 — console_clean + network_clean (mined from LH audits)
   //   · (Live URL Health 5 often 0 due to bot fight — excluded so well-polished
   //      SaaS aren't penalized for having bot protection)
-  // 2026-05-12: dropped the custom URL_LANE_MAX=26 normalization. A URL
-  // audit that maxed out URL signals (~26 score_auto) was being shown
-  // as 100/100 here while /projects/<slug> showed 52/100 (audit pillar
-  // /50 scale). Same audit, two different numbers, 100 reading as
-  // 'perfect' which a partial URL audit can't be. Now displays the
-  // server-computed score_total directly · always consistent with the
-  // project detail page.
-  const polishScore = snap?.score_total ?? result.project.score_total ?? 0
+  // Lane denominator lives in `laneScore.URL_LANE_MAX` so HeroUrlHook,
+  // ProjectDetail (URL-lane projects), and recentAudits.ts all produce
+  // identical numbers. The "URL signals only" caption + amber lane chip on
+  // the score card stop visitors from mistaking 100/100 for a full audit.
+  const polishScore = urlLanePolish(snap?.score_auto ?? result.project.score_auto ?? 0)
 
   const band =
     polishScore >= 90 ? 'Top-tier polish' :

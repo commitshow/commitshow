@@ -106,15 +106,20 @@ function sequenceForDemo(d: AuditDemo): Line[] {
   const captionPost  = concernCount > 0
     ? ` · ${d.band} · ${concernCount} to fix`
     : ` · ${d.band}`
-  // 3-stream caption (§15-E):
-  //   'platform'      → 'audition'  (member full audit · status != 'preview')
-  //   'walk_on'       → 'walk-on'   (CLI repo audit · github_url + status='preview')
-  //   'url_fast_lane' → 'url-audit' (URL-only · github_url IS NULL · partial cap)
-  // The prompt line also varies — repo lanes show the github slug, URL lane
-  // shows the bare host so the audience sees both entry shapes side by side.
-  const captionMid = d.source === 'platform'      ? 'audition'
-                   : d.source === 'url_fast_lane' ? 'url-audit'
-                   :                                'walk-on'
+  // 3-stream caption (§15-E) · lane label + color must visually distinguish:
+  //   'platform'      → 'PLATFORM · audition'  gold   (member full audit)
+  //   'walk_on'       → 'CLI · walk-on'        cream  (anonymous repo audit)
+  //   'url_fast_lane' → 'URL · partial'        teal   (URL-only · partial cap)
+  // Color matches the lane rails on AuditShowcase below so the two
+  // surfaces read as the same taxonomy.
+  const captionMid =
+      d.source === 'platform'      ? 'PLATFORM · audition'
+    : d.source === 'url_fast_lane' ? 'URL · partial'
+    :                                'CLI · walk-on'
+  const captionMidColor =
+      d.source === 'platform'      ? 'var(--gold-500)'
+    : d.source === 'url_fast_lane' ? '#00D4AA'
+    :                                'var(--cream)'
   const promptLine = d.source === 'url_fast_lane'
     ? `npx commitshow@latest audit ${d.slug}`
     : `npx commitshow@latest audit github.com/${d.slug}`
@@ -129,7 +134,7 @@ function sequenceForDemo(d: AuditDemo): Line[] {
     { kind: 'note',   text: `It's a snapshot, not a verdict. Code changes; so does this number.` },
     { kind: 'spacer' },
     { kind: 'big',    score: String(d.score) },
-    { kind: 'caption', pre: '/ 100 · ', mid: captionMid, mid_color: 'var(--gold-500)', post: captionPost },
+    { kind: 'caption', pre: '/ 100 · ', mid: captionMid, mid_color: captionMidColor, post: captionPost },
     { kind: 'spacer' },
     { kind: 'bar',       label: 'Audit', value: `${d.auditPts}/45`, bar, color: '#00D4AA' },
     { kind: 'lockedBar', label: 'Scout', value: '—/30' },
@@ -360,7 +365,7 @@ function LineRow({
     return (
       <div className="text-center" style={{ color: 'rgba(248,245,238,0.6)', marginBottom: '0.4em' }}>
         {line.pre}
-        <span style={{ color: line.mid_color }}>{line.mid}</span>
+        <span style={{ color: line.mid_color, fontWeight: 700, letterSpacing: '0.05em' }}>{line.mid}</span>
         {line.post}
       </div>
     )

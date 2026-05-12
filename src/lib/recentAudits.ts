@@ -104,21 +104,16 @@ const SCORE_FLOOR    = 74    // hard cutoff · '74점 이상' per CEO directive
 const PER_BUCKET_TOP = 10    // top 10 platform + top 10 walk-on, both shown
 const RAW_FETCH      = 120   // each query · room for dedupe and bullet-quality drops
 
-// §15-E URL fast lane uses a separate /26 polish scale. The DB column
-// `score_total` is the raw absolute pillar (caps near 46 because most
-// repo-evidence slots are structurally unattainable for URL audits). The
-// number users see on the detail page is `score_auto / URL_LANE_MAX × 100`.
-// Hero must compare against that polish number — comparing the floor (74)
-// against raw 46 means URL lane never surfaces, even when polish is 88+
-// (apple.com / google.com case).
-const URL_LANE_MAX = 26
-function urlLanePolish(scoreAuto: number): number {
-  return Math.max(0, Math.min(100, Math.round((scoreAuto / URL_LANE_MAX) * 100)))
-}
-// SQL-side prefilter for the url_fast_lane query · score_auto >= 20 maps
-// to polish ≥ ~77 with the URL_LANE_MAX=26 scale. We re-apply the exact
-// 74 floor in JS after polish conversion below.
-const URL_LANE_AUTO_FLOOR = Math.ceil((SCORE_FLOOR * URL_LANE_MAX) / 100)  // ~20
+// §15-E URL fast lane uses a separate /33 polish scale (see laneScore.ts).
+// The DB column `score_total` is the platform-lane normalization · URL
+// lane consumers must call urlLanePolish(score_auto) so the same 79 shows
+// up on Hero, HeroUrlHook, and ProjectDetail. Floor 74 is applied on the
+// polish value.
+import { URL_LANE_MAX, urlLanePolish } from './laneScore'
+// SQL-side prefilter for the url_fast_lane query · score_auto >= ceil(74×33/100)
+// = 25 maps to polish ≥ 74 with URL_LANE_MAX=33. JS re-applies the 74
+// floor on polish below.
+const URL_LANE_AUTO_FLOOR = Math.ceil((SCORE_FLOOR * URL_LANE_MAX) / 100)
 
 // Build a normalized AuditDemo array from raw snapshot rows · same
 // filters (project_name length, slug, ≥2 strengths, ≥1 concern), same

@@ -27,25 +27,39 @@ interface SourceMeta {
   badge:        string
   badgeBg:      string
   badgeColor:   string
+  /** Solid 4px left rail color · the strongest lane-distinction signal
+   *  on the card. Picks one of the lane tokens so a viewer reads the
+   *  lane before reading the project name. */
+  railColor:    string
+  /** Sub-caption directly under the badge · spells out what the lane
+   *  means in plain English so first-time viewers don't have to guess
+   *  what 'walk-on' / 'fast lane' implies. */
+  tagline:      string
 }
 const SOURCE_META: Record<AuditDemo['source'], SourceMeta> = {
   platform: {
-    label:      'AUDITION',
-    badge:      'Audition',
-    badgeBg:    'rgba(240,192,64,0.12)',
+    label:      'OUR PLATFORM',
+    badge:      'Platform · Audition',
+    badgeBg:    'rgba(240,192,64,0.18)',
     badgeColor: 'var(--gold-500)',
+    railColor:  '#F0C040',
+    tagline:    'member audition · full audit',
   },
   walk_on: {
-    label:      'WALK-ON · CLI',
-    badge:      'Walk-on',
-    badgeBg:    'rgba(248,245,238,0.06)',
+    label:      'CLI · WALK-ON',
+    badge:      'CLI · Walk-on',
+    badgeBg:    'rgba(248,245,238,0.10)',
     badgeColor: 'var(--cream)',
+    railColor:  'var(--cream)',
+    tagline:    'npx commitshow audit · anyone',
   },
   url_fast_lane: {
     label:      'URL FAST LANE',
-    badge:      'URL audit',
-    badgeBg:    'rgba(0,212,170,0.10)',
+    badge:      'URL · Fast lane',
+    badgeBg:    'rgba(0,212,170,0.18)',
     badgeColor: '#00D4AA',
+    railColor:  '#00D4AA',
+    tagline:    'URL signals only · partial cap',
   },
 }
 
@@ -130,32 +144,41 @@ function AuditCard({ demo }: AuditCardProps) {
   const href       = isExternal ? (demo.liveUrl ?? '#') : `/projects/${demo.projectId}`
 
   const inner = (
-    <div className="h-full p-5 flex flex-col" style={{
+    <div className="h-full p-5 flex flex-col relative" style={{
       background: 'rgba(15,32,64,0.45)',
       border: '1px solid rgba(248,245,238,0.10)',
+      borderLeft: `4px solid ${meta.railColor}`,
       borderRadius: '2px',
       transition: 'border-color 180ms ease',
     }}
       onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.4)')}
       onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.10)')}
     >
-      <div className="flex items-center justify-between mb-4">
-        <span
-          className="inline-block px-2 py-1 font-mono text-[10px] tracking-widest"
-          style={{
-            background: meta.badgeBg,
-            color: meta.badgeColor,
-            border: `1px solid ${meta.badgeColor}`,
-            borderRadius: '2px',
-          }}
-        >
-          {meta.label}
-        </span>
-        <div className="text-right">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <span
+            className="inline-block px-2.5 py-1 font-mono text-[11px] font-bold tracking-widest"
+            style={{
+              background: meta.badgeBg,
+              color: meta.badgeColor,
+              border: `1px solid ${meta.badgeColor}`,
+              borderRadius: '2px',
+            }}
+          >
+            {meta.label}
+          </span>
+          <div className="font-mono text-[10px] mt-1.5 tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            {meta.tagline}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
           <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--text-muted)' }}>SCORE</div>
           <div className="font-display font-black" style={{ color: scoreColor, fontSize: '1.75rem', lineHeight: 1 }}>
             {Math.round(demo.score)}<span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>/100</span>
           </div>
+          {demo.source === 'url_fast_lane' && (
+            <div className="font-mono text-[9px] mt-0.5" style={{ color: '#00D4AA' }}>partial</div>
+          )}
         </div>
       </div>
 
