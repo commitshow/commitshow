@@ -248,7 +248,7 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
         overflow: 'hidden',
       }}
     >
-      <TerminalChrome demoSlug={currentDemo.slug} />
+      <TerminalChrome demoSlug={currentDemo.slug} source={currentDemo.source} />
       <div className="px-4 md:px-6 py-4 md:py-5" style={{ minHeight: '380px' }}>
         {sequence.slice(0, visibleLines).map((line, i) => (
           <LineRow
@@ -268,7 +268,22 @@ export function HeroTerminal({ reduceMotion: forceReduce }: Props) {
   )
 }
 
-function TerminalChrome({ demoSlug }: { demoSlug: string }) {
+// Lane chip in the terminal title bar · the clearest place to surface
+// which audit lane the demo is from. Caption-line tagging ("/ 100 · CLI ·
+// walk-on") got lost between strings; a colored chip in chrome reads as
+// a label at a glance.
+function laneChip(source: AuditDemo['source']): { text: string; color: string; bg: string } {
+  if (source === 'platform') {
+    return { text: 'PLATFORM · audition', color: 'var(--gold-500)', bg: 'rgba(240,192,64,0.16)' }
+  }
+  if (source === 'url_fast_lane') {
+    return { text: 'URL · partial', color: '#00D4AA', bg: 'rgba(0,212,170,0.16)' }
+  }
+  return { text: 'CLI · walk-on', color: 'var(--cream)', bg: 'rgba(248,245,238,0.10)' }
+}
+
+function TerminalChrome({ demoSlug, source }: { demoSlug: string; source: AuditDemo['source'] }) {
+  const chip = laneChip(source)
   return (
     <div
       className="flex items-center gap-1.5 px-3 py-2"
@@ -286,9 +301,24 @@ function TerminalChrome({ demoSlug }: { demoSlug: string }) {
       <Dot color="rgba(39,201,63,0.7)" />
       <span
         className="ml-3 tracking-widest truncate"
-        style={{ color: 'rgba(248,245,238,0.45)', fontSize: '10px', maxWidth: 'calc(100% - 80px)' }}
+        style={{ color: 'rgba(248,245,238,0.45)', fontSize: '10px', maxWidth: 'calc(100% - 200px)' }}
       >
         commit.show — auditing {demoSlug}
+      </span>
+      <span
+        className="ml-auto font-mono tracking-widest"
+        style={{
+          color: chip.color,
+          background: chip.bg,
+          border: `1px solid ${chip.color}`,
+          borderRadius: 2,
+          padding: '2px 8px',
+          fontSize: '10px',
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {chip.text}
       </span>
     </div>
   )
