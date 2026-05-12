@@ -1287,17 +1287,11 @@ function ScanStrip({
    *  needs visible context. */
   formFactor?: 'app' | 'library' | 'scaffold' | 'native_app' | 'skill' | 'unknown' | null
 }) {
-  // URL lane label overrides form factor — the "partial · URL signals only"
-  // context is more important than form factor for these rows (we never
-  // saw their repo so form factor is 'unknown' anyway).
-  const formLabel =
-    lane === 'url_fast_lane'   ? 'partial · URL signals only' :
-    formFactor === 'library'   ? 'audited as library' :
-    formFactor === 'scaffold'  ? 'audited as scaffold' :
-    formFactor === 'native_app'? 'audited as native app' :
-    formFactor === 'skill'     ? 'audited as skill' :
-    formFactor === 'app'       ? 'audited as web app' :
-                                 'out of 100'
+  // ScanStrip sub-label · 'partial · URL signals only' for URL fast lane
+  // (visitors need that context), plain 'out of 100' for everything else.
+  // form_factor specifics removed 2026-05-12 · stays as internal B2B
+  // taxonomy (still drives audit rubric server-side).
+  const formLabel = lane === 'url_fast_lane' ? 'partial · URL signals only' : 'out of 100'
   const scoreColor = score >= 75 ? '#00D4AA' : score >= 50 ? '#F0C040' : '#C8102E'
   const deltaColor = roundDelta == null || roundDelta === 0 ? 'var(--text-muted)'
     : roundDelta > 0 ? '#00D4AA' : '#F88771'

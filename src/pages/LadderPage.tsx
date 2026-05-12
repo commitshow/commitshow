@@ -51,15 +51,8 @@ export function LadderPage() {
   const category: CatFilter      = isCategoryFilter(params.get('cat')) ? params.get('cat') as CatFilter : 'all'
   const window:   LadderWindow   = isWindow(params.get('window'))   ? params.get('window') as LadderWindow : 'week'
   const view:     ViewMode       = isView(params.get('view'))       ? params.get('view') as ViewMode : 'list'
-  // form_factor filter · 'all' (default) compares everything · per-form
-  // filters compare apples to apples (library vs library, app vs app).
-  // Library scores tend to run 13pts higher than apps because the
-  // rubric is form-aware and library's substituted slots are easier
-  // to satisfy fully · this filter lets viewers normalize.
-  type FormFilter = 'all' | 'app' | 'library' | 'scaffold' | 'native_app' | 'skill'
-  const isFormFilter = (v: string | null): v is FormFilter =>
-    v === 'all' || v === 'app' || v === 'library' || v === 'scaffold' || v === 'native_app' || v === 'skill'
-  const form: FormFilter = isFormFilter(params.get('form')) ? params.get('form') as FormFilter : 'all'
+  // form_factor filter UI removed 2026-05-12 · form is internal B2B
+  // analytics now (still drives audit rubric slot semantics server-side).
 
   // List-mode state
   const [rows,   setRows]   = useState<LadderRow[]>([])
@@ -245,45 +238,9 @@ export function LadderPage() {
           })}
         </div>
 
-        {/* ── Form-factor filter · normalizes apples-to-apples comparisons.
-              Default 'all' shows everything. Per-form filters let visitors
-              read 'library 85' vs 'app 85' under the right rubric since
-              the audit slot semantics shift with form. */}
-        <div
-          className="mb-4 flex items-center gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible pb-1 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0"
-          style={{ scrollbarWidth: 'none' }}
-        >
-          <span className="font-mono text-[10px] tracking-widest shrink-0" style={{ color: 'var(--text-muted)' }}>
-            FORM
-          </span>
-          {([
-            { value: 'all'        as const, label: 'All'    },
-            { value: 'app'        as const, label: 'Web'    },
-            { value: 'library'    as const, label: 'Library' },
-            { value: 'scaffold'   as const, label: 'Scaffold' },
-            { value: 'native_app' as const, label: 'Native' },
-            { value: 'skill'      as const, label: 'Skill'  },
-          ]).map(f => {
-            const active = f.value === form
-            return (
-              <button
-                key={f.value}
-                type="button"
-                onClick={() => updateParam('form', f.value)}
-                className="font-mono text-[10px] tracking-wide px-2.5 py-1 shrink-0"
-                style={{
-                  background:  active ? 'rgba(96,165,250,0.15)' : 'transparent',
-                  color:       active ? '#60A5FA' : 'var(--text-secondary)',
-                  border:      `1px solid ${active ? 'rgba(96,165,250,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                  borderRadius: '2px',
-                  cursor:      'pointer',
-                }}
-              >
-                {f.label}
-              </button>
-            )
-          })}
-        </div>
+        {/* Form-factor filter UI removed 2026-05-12 · form_factor stays as
+            internal B2B / partnership taxonomy (also drives auditor rubric
+            slot semantics) but is no longer shown to ladder visitors. */}
 
         {/* ── View toggle · sits below the category strip, right-aligned · paired with hint on the left ── */}
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -338,10 +295,7 @@ export function LadderPage() {
 
         {/* ── List view (rank-first) ── */}
         {view === 'list' && (() => {
-          // Form-filter pass · 'all' shows everything, otherwise narrow
-          // to rows matching the selected form_factor (or null rows when
-          // 'unknown' is implied · we surface 'unknown' under 'all' only).
-          const filtered = form === 'all' ? rows : rows.filter(r => r.form_factor === form)
+          const filtered = rows
           return (
           <div className="card-navy" style={{ borderRadius: '2px', overflow: 'hidden' }}>
             {loading ? (
@@ -371,9 +325,7 @@ export function LadderPage() {
 
         {/* ── Cards view (editorial grid · was /projects) ── */}
         {view === 'cards' && (() => {
-          const filteredCards = form === 'all'
-            ? cardRows
-            : cardRows.filter(c => c.project.form_factor === form)
+          const filteredCards = cardRows
           return (
           loading ? (
             <div className="card-navy px-5 py-12 text-center font-mono text-xs" style={{ color: 'var(--text-muted)', borderRadius: '2px' }}>
@@ -473,25 +425,7 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
                 {row.score_total}
               </span>
               <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/100</span>
-              {row.form_factor && row.form_factor !== 'unknown' && (
-                <span
-                  className="font-mono text-[9px] tracking-wide px-1.5 py-0.5 ml-1"
-                  style={{
-                    color: '#60A5FA',
-                    background: 'rgba(96,165,250,0.1)',
-                    border: '1px solid rgba(96,165,250,0.25)',
-                    borderRadius: '2px',
-                  }}
-                  title="Audited form factor · scoring rubric shifts per form"
-                >
-                  {row.form_factor === 'app'        ? 'WEB'
-                  : row.form_factor === 'library'   ? 'LIB'
-                  : row.form_factor === 'scaffold'  ? 'SCAFFOLD'
-                  : row.form_factor === 'native_app'? 'NATIVE'
-                  : row.form_factor === 'skill'     ? 'SKILL'
-                  :                                    ''}
-                </span>
-              )}
+              {/* form_factor inline tag removed 2026-05-12 · B2B-only signal */}
             </>
           )}
         </div>
