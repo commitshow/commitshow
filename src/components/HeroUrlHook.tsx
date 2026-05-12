@@ -39,7 +39,7 @@ interface SnapshotRich {
 
 interface SiteAuditResult {
   project_id: string
-  project: { id: string; project_name: string; live_url: string; score_total: number; score_auto: number; status: string; creator_id: string | null }
+  project: { id: string; slug?: string | null; project_name: string; live_url: string; score_total: number; score_auto: number; status: string; creator_id: string | null }
   latest_snapshot: { id: string; created_at: string; score_total: number; score_auto: number; rich_analysis: SnapshotRich } | null
   status: 'running' | 'ready'
   cache_hit?: boolean
@@ -761,7 +761,7 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
             // Function (1280×720 PNG with score+bars+strengths/concerns).
             // Same surface auto-tweet uses · "no policy A claim, just share
             // the result card" — anonymous walk-on still gets to brag.
-            const projectUrl = `https://commit.show/projects/${result.project_id}?og=tweet`
+            const projectUrl = `https://commit.show/projects/${result.project.slug ?? result.project_id}?og=tweet`
             const topStrength = result.latest_snapshot?.rich_analysis?.scout_brief?.strengths?.[0]?.bullet ?? null
             openTweetIntent({
               projectName: result.project.project_name,

@@ -239,6 +239,32 @@ export async function fetchProjectById(id: string): Promise<Project | null> {
   return (data as Project | null) ?? null
 }
 
+// Slug-aware lookup · the URL param /projects/<idOrSlug> can be
+// either form, so the resolver tries id first (UUID-only shape) and
+// falls back to slug. Returns the row plus a hint so the caller can
+// 301-redirect a UUID-shaped param to the canonical slug URL.
+import { isUuid } from './projectSlug'
+export async function fetchProjectByIdOrSlug(idOrSlug: string):
+  Promise<{ project: Project | null; matchedBy: 'id' | 'slug' | 'none' }> {
+  if (!idOrSlug) return { project: null, matchedBy: 'none' }
+  if (isUuid(idOrSlug)) {
+    const { data } = await supabase
+      .from('projects')
+      .select(PUBLIC_PROJECT_COLUMNS)
+      .eq('id', idOrSlug)
+      .maybeSingle()
+    if (data) return { project: data as Project, matchedBy: 'id' }
+    return { project: null, matchedBy: 'none' }
+  }
+  const { data } = await supabase
+    .from('projects')
+    .select(PUBLIC_PROJECT_COLUMNS)
+    .eq('slug', idOrSlug)
+    .maybeSingle()
+  if (data) return { project: data as Project, matchedBy: 'slug' }
+  return { project: null, matchedBy: 'none' }
+}
+
 // Creator-initiated project deletion. RLS enforces creator_id = auth.uid.
 // Cleans up the thumbnail object too — projects cascade handles children rows.
 export async function deleteProject(projectId: string): Promise<{ error: string | null }> {

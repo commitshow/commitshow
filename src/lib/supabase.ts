@@ -222,7 +222,7 @@ export const PUBLIC_MEMBER_COLUMNS =
   'linkedin_handle, linkedin_provider_id, linkedin_connected_at'
 
 export const PUBLIC_PROJECT_COLUMNS =
-  'id, created_at, github_url, live_url, description, lh_performance, ' +
+  'id, slug, created_at, github_url, live_url, description, lh_performance, ' +
   'lh_accessibility, lh_best_practices, lh_seo, github_accessible, ' +
   'score_auto, score_forecast, score_community, score_total, creator_grade, ' +
   'verdict, claude_insight, tech_layers, unlock_level, status, ' +
@@ -279,6 +279,10 @@ export type MemberStackAuto = {
 
 export type Project = {
   id: string
+  /** URL slug · canonical path is /projects/<slug>. Derived from
+   *  project_name (or github_url for owner/repo style) on insert.
+   *  Nullable for legacy rows before the 20260512 migration. */
+  slug: string | null
   created_at: string
   updated_at: string
   project_name: string

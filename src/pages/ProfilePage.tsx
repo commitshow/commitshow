@@ -30,7 +30,7 @@ export function ProfilePage() {
   // the "Share Early Spotter hit" button. null when no correct vote yet,
   // or when the vote target hasn't graduated. Computed once on mount.
   const [earlyHit, setEarlyHit] = useState<{
-    project_name: string; project_id: string; grade: string;
+    project_name: string; project_id: string; project_slug: string | null; grade: string;
     days_before:  number; hit_count: number;
   } | null>(null)
   const [library, setLibrary] = useState<Array<MDLibraryItem & { projects_applied: number; projects_graduated: number }>>([])
@@ -92,7 +92,7 @@ export function ProfilePage() {
       if (vote?.project_id) {
         const { data: proj } = await supabase
           .from('projects')
-          .select('id, project_name, graduation_grade, graduated_at')
+          .select('id, slug, project_name, graduation_grade, graduated_at')
           .eq('id', vote.project_id)
           .maybeSingle()
         if (proj?.graduation_grade && proj?.graduated_at) {
@@ -107,6 +107,7 @@ export function ProfilePage() {
           setEarlyHit({
             project_name: proj.project_name ?? 'a project',
             project_id:   proj.id,
+            project_slug: (proj as { slug?: string | null }).slug ?? null,
             grade:        proj.graduation_grade,
             days_before:  days,
             hit_count:    count ?? 1,
@@ -311,7 +312,7 @@ export function ProfilePage() {
                         hit_count:      earlyHit.hit_count,
                         scout_id:       user.id,
                       }}
-                      url={`https://commit.show/projects/${earlyHit.project_id}`}
+                      url={`https://commit.show/projects/${earlyHit.project_slug ?? earlyHit.project_id}`}
                       variant="gold"
                       label="Share Early Spotter"
                     />

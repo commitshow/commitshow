@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { projectSlug, projectShareUrl } from '../lib/projectSlug'
 import {
   fetchProjectById,
+  fetchProjectByIdOrSlug,
   fetchProjectTimeline,
   fetchProjectForecasts,
   fetchProjectApplauds,
@@ -121,8 +122,16 @@ export function ProjectDetailPage() {
     setLoading(true)
     setNotFound(false)
     ;(async () => {
-      const proj = await fetchProjectById(id)
+      // Slug-aware lookup · accepts UUID or slug. If the caller hit
+      // the UUID variant and the project has a slug, redirect to the
+      // canonical /projects/<slug> URL so the address bar + cache key
+      // settle on the friendlier form (SEO + share-card cleanliness).
+      const { project: proj, matchedBy } = await fetchProjectByIdOrSlug(id)
       if (!proj) { setNotFound(true); setLoading(false); return }
+      if (matchedBy === 'id' && proj.slug) {
+        navigate(`/projects/${proj.slug}`, { replace: true })
+        return
+      }
       setProject(proj)
 
       // Resolve the current season so we can enforce blind-stage rules for
@@ -1133,6 +1142,7 @@ export function ProjectDetailPage() {
               <OwnerToolsTabs
                 projectId={project.id}
                 projectName={project.project_name}
+                projectSlug={project.slug}
                 githubUrl={project.github_url}
                 projectScore={project.score_total}
               />
@@ -1422,10 +1432,11 @@ function CollapsibleSection({
 // stack 3 heavy cards on top of each other. One tool visible at a
 // time; sticky tab bar lets the owner switch between them.
 function OwnerToolsTabs({
-  projectId, projectName, githubUrl, projectScore,
+  projectId, projectName, projectSlug, githubUrl, projectScore,
 }: {
   projectId:    string
   projectName:  string
+  projectSlug:  string | null
   githubUrl:    string | null
   projectScore: number | null
 }) {
@@ -1477,7 +1488,7 @@ function OwnerToolsTabs({
         />
       )}
       {tab === 'badge' && (
-        <BadgeSnippet projectId={projectId} projectName={projectName} githubUrl={githubUrl} />
+        <BadgeSnippet projectId={projectId} projectName={projectName} projectSlug={projectSlug} githubUrl={githubUrl} />
       )}
       {tab === 'tokens' && (
         <TokenReceiptForm

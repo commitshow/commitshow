@@ -16,6 +16,9 @@ import { SUPABASE_URL } from '../lib/supabase'
 interface Props {
   projectId:   string
   projectName: string
+  /** Canonical URL slug · README link target prefers this over the
+   *  UUID for cleaner display. Null falls back to /projects/<uuid>. */
+  projectSlug?: string | null
   /** Canonical https://github.com/owner/repo URL · enables the
    *  one-click "Open README" deep-link. Null falls back to the
    *  copy-only flow used on the /audit explainer page. */
@@ -30,13 +33,15 @@ function parseRepo(url: string): { owner: string; repo: string } | null {
 
 type Style = 'flat' | 'pill'
 
-export function BadgeSnippet({ projectId, projectName, githubUrl }: Props) {
+export function BadgeSnippet({ projectId, projectName, projectSlug, githubUrl }: Props) {
   const [style, setStyle]       = useState<Style>('flat')
   const [showMore, setShowMore] = useState(false)
   const [copied, setCopied]     = useState<'md' | 'html' | null>(null)
 
   const badgeUrl   = `${SUPABASE_URL}/functions/v1/badge?project=${projectId}&style=${style}`
-  const projectUrl = `https://commit.show/projects/${projectId}`
+  // Prefer slug · cleaner README link target than UUID. UUID fallback
+  // keeps legacy embeds working for projects without a backfilled slug.
+  const projectUrl = `https://commit.show/projects/${projectSlug ?? projectId}`
   const altText    = `${projectName} on commit.show`
 
   const markdown = `[![${altText}](${badgeUrl})](${projectUrl})`

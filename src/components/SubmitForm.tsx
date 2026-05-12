@@ -255,8 +255,20 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       setStep(2); return
     }
 
+    // Slug generation · domain-style / github-repo / generic rules
+     // (src/lib/projectSlug.ts) + server-side collision suffix via
+     // generate_unique_slug RPC. NULL means the name didn't yield a
+     // valid ASCII slug (e.g. Korean-only) · row insert still
+     // succeeds, just falls back to UUID URL until creator renames.
+    const { data: slugResult } = await supabase.rpc('generate_unique_slug', {
+      p_name:       form.name,
+      p_github_url: form.github,
+    })
+    const slug = (typeof slugResult === 'string' && slugResult.length > 0) ? slugResult : null
+
     const projectFields = {
       project_name: form.name,
+      slug,
       creator_id:   user?.id ?? null,
       creator_name: member?.display_name ?? null,
       creator_email: form.email,

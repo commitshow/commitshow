@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
   // Load project + latest snapshot.
   const { data: project, error: pErr } = await admin
     .from('projects')
-    .select('id, project_name, score_total, status, github_url, social_share_disabled, creator_id')
+    .select('id, slug, project_name, score_total, status, github_url, social_share_disabled, creator_id')
     .eq('id', projectId)
     .maybeSingle()
   if (pErr || !project) return json({ error: 'project not found', detail: pErr?.message }, 404)
@@ -351,12 +351,14 @@ Deno.serve(async (req) => {
   const topConcern  = rich?.scout_brief?.weaknesses?.[0]?.bullet ?? null
   const scope       = ghSig?.scanned_scope ?? null
 
-  // URL the tweet links to · ?og=trajectory swaps the page's og:image
-  // to the trajectory PNG (via /functions/projects/_middleware.ts), so
-  // X unfurls the climb arc card instead of the static score card.
+  // URL the tweet links to · prefer slug (canonical · cleaner unfurl)
+  // and fall back to UUID for legacy rows without a slug. ?og=trajectory
+  // swaps the page's og:image to the trajectory PNG (via
+  // /functions/projects/_middleware.ts) so X unfurls the climb arc card.
+  const pathSeg = (project as { slug?: string | null }).slug ?? project.id
   const shareUrl = kind === 'trajectory'
-    ? `https://commit.show/projects/${project.id}?og=trajectory`
-    : `https://commit.show/projects/${project.id}`
+    ? `https://commit.show/projects/${pathSeg}?og=trajectory`
+    : `https://commit.show/projects/${pathSeg}`
 
   // Render template · stable per (project_id, score, kind) so retries
   // don't reroll. Trajectory kind uses richer input pulled from the
