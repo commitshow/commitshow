@@ -4146,6 +4146,43 @@ Deno.serve(async (req) => {
   // path string or null. null = let analyze() use its 3-tier auto-pick.
   const explicitWorkspace = (payload.workspace ?? null) || null
 
+  // ── Concurrency guard · prevents the same project from being audited
+  // twice in parallel. The datasette/2026-05-12 race produced two
+  // snapshots 322ms apart — the second arrived empty, overwrote
+  // projects.score_auto with 0, and the user saw a 0/100 for a
+  // graduated-tier OSS. PostgreSQL row-lock on projects.last_analysis_at
+  // serializes the two .update() calls; whichever loses the WHERE clause
+  // gets back an empty rowset and we 429 it before doing any work.
+  //
+  // Window = 90s. Bigger than any sane audit duration (rarely >60s) yet
+  // small enough that a stuck/crashed audit unblocks itself fast. The
+  // happy-path completion below re-stamps last_analysis_at to the real
+  // completion time so timeline UIs still read it as "when did this audit
+  // finish", not "when was the lock taken".
+  //
+  // resubmit goes through the explicit cooldown gate further down · only
+  // the auto/initial/weekly/season_end paths need the race guard.
+  if (triggerType !== 'resubmit') {
+    const ninetyAgo = new Date(Date.now() - 90_000).toISOString()
+    const { data: claim, error: claimErr } = await admin
+      .from('projects')
+      .update({ last_analysis_at: new Date().toISOString() })
+      .eq('id', projectId)
+      .or(`last_analysis_at.is.null,last_analysis_at.lt.${ninetyAgo}`)
+      .select('id')
+      .maybeSingle()
+    if (claimErr) {
+      console.error('audit lock claim failed', claimErr)
+      // Fall through · don't let a transient claim error block legitimate audits.
+    } else if (!claim) {
+      return json({
+        error: 'already_in_progress',
+        message: 'An audit is already running for this project. Try again in ~90 seconds.',
+        retry_after_seconds: 90,
+      }, 429)
+    }
+  }
+
   // Cooldown gate for creator-initiated re-runs · sha-aware bypass.
   if (triggerType === 'resubmit') {
     const { data: lastSnap } = await admin
