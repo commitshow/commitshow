@@ -2876,15 +2876,23 @@ const CATEGORY_RULES: CategoryRule[] = [
   },
   {
     cat:  'dev_tools',
-    hard: /\bcli\b|\bcommand[- ]line\b|\bscaffold(?:ing)?\b|\bstarter\s+(?:kit|template)\b|\bboilerplate\b|\bide\s+(?:plugin|extension)\b|\bsdk\b|\bapi\s+client\b|coding\s+(?:agent|assistant)|\bdebugger\b|\blinter\b|\bbundler\b|\bdevtools?\b|\bcompiler\b|\bmcp\s+server\b|\bvscode\s+extension\b|\bgithub\s+action\b/,
-    soft: /\blibrary\b|\bframework\b|\bplugin\b|\btemplate\b|\bdeveloper[s]?\b|\bdev\b|\bopen\s+source\b|\bnpm\b|\bpackage\b|\bmcp\b|\b개발자\b|\b개발\s*도구\b/,
+    // hard slot keeps the unambiguous dev-tool nouns. Removed 2026-05-13:
+    // 'mcp server' / 'vscode extension' / 'github action' phrases — they
+    // pattern-match on description text that often appears in non-dev_tools
+    // SaaS prose ('CI via GitHub Actions', 'we use MCP internally'). The
+    // real manifest signals — action.yml / engines.vscode / @modelcontextprotocol
+    // dep — already flow in via the stack callback below, so description
+    // matching is redundant and false-positive prone.
+    hard: /\bcli\b|\bcommand[- ]line\b|\bscaffold(?:ing)?\b|\bstarter\s+(?:kit|template)\b|\bboilerplate\b|\bide\s+(?:plugin|extension)\b|\bsdk\b|\bapi\s+client\b|coding\s+(?:agent|assistant)|\bdebugger\b|\blinter\b|\bbundler\b|\bdevtools?\b|\bcompiler\b/,
+    // soft slot · removed bare \bmcp\b (too ambiguous · matches non-MCP uses
+    // of the acronym). The manifest detector handles real MCP servers.
+    soft: /\blibrary\b|\bframework\b|\bplugin\b|\btemplate\b|\bdeveloper[s]?\b|\bdev\b|\bopen\s+source\b|\bnpm\b|\bpackage\b|\b개발자\b|\b개발\s*도구\b/,
     stack: ({ formFactor, isMcpServer, isGhAction, isVscodeExt }) =>
       formFactor === 'library' || formFactor === 'cli' || formFactor === 'scaffold' ||
       // dev-tool sub-forms · structurally library but always dev_tools
-      // category-wise. Same +2 weight as the form-factor signal — combined
-      // with even a single 'mcp'/'extension' soft hit this beats the
-      // niche_saas / consumer fallbacks for closed-source AI agent SaaS
-      // that happens to mention 'agent' in its description.
+      // category-wise. The manifest is what matters — action.yml /
+      // engines.vscode / @modelcontextprotocol/* dep — not what the
+      // creator's prose happens to mention.
       isMcpServer === true || isGhAction === true || isVscodeExt === true,
   },
   {
