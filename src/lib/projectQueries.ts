@@ -253,12 +253,20 @@ export async function fetchProjectByIdOrSlug(idOrSlug: string):
       .select(PUBLIC_PROJECT_COLUMNS)
       .eq('id', idOrSlug)
       .maybeSingle()
-    if (data) return { project: data as Project, matchedBy: 'id' }
+    if (data) return { project: data as unknown as Project, matchedBy: 'id' }
     return { project: null, matchedBy: 'none' }
   }
-  const { data } = await supabase
+  // .eq('slug', ...) · slug column is new (20260512 migration) so the
+  // generated Supabase type cast doesn't include it yet; we go via
+  // `as unknown` to bypass the TS column-shape check. RLS still
+  // enforces the same rules — just a compile-time bypass.
+  const { data } = await (supabase
     .from('projects')
-    .select(PUBLIC_PROJECT_COLUMNS)
+    .select(PUBLIC_PROJECT_COLUMNS) as unknown as {
+      eq: (col: string, val: string) => {
+        maybeSingle: () => Promise<{ data: unknown }>
+      }
+    })
     .eq('slug', idOrSlug)
     .maybeSingle()
   if (data) return { project: data as Project, matchedBy: 'slug' }
