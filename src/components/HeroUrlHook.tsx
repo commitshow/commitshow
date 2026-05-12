@@ -589,12 +589,14 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
   //   · Runtime evidence 2 — console_clean + network_clean (mined from LH audits)
   //   · (Live URL Health 5 often 0 due to bot fight — excluded so well-polished
   //      SaaS aren't penalized for having bot protection)
-  // Total: 26 (was 24 · wave 5 added runtime evidence). Sites with reachable
-  // homepage probe naturally hit the >100 ceiling and clamp · intentional ·
-  // no docking for over-delivery.
-  const URL_LANE_MAX = 26
-  const autoPts = snap?.score_auto ?? result.project.score_auto ?? 0
-  const polishScore = Math.max(0, Math.min(100, Math.round((autoPts / URL_LANE_MAX) * 100)))
+  // 2026-05-12: dropped the custom URL_LANE_MAX=26 normalization. A URL
+  // audit that maxed out URL signals (~26 score_auto) was being shown
+  // as 100/100 here while /projects/<slug> showed 52/100 (audit pillar
+  // /50 scale). Same audit, two different numbers, 100 reading as
+  // 'perfect' which a partial URL audit can't be. Now displays the
+  // server-computed score_total directly · always consistent with the
+  // project detail page.
+  const polishScore = snap?.score_total ?? result.project.score_total ?? 0
 
   const band =
     polishScore >= 90 ? 'Top-tier polish' :
