@@ -396,8 +396,7 @@ export function LadderPage() {
               ))}
             </div>
           ))
-        })()
-        )}
+        })()}
 
         <p className="mt-6 font-mono text-[11px]" style={{ color: 'var(--text-faint)', lineHeight: 1.6 }}>
           Today/Week refresh every 5 minutes · Month/All time every hour. Your own project
