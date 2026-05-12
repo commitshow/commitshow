@@ -17,9 +17,8 @@
 // columns only). Falls back to '—' if RLS / network blocks the read,
 // so the page never looks broken in the worst case.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { usePretendardFont } from '../lib/pretendardFont'
 
 const NAVY_950   = '#060C1A'
@@ -35,42 +34,8 @@ const BLUE       = '#60A5FA'
 // Live stat hook
 // ──────────────────────────────────────────────────────────────────────
 
-interface PitchStats {
-  projects:    number | null
-  audits:      number | null
-  members:     number | null
-  audits_7d:   number | null
-  cli_7d:      number | null
-}
-
-function usePitchStats(): PitchStats {
-  const [s, setS] = useState<PitchStats>({
-    projects: null, audits: null, members: null, audits_7d: null, cli_7d: null,
-  })
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const sevenAgo = new Date(Date.now() - 7 * 86400_000).toISOString()
-      const [p, a, m, a7, c7] = await Promise.all([
-        supabase.from('projects').select('id', { count: 'exact', head: true }),
-        supabase.from('analysis_snapshots').select('id', { count: 'exact', head: true }),
-        supabase.from('members').select('id', { count: 'exact', head: true }),
-        supabase.from('analysis_snapshots').select('id', { count: 'exact', head: true }).gt('created_at', sevenAgo),
-        supabase.from('cli_audit_calls').select('id', { count: 'exact', head: true }).gt('created_at', sevenAgo),
-      ])
-      if (!alive) return
-      setS({
-        projects:  p.count  ?? null,
-        audits:    a.count  ?? null,
-        members:   m.count  ?? null,
-        audits_7d: a7.count ?? null,
-        cli_7d:    c7.count ?? null,
-      })
-    })().catch(() => { /* silent · render '—' */ })
-    return () => { alive = false }
-  }, [])
-  return s
-}
+// usePitchStats / PitchStats / StatCell removed 2026-05-13 · traction strip
+// taken off the hero (numbers aren't headline-ready yet · pre-launch).
 
 // ──────────────────────────────────────────────────────────────────────
 // Reusable bits
@@ -116,19 +81,6 @@ function PillarCard({ tone, title, weight, children }: { tone: string; title: st
   )
 }
 
-function StatCell({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <div className="px-3 py-3"
-         style={{ background: 'rgba(15,32,64,0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px' }}>
-      <div className="font-mono text-[9px] tracking-[0.2em] uppercase mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="font-display font-bold tabular-nums" style={{ color: 'var(--cream)', fontSize: 28, lineHeight: 1.05 }}>
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </div>
-      {hint && <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-faint)' }}>{hint}</div>}
-    </div>
-  )
-}
-
 function BulletList({ items, accent = GOLD }: { items: Array<string | { strong: string; rest: string }>; accent?: string }) {
   return (
     <ul className="space-y-2.5">
@@ -152,8 +104,6 @@ function BulletList({ items, accent = GOLD }: { items: Array<string | { strong: 
 
 export function PitchPage() {
   usePretendardFont()
-  const stats = usePitchStats()
-  const fmt = (n: number | null) => n == null ? '—' : n.toLocaleString()
 
   return (
     <main className="pitch-deck-root relative z-10 min-h-screen pb-20">
@@ -183,17 +133,7 @@ export function PitchPage() {
           </Link>
         </div>
 
-        {/* Live traction strip */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          <StatCell label="Projects audited" value={fmt(stats.projects)} hint="all-time" />
-          <StatCell label="Audit reports"    value={fmt(stats.audits)}   hint="snapshots" />
-          <StatCell label="Members"          value={fmt(stats.members)}  hint="creators + scouts" />
-          <StatCell label="Audits last 7d"   value={fmt(stats.audits_7d)} hint="weekly run-rate" />
-          <StatCell label="CLI invocations"  value={fmt(stats.cli_7d)}    hint="`npx commitshow`" />
-        </div>
-        <div className="font-mono text-[10px] mt-3" style={{ color: 'var(--text-faint)' }}>
-          Live numbers · pulled from production at page load · pre-launch (Season Zero)
-        </div>
+        {/* Live traction strip removed 2026-05-13 · not the headline numbers yet (pre-launch · Season Zero) */}
       </section>
 
       <Divider />

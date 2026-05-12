@@ -9,9 +9,8 @@
 // 가 한글 글리프 없으므로 system serif 로 폴백되는데, 이건 의도된
 // 동작 (영문 wordmark + 한국어 본문 대비가 deck 의 시각 톤).
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { usePretendardFont } from '../lib/pretendardFont'
 
 const NAVY_950   = '#060C1A'
@@ -22,42 +21,8 @@ const PURPLE     = '#A78BFA'
 const TEAL       = '#00D4AA'
 const BLUE       = '#60A5FA'
 
-interface PitchStats {
-  projects:    number | null
-  audits:      number | null
-  members:     number | null
-  audits_7d:   number | null
-  cli_7d:      number | null
-}
-
-function usePitchStats(): PitchStats {
-  const [s, setS] = useState<PitchStats>({
-    projects: null, audits: null, members: null, audits_7d: null, cli_7d: null,
-  })
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const sevenAgo = new Date(Date.now() - 7 * 86400_000).toISOString()
-      const [p, a, m, a7, c7] = await Promise.all([
-        supabase.from('projects').select('id', { count: 'exact', head: true }),
-        supabase.from('analysis_snapshots').select('id', { count: 'exact', head: true }),
-        supabase.from('members').select('id', { count: 'exact', head: true }),
-        supabase.from('analysis_snapshots').select('id', { count: 'exact', head: true }).gt('created_at', sevenAgo),
-        supabase.from('cli_audit_calls').select('id', { count: 'exact', head: true }).gt('created_at', sevenAgo),
-      ])
-      if (!alive) return
-      setS({
-        projects:  p.count  ?? null,
-        audits:    a.count  ?? null,
-        members:   m.count  ?? null,
-        audits_7d: a7.count ?? null,
-        cli_7d:    c7.count ?? null,
-      })
-    })().catch(() => { /* silent */ })
-    return () => { alive = false }
-  }, [])
-  return s
-}
+// usePitchStats / PitchStats / StatCell removed 2026-05-13 · traction strip
+// taken off the hero (pre-launch · Season Zero 숫자는 아직 내세울 단계 아님).
 
 // ──────────────────────────────────────────────────────────────────────
 // Section primitives (mirror of PitchPage)
@@ -85,19 +50,6 @@ function SectionLead({ children }: { children: React.ReactNode }) {
     <p className="font-light mb-8" style={{ color: 'var(--text-primary)', fontSize: 'clamp(1.05rem, 1.6vw, 1.25rem)', lineHeight: 1.65, maxWidth: 880 }}>
       {children}
     </p>
-  )
-}
-
-function StatCell({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return (
-    <div className="px-3 py-3"
-         style={{ background: 'rgba(15,32,64,0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '2px' }}>
-      <div className="font-mono text-[9px] tracking-[0.2em] uppercase mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
-      <div className="font-display font-bold tabular-nums" style={{ color: 'var(--cream)', fontSize: 28, lineHeight: 1.05 }}>
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </div>
-      {hint && <div className="font-mono text-[10px] mt-1" style={{ color: 'var(--text-faint)' }}>{hint}</div>}
-    </div>
   )
 }
 
@@ -264,8 +216,6 @@ function Divider() {
 
 export function PitchKPage() {
   usePretendardFont()
-  const stats = usePitchStats()
-  const fmt = (n: number | null) => n == null ? '—' : n.toLocaleString()
 
   return (
     <main className="pitch-deck-root relative z-10 min-h-screen pb-20">
@@ -296,17 +246,7 @@ export function PitchKPage() {
           </Link>
         </div>
 
-        {/* Live traction strip */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          <StatCell label="감사된 프로젝트"  value={fmt(stats.projects)} hint="누적" />
-          <StatCell label="감사 리포트"      value={fmt(stats.audits)}   hint="스냅샷" />
-          <StatCell label="회원 수"          value={fmt(stats.members)}  hint="Creator + Scout" />
-          <StatCell label="최근 7일 감사"    value={fmt(stats.audits_7d)} hint="주간 가동률" />
-          <StatCell label="CLI 호출"         value={fmt(stats.cli_7d)}    hint="npx commitshow" />
-        </div>
-        <div className="font-mono text-[10px] mt-3" style={{ color: 'var(--text-faint)' }}>
-          위 수치는 production DB 에서 페이지 로드 시점에 직접 조회됩니다 · pre-launch (Season Zero)
-        </div>
+        {/* Live traction strip removed 2026-05-13 · 아직 내세울 숫자가 아님 (pre-launch · Season Zero) */}
       </section>
 
       <Divider />
