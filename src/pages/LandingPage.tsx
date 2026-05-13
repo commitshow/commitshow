@@ -62,14 +62,6 @@ const GRADE_DATA = [
   { name: 'Legend',        cond: '10+ Encore · community influence' },
 ]
 
-const UNLOCK_DATA = [
-  { votes: 'Audit 1',     label: 'Initial audit',            desc: 'Source structure · live performance audit · brief integrity · live URL health',          active: true },
-  { votes: '3 votes',     label: 'Code quality snapshot',    desc: 'Complexity · duplicate patterns · function length',                                       active: false },
-  { votes: '5 votes',     label: 'Security layer audit',     desc: 'Row-level security review · secret exposure · API auth patterns',                        active: false },
-  { votes: '10 votes',    label: 'Production-ready check',   desc: 'Core Web Vitals · dependency vulnerabilities · uptime estimation',                       active: false },
-  { votes: '20 votes',    label: 'Scout deep review',        desc: 'Structured expert feedback interface — Platinum+ Scouts only',                           active: false },
-]
-
 export function LandingPage() {
   const stats = useHeroStats()
   const [currentQuarterly, setCurrentQuarterly] = useState<Season | null>(null)
@@ -203,32 +195,12 @@ export function LandingPage() {
             })()}
           </div>
 
-          <div className="font-mono text-xs tracking-widest mb-6" style={{ color: 'rgba(248,245,238,0.3)' }}>PROGRESSIVE REVEAL — DEEPER ANALYSIS UNLOCKS WITH SCOUT VOTES</div>
-          <div className="relative">
-            {/* Vertical connector · starts at the bottom edge of the first
-                32px circle (top = 2rem) and stops at the top edge of the
-                last circle (bottom = pb-6 24px + circle 32px = 3.5rem) so
-                the line lives strictly between nodes, never overlapping. */}
-            <div className="absolute left-4 w-px" style={{ top: '2rem', bottom: '3.5rem', background: 'linear-gradient(to bottom, var(--gold-500), transparent)', opacity: 0.2 }} />
-            {UNLOCK_DATA.map(({ votes, label, desc, active }) => (
-              <div key={label} className="flex gap-6 pl-10 pb-6 relative">
-                <div
-                  className="absolute left-0 w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs flex-shrink-0"
-                  style={active
-                    ? { background: 'rgba(0,212,170,0.15)', color: '#00D4AA', border: '1px solid rgba(0,212,170,0.4)' }
-                    : { background: 'var(--navy-800)', color: 'rgba(248,245,238,0.25)', border: '1px solid rgba(255,255,255,0.07)' }
-                  }
-                >
-                  {active ? '✓' : '○'}
-                </div>
-                <div>
-                  <div className="font-mono text-xs mb-1" style={{ color: active ? 'var(--gold-500)' : 'rgba(248,245,238,0.3)' }}>{votes}</div>
-                  <div className="font-medium mb-1" style={{ color: active ? 'var(--cream)' : 'rgba(248,245,238,0.45)' }}>{label}</div>
-                  <div className="text-sm font-light" style={{ color: 'rgba(248,245,238,0.3)' }}>{desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* Progressive Reveal section removed 2026-05-14 · the model
+              (vote-gated audit slots unlocking at 3/5/10/20 votes) was an
+              old spec carryover. v2 audits surface the full 14-frame
+              result on every run regardless of vote count · projects.unlock_level
+              was always 0 in production · the section was promising behavior
+              the engine never delivered. UNLOCK_DATA constant also dropped. */}
         </div>
       </section>
 
