@@ -189,7 +189,12 @@ function TypedH1() {
       // serif glyphs collide. CLAUDE.md §4 prefers no letter-spacing override
       // outside the 3.5–8rem 'Hero 초대형' range — our clamp lands at 3rem on
       // mobile so the default kerning is the cleaner default.
-      style={{ fontSize: 'clamp(3rem, 7.5vw, 6.5rem)' }}
+      //
+      // 2026-05-14b · clamp max shrunk 6.5rem → 4.75rem because at the old
+      // size the 13-char line 2 overflowed the lg 50% left column and
+      // collided with HeroTerminal. New max keeps the wordmark large but
+      // inside its half of the grid.
+      style={{ fontSize: 'clamp(2.75rem, 5.5vw, 4.75rem)' }}
     >
       <span style={{ color: 'var(--cream)' }}>{line1 || '​'}</span>
       {!onLine2 && <span className="terminal-cursor" aria-hidden="true" />}
