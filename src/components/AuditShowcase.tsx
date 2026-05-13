@@ -70,9 +70,13 @@ export function AuditShowcase() {
     let live = true
     fetchRecentAuditDemos().then(d => {
       if (!live) return
-      // Pick a varied mix · prefer 1-2 of each source if available, then
-      // top-up with whatever's most recent. Order = display order.
-      setDemos(pickVariedMix(d, SHOWCASE_LIMIT))
+      // 2026-05-14 · platform-only · CEO directive: showcase should
+      // surface what real members ran on commit.show, not what anonymous
+      // CLI walk-ons or URL fast-lane previews pulled. Walk-ons + URL
+      // lane still flow through HeroTerminal's 3-stream cycle (Hero is
+      // engine demo · this section is member receipts).
+      const platformOnly = d.filter(x => x.source === 'platform').slice(0, SHOWCASE_LIMIT)
+      setDemos(platformOnly)
     }).catch(() => { /* silent · empty pool falls through to no-render */ })
     return () => { live = false }
   }, [])
@@ -86,15 +90,14 @@ export function AuditShowcase() {
     >
       <div className="max-w-6xl mx-auto">
         <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
-          // RECENT AUDITS · ENGINE RECEIPTS
+          // RECENT AUDITS · ON COMMIT.SHOW
         </div>
         <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight" style={{ color: 'var(--cream)' }}>
-          See the engine on real projects
+          Real members. Real audits.
         </h2>
         <p className="font-light max-w-2xl mb-12" style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.55 }}>
-          Every card below is a real audit run by the engine. Auditioned member
-          products · CLI walk-ons · URL fast-lane probes — all three lanes,
-          today's results. Click through to the report.
+          Every card below is a member who shipped on commit.show — product +
+          Build Brief audited end-to-end. Click through to the report.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -105,28 +108,10 @@ export function AuditShowcase() {
   )
 }
 
-function pickVariedMix(pool: AuditDemo[], limit: number): AuditDemo[] {
-  // Round-robin across source buckets so the showcase reads as 3-lane
-  // proof rather than just-one-lane. Falls back to whatever's available
-  // when a bucket runs out.
-  const buckets: Record<AuditDemo['source'], AuditDemo[]> = {
-    platform: [], walk_on: [], url_fast_lane: [],
-  }
-  for (const d of pool) buckets[d.source].push(d)
-  const out: AuditDemo[] = []
-  let i = 0
-  while (out.length < limit) {
-    const order: Array<AuditDemo['source']> = ['platform', 'walk_on', 'url_fast_lane']
-    let picked = false
-    for (const src of order) {
-      if (buckets[src][i]) { out.push(buckets[src][i]); picked = true }
-      if (out.length >= limit) break
-    }
-    if (!picked) break
-    i++
-  }
-  return out
-}
+// pickVariedMix removed 2026-05-14 · showcase is platform-only now, so the
+// round-robin across lanes is no longer used. Keeping the round-robin
+// pattern in git history (commit dcc0491) in case the 3-lane mix is
+// reinstated for a different surface later.
 
 interface AuditCardProps { demo: AuditDemo }
 
