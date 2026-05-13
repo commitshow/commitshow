@@ -106,11 +106,11 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
 
   const auditionLabel = balance
     ? balance.free_remaining > 0
-      ? `Put on audition stage · free ticket →`
+      ? `Bring it on stage · free ticket →`
       : balance.paid_credit > 0
-        ? `Put on audition stage · paid ticket →`
-        : `Put on audition stage · pay →`
-    : 'Put on audition stage →'
+        ? `Bring it on stage · paid ticket →`
+        : `Bring it on stage · pay →`
+    : 'Bring it on stage →'
 
   // Visual band based on score · matches the four-band convention used
   // elsewhere (encore 85+ · strong 70-84 · building 50-69 · early <50).
@@ -124,16 +124,19 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
                   : scoreBand === 'building' ? '#60A5FA'
                   : scoreBand === 'early'    ? 'var(--scarlet)'
                   :                            'var(--text-muted)'
-  const bandLabel = scoreBand === 'encore'   ? 'ENCORE TERRITORY'
-                  : scoreBand === 'strong'   ? 'STRONG'
-                  : scoreBand === 'building' ? 'BUILDING'
-                  : scoreBand === 'early'    ? 'EARLY DAYS'
-                  :                            'AUDIT COMPLETE'
+  const bandLabel = scoreBand === 'encore'   ? 'Encore territory'
+                  : scoreBand === 'strong'   ? 'Strong'
+                  : scoreBand === 'building' ? 'Building'
+                  : scoreBand === 'early'    ? 'Early days'
+                  :                            'Audit complete'
 
   return (
     <div className="card-navy p-7 mb-6" style={{ borderRadius: '2px', borderLeft: `3px solid ${bandColor}` }}>
-      <div className="font-mono text-xs tracking-widest mb-3" style={{ color: bandColor }}>
-        // {bandLabel} · NEXT STEP
+      {/* Eyebrow flipped 2026-05-14 · CEO directive: the headline message is
+          'you reached backstage' (achievement) · score band gets demoted to
+          a chip beside the score badge below. */}
+      <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>
+        // YOU REACHED BACKSTAGE
       </div>
 
       {/* Big total-score badge · always visible regardless of band so the
@@ -154,6 +157,17 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
               marginLeft: '0.25rem',
             }}>/ 100</span>
           </div>
+          <span
+            className="font-mono text-[10px] tracking-widest uppercase px-2 py-1"
+            style={{
+              background: `${bandColor}1F`,    // 0x1F = 12% alpha
+              border: `1px solid ${bandColor}66`,
+              color: bandColor,
+              borderRadius: '2px',
+            }}
+          >
+            {bandLabel}
+          </span>
           <div className="font-mono text-[10px] tracking-wide" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
             audit pillar live<br />
             scout · community open up once you publish
@@ -162,14 +176,15 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
       )}
 
       <div className="font-display font-bold text-xl mb-2" style={{ color: 'var(--cream)' }}>
-        Want eyes on this build?
+        You reached Backstage
       </div>
       <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.6 }}>
-        Your audit is done — right now only you can see it (we call this <em style={{ color: 'var(--cream)', fontStyle: 'normal' }}>backstage</em>).
-        Audition to put it on stage and get real feedback from other builders. The project goes public,
-        lands on its category ladder, and earns the permanent Encore badge at score 85+.
+        Backstage is private — only you can see this audit right now. Audition to share it with
+        the <em style={{ color: 'var(--cream)', fontStyle: 'normal' }}>MVPs already on stage</em>:
+        the project lands on its category ladder, picks up real feedback, and earns the permanent
+        Encore badge at score 85+.
         {scoreTotal != null && scoreTotal >= 85 && (
-          <> <span style={{ color: 'var(--gold-500)' }}>You're already there — Encore lands the moment you go public.</span></>
+          <> <span style={{ color: 'var(--gold-500)' }}>You're already there — Encore lands the moment you bring it on stage.</span></>
         )}
       </p>
 
@@ -232,7 +247,7 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
       </div>
 
       <p className="font-mono text-[10px] mt-4" style={{ color: 'rgba(248,245,238,0.35)', lineHeight: 1.6 }}>
-        Backstage projects stay on your /me page · audition them later anytime.
+        Backstage stays on your /me page · bring it on stage whenever you're ready.
       </p>
     </div>
   )

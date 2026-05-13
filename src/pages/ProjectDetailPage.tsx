@@ -453,7 +453,7 @@ export function ProjectDetailPage() {
                 // BACKSTAGE · ONLY YOU CAN SEE
               </div>
               <div className="font-mono text-[11px] mt-1" style={{ color: 'rgba(248,245,238,0.65)' }}>
-                Audit done. Audition to put it on stage and get feedback from other builders · lands on the live ladder · Encore at score 85+.
+                Backstage is private. Audition to join the MVPs already on stage · lands on the live ladder · Encore at score 85+.
               </div>
             </div>
             <a
@@ -467,7 +467,7 @@ export function ProjectDetailPage() {
                 textDecoration: 'none',
               }}
             >
-              PUT ON AUDITION STAGE →
+              BRING IT ON STAGE →
             </a>
           </div>
         )}
