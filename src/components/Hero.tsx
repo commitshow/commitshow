@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import type { HeroStats } from '../lib/heroStats'
 import { HeroTerminal } from './HeroTerminal'
 
-const HEADLINE_LINE_1 = 'Show your'
-const HEADLINE_LINE_2 = 'Commit'
+// Hero h1 · 2026-05-14 tribe-flag rewrite.
+// Line 1 names the tribe (people who built with Cursor / Claude / Lovable /
+// Bolt), line 2 makes the offer. The terminal typing effect + gold shimmer
+// on line 2 stays — line 1 is plain cream so the shimmer lands on the verb
+// that names what we do for them.
+const HEADLINE_LINE_1 = 'Vibecoded'
+const HEADLINE_LINE_2 = 'Time to audit'
 const TOTAL_HEADLINE_CHARS = HEADLINE_LINE_1.length + HEADLINE_LINE_2.length
 
 function useTypedHeadline() {
@@ -178,8 +183,13 @@ function TypedH1() {
 
   return (
     <h1
-      className="stagger-2 font-display font-black leading-none tracking-tight mb-6"
-      style={{ fontSize: 'clamp(3rem, 7.5vw, 6.5rem)', letterSpacing: '-1.5px' }}
+      className="stagger-2 font-display font-black leading-none mb-6"
+      // Tightening dropped 2026-05-14 · 'Time to audit' is 13 chars vs the old
+      // 'Commit' (6 chars), and the -1.5px / tracking-tight pair was making the
+      // serif glyphs collide. CLAUDE.md §4 prefers no letter-spacing override
+      // outside the 3.5–8rem 'Hero 초대형' range — our clamp lands at 3rem on
+      // mobile so the default kerning is the cleaner default.
+      style={{ fontSize: 'clamp(3rem, 7.5vw, 6.5rem)' }}
     >
       <span style={{ color: 'var(--cream)' }}>{line1 || '​'}</span>
       {!onLine2 && <span className="terminal-cursor" aria-hidden="true" />}
