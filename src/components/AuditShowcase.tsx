@@ -18,7 +18,8 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchRecentAuditDemos, type AuditDemo } from '../lib/recentAudits'
+import { supabase } from '../lib/supabase'
+import { type AuditDemo } from '../lib/recentAudits'
 
 const SHOWCASE_LIMIT = 6   // grid · 3 cols × 2 rows on desktop · 2 cols × 3 rows on tablet · 1 col stacked on mobile
 
@@ -68,16 +69,85 @@ export function AuditShowcase() {
 
   useEffect(() => {
     let live = true
-    fetchRecentAuditDemos().then(d => {
+    ;(async () => {
+      // Member-receipts pool. Separate query from recentAudits.ts because
+      // HeroTerminal's 74-score floor is too aggressive for a 'real members
+      // on the platform' surface — we want all auditioned members visible,
+      // not just the highest-scoring ones. Filters carried over from the
+      // shared pool: platform status, audit_count >= 2 (re-audit privacy),
+      // name length cap for grid layout, scout_brief bullets present.
+      const { data } = await supabase
+        .from('analysis_snapshots')
+        .select('project_id, created_at, score_total, score_auto, rich_analysis, projects!inner(project_name, github_url, live_url, status, audit_count)')
+        .in('projects.status', ['active', 'graduated', 'valedictorian', 'retry'])
+        .gte('projects.audit_count', 2)
+        .order('created_at', { ascending: false })
+        .limit(60)
       if (!live) return
-      // 2026-05-14 · platform-only · CEO directive: showcase should
-      // surface what real members ran on commit.show, not what anonymous
-      // CLI walk-ons or URL fast-lane previews pulled. Walk-ons + URL
-      // lane still flow through HeroTerminal's 3-stream cycle (Hero is
-      // engine demo · this section is member receipts).
-      const platformOnly = d.filter(x => x.source === 'platform').slice(0, SHOWCASE_LIMIT)
-      setDemos(platformOnly)
-    }).catch(() => { /* silent · empty pool falls through to no-render */ })
+      type Raw = {
+        project_id: string
+        created_at: string
+        score_total: number
+        score_auto:  number
+        rich_analysis: {
+          scout_brief?: {
+            strengths?:  Array<{ axis?: string | null; bullet?: string } | string>
+            weaknesses?: Array<{ axis?: string | null; bullet?: string } | string>
+          }
+        } | null
+        projects: {
+          project_name: string
+          github_url:   string | null
+          live_url:     string | null
+          status:       string
+          audit_count:  number | null
+        } | null
+      }
+      // Dedupe by project_id keeping FIRST (= latest snapshot · rows
+      // arrive created_at DESC) so a project doesn't fill the grid with
+      // its own re-audit history.
+      const seen = new Set<string>()
+      const out: AuditDemo[] = []
+      for (const raw of (data ?? []) as unknown as Raw[]) {
+        if (seen.has(raw.project_id)) continue
+        seen.add(raw.project_id)
+        const proj = raw.projects
+        if (!proj || proj.project_name.length > 24) continue
+        const bullets = (it: unknown): string | null => {
+          if (typeof it === 'string') return it.trim() || null
+          if (it && typeof it === 'object') {
+            const r = it as { bullet?: unknown; finding?: unknown; text?: unknown }
+            const v = r.bullet ?? r.finding ?? r.text ?? null
+            return typeof v === 'string' ? v.trim() || null : null
+          }
+          return null
+        }
+        const sBrief    = raw.rich_analysis?.scout_brief
+        const strengths = (sBrief?.strengths ?? []).map(bullets).filter((s): s is string => !!s).slice(0, 3)
+        const concerns  = (sBrief?.weaknesses ?? []).map(bullets).filter((s): s is string => !!s).slice(0, 2)
+        if (strengths.length < 2 || concerns.length < 1) continue
+        // github slug for the prompt-line label (owner/repo)
+        const m = (proj.github_url ?? '').match(/github\.com[:/]([^/\s?#]+)\/([^/\s?#]+?)(?:\.git)?\/?(?:[?#]|$)/i)
+        const slug = m ? `${m[1]}/${m[2]}` : proj.project_name
+        const score = raw.score_total ?? 0
+        const band: AuditDemo['band'] = score >= 75 ? 'strong' : score >= 50 ? 'mid' : 'weak'
+        out.push({
+          projectId:   raw.project_id,
+          projectName: proj.project_name,
+          slug,
+          score,
+          band,
+          auditPts:    raw.score_auto,
+          strengths,
+          concerns,
+          githubUrl:   proj.github_url,
+          liveUrl:     proj.live_url,
+          source:      'platform',
+        })
+        if (out.length >= SHOWCASE_LIMIT) break
+      }
+      setDemos(out)
+    })().catch(() => { /* silent · empty pool falls through to no-render */ })
     return () => { live = false }
   }, [])
 
