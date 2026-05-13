@@ -205,11 +205,11 @@ export function LandingPage() {
 
           <div className="font-mono text-xs tracking-widest mb-6" style={{ color: 'rgba(248,245,238,0.3)' }}>PROGRESSIVE REVEAL — DEEPER ANALYSIS UNLOCKS WITH SCOUT VOTES</div>
           <div className="relative">
-            {/* Vertical connector · starts at the center of the first circle
-                (top-4 = 16px = circle radius) instead of the container top so
-                the line doesn't poke out above the first node. Bottom stops
-                short of the last row's pb-6 padding for the same reason. */}
-            <div className="absolute left-4 w-px" style={{ top: '1rem', bottom: '2.5rem', background: 'linear-gradient(to bottom, var(--gold-500), transparent)', opacity: 0.2 }} />
+            {/* Vertical connector · starts at the bottom edge of the first
+                32px circle (top = 2rem) and stops at the top edge of the
+                last circle (bottom = pb-6 24px + circle 32px = 3.5rem) so
+                the line lives strictly between nodes, never overlapping. */}
+            <div className="absolute left-4 w-px" style={{ top: '2rem', bottom: '3.5rem', background: 'linear-gradient(to bottom, var(--gold-500), transparent)', opacity: 0.2 }} />
             {UNLOCK_DATA.map(({ votes, label, desc, active }) => (
               <div key={label} className="flex gap-6 pl-10 pb-6 relative">
                 <div
