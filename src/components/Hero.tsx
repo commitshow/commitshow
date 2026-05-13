@@ -123,7 +123,7 @@ export function Hero(_props: HeroProps) {
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-400)'; e.currentTarget.style.boxShadow = '0 0 60px rgba(240,192,64,0.35)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(240,192,64,0.2)'; }}
             >
-              Audit your project →
+              Analyze your MVP →
             </button>
             <button
               onClick={onFeedClick}
