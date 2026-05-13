@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Hero } from '../components/Hero'
 import { HeroUrlHook } from '../components/HeroUrlHook'
 import { AuditShowcase } from '../components/AuditShowcase'
+import { WhatWeCatch } from '../components/WhatWeCatch'
 import { LadderTopStrip } from '../components/LadderTopStrip'
 import { SeasonProgressBar } from '../components/SeasonProgress'
 import { ThisWeekHighlight } from '../components/ThisWeekHighlight'
@@ -89,6 +90,13 @@ export function LandingPage() {
           all three lanes (member full · CLI walk-on · URL fast). Hides
           itself if the recent-audits pool is empty. ── */}
       <AuditShowcase />
+
+      {/* ── "What we catch" · live prevalence of the 14 AI-Coder vibe
+          concerns across the latest snapshot per non-preview project.
+          Pairs with AuditShowcase (real cards) by answering the natural
+          follow-up: "ok, what does it catch?" Hides itself when sample
+          < 5 or every frame is under the 10% surface threshold. ── */}
+      <WhatWeCatch />
 
       {/* ── LADDER TOP 3 · always-on · §11-NEW.1 ── */}
       <LadderTopStrip />
