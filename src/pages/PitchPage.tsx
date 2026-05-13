@@ -116,7 +116,7 @@ export function PitchPage() {
           <span style={{ color: GOLD }}>on stage</span>
         </h1>
         <p className="font-light mb-8" style={{ color: 'var(--text-primary)', fontSize: 'clamp(1.15rem, 2vw, 1.5rem)', lineHeight: 1.45, maxWidth: 880 }}>
-          AI ships fast. AI also misses things. <span style={{ color: 'var(--cream)' }}>commit.show</span> is the audit layer for the vibe-coding generation — repeatable evidence of craft for the 30M+ builders shipping with Cursor, Claude Code, and Lovable.
+          AI ships fast. AI also misses things. <span style={{ color: 'var(--cream)' }}>commit.show</span> makes AI-built products real — and helps real users find them. The audit and distribution layer for the 30M+ builders shipping with Cursor, Claude Code, and Lovable.
         </p>
         <div className="flex flex-wrap gap-3 mb-12">
           <Link to="/" className="inline-block px-5 py-2.5 font-mono text-[12px] tracking-widest uppercase"
@@ -146,12 +146,13 @@ export function PitchPage() {
           Cursor crossed 1M paying users in 2025. Lovable went from $0 to $20M ARR in 8 weeks. Claude Code is shipping into Anthropic's enterprise contracts. Every product team you fund will lean on this layer to ship faster.
         </SectionLead>
         <SectionLead>
-          But three new problems landed with the wave — and none have a default tool yet:
+          But four new problems landed with the wave — and none have a default tool yet:
         </SectionLead>
-        <div className="grid md:grid-cols-3 gap-4 mt-2">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
           <ProblemCard tone={SCARLET} title="No quality signal" body="A landing page built in 6 hours and one shipped to staff for 6 months look identical at the URL. Investors, hiring managers, and customers can't tell which is which." />
           <ProblemCard tone={SCARLET} title="Drift between AI tools" body="Same prompt, four different outputs. There's no public artifact that says 'this Cursor rule worked' or 'this Claude Skill stuck the landing.' Knowledge stays trapped in private Discord screenshots." />
           <ProblemCard tone={SCARLET} title="No trust marketplace" body="Solo builders ship great work but have no portfolio surface. Recruiters and acquirers fall back to GitHub stars (wrong signal) or VC-backed brands (lossy filter)." />
+          <ProblemCard tone={SCARLET} title="No real-user meeting surface" body="A vibe-coded product that solves a real problem still has nowhere to meet its users. Product Hunt is a one-day spike. HN is saturated with AI slop. Indie Hackers needs an audience to start. There's no permanent discovery surface for 'the good ones.'" />
         </div>
       </section>
 
@@ -165,7 +166,7 @@ export function PitchPage() {
           commit.show measures every shipped product against a transparent 100-point rubric — combining deterministic technical signals (Lighthouse, repo hygiene, security headers, deep probes) with two human signals (Scout forecasts, Community engagement). The result: a verifiable score that travels.
         </SectionLead>
 
-        <div className="grid md:grid-cols-3 gap-4 mt-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
           <LaneCard
             tone={BLUE}
             num="01"
@@ -185,7 +186,31 @@ export function PitchPage() {
             num="03"
             title="Member Audition"
             sub="Full audit · permanent ladder + events"
-            body="Creator submits product + Build Brief. The Audit engine runs deep checks, Scouts (graded forecasters) cast vote tickets, and the project enters the permanent Ladder — real-time ranking by category and time window (today / week / month / all-time). Six event templates run on top: Quarterly Season (3-week, top 20% graduate to Hall of Fame), Tool Challenge, Theme Sprint, Quality Bar, Sponsored Showcase, Open Bounty."
+            body={
+              <>
+                Creator submits product + Build Brief. The Audit engine runs deep checks, Scouts (graded forecasters) cast vote tickets, and the project enters the permanent Ladder — real-time ranking by category and time window (today / week / month / all-time). Six event templates run on top: Quarterly Season (3-week, top 20% graduate to Hall of Fame), Tool Challenge, Theme Sprint, Quality Bar, Sponsored Showcase, Open Bounty.
+                <div className="mt-3 px-3 py-2.5" style={{ background: `${GOLD}10`, borderLeft: `2px solid ${GOLD}`, borderRadius: '2px' }}>
+                  <div className="font-mono text-[10px] tracking-widest uppercase mb-1" style={{ color: GOLD }}>Ladder velocity</div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: '0.88rem', lineHeight: 1.55 }}>
+                    The Ladder ranks by velocity (climb trajectory) as much as snapshot — a product that climbed +30 in 2 weeks beats a static 75 sitting still. AI-built products improve fast; the surface measures improvement, not just current state.
+                  </div>
+                </div>
+              </>
+            }
+          />
+          <LaneCard
+            tone={GOLD}
+            num="04"
+            title="Community + Distribution"
+            sub="Permanent discovery surface"
+            body={
+              <>
+                Once audited, a product enters the permanent Ladder — ranked by category and time window (today / week / month / all-time). The X auto-share loop (8 triggers) wires every climb, frame fix, Encore, and acted-on comment into the creator's own audience. Supporters track climbs. The Library distributes proven artifacts. Cursor Directory (300k+ developers), Vercel skills.sh, MCP server, and GitHub Marketplace bring inbound discovery.
+                <div className="mt-3" style={{ color: 'var(--cream)', fontSize: '0.92rem', fontWeight: 600 }}>
+                  This is where audited products meet real users — today, before league mode opens at Phase 2.
+                </div>
+              </>
+            }
           />
         </div>
       </section>
@@ -240,11 +265,11 @@ export function PitchPage() {
               <li>· Scouts compete for OR-path tier promotion (activity OR accuracy)</li>
             </ul>
           </PillarCard>
-          <PillarCard tone={TEAL} title="Community" weight="20">
-            <p className="mb-2"><strong style={{ color: 'var(--cream)' }}>Network signal.</strong> Engagement quality, not raw volume.</p>
+          <PillarCard tone={TEAL} title="Community + Distribution" weight="20">
+            <p className="mb-2"><strong style={{ color: 'var(--cream)' }}>Network signal + real-user signals.</strong> Engagement quality, not raw volume.</p>
             <ul className="space-y-1 list-none">
               <li>· Comment depth (judgment-based, not "+1")</li>
-              <li>· Re-visit rate weighted</li>
+              <li>· Used-by attestation + supporter graph</li>
               <li>· Applauds (unlimited toggle, 1 item · 1 applaud)</li>
               <li>· Self-engagement filtered out</li>
               <li>· Cosine-similarity bot pattern → silent zero-out</li>
@@ -266,17 +291,17 @@ export function PitchPage() {
       {/* ─── Network effects ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="04" label="Network effects" accent={GOLD} />
-        <SectionH>Three sides, one flywheel</SectionH>
+        <SectionH>Four sides, one flywheel</SectionH>
         <SectionLead>
-          Every audit produces three reusable assets: a public score (creator-side), a forecast track record (scout-side), and a Library artifact — Cursor rules, Claude Skills, MCP configs that the audited repo actually shipped with. Each artifact links back to the graduated project as proof. Adoption begets audits begets artifacts.
+          Every audit produces four reusable assets: a public score (creator), a forecast track record (scout), a Library artifact (library), and user attestation + supporter graph (user). Each side feeds the next.
         </SectionLead>
 
-        <div className="grid md:grid-cols-3 gap-4 mt-2">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
           <FlowCard
             tone={GOLD}
             label="Creator"
             edges="Audited → live ladder rank → streaks + milestones"
-            body="Solo builder ships a product. The Audit engine scores it and the project enters the permanent Ladder — ranked in real time per category × time window. Streaks (100 days top-50) and milestones (first top-10, all-categories top-50) accumulate as durable badges. Quarterly Season events layer on top for cohort-based graduation and Hall of Fame entry."
+            body="Solo builder ships a product. The Audit engine scores it and the project enters the permanent Ladder. Streaks (100 days top-50) and milestones accumulate as durable badges. Quarterly Season events layer on top for cohort-based graduation and Hall of Fame entry."
           />
           <FlowCard
             tone={PURPLE}
@@ -289,6 +314,12 @@ export function PitchPage() {
             label="Library"
             edges="Auto-discovered → adopted via PR → graduations citing it"
             body="Every audited repo is scanned for reusable artifacts (Cursor rules, MCP configs, prompt packs). The 'apply-to-my-repo' flow opens a one-click PR. Adoption stats become the artifact's credibility — not stars, not downloads."
+          />
+          <FlowCard
+            tone={BLUE}
+            label="User"
+            edges="Discovers audited products → backs them publicly → uses them in production"
+            body="Real users find audited products through the Ladder, time-filtered ('this week's climbers'), the X auto-share loop (creator-owned distribution), and the Cursor Directory / Vercel skills.sh ecosystem registrations. Used-by attestation ('Used by 14 builders') becomes social proof creators can't fake. Real-user feedback loops back to audits — comments improve scores, supporters amplify climbs."
           />
         </div>
       </section>
@@ -314,6 +345,8 @@ export function PitchPage() {
               body="80 / 20 split (Creator / platform) on premium artifacts. Free tier ships day 1 to bootstrap supply; paid tier unlocks once the artifact has graduated projects citing it. V1.5 launch." />
             <RevenueRow tone={GOLD} title="Cosmetic + permanence"
               body="Hall of Fame upgrades, custom badge designs, season memorabilia. Low-frequency but high-margin · Steam-style monetization on top of the credential." />
+            <RevenueRow tone={GOLD} title="Distribution placements"
+              body="Sponsored Discovery slots in Ladder time-windows (today / week / month). Tool partners pay for category placement. V1.5+." />
           </div>
 
           {/* B2B */}
@@ -330,6 +363,13 @@ export function PitchPage() {
               body="ATS-style tier for hiring teams: filter graduated Creators by Audit pillar, Stack Fingerprint, Scout endorsements. Per-seat subscription. Bridges the 'GitHub stars are wrong signal' problem identified in §01." />
             <RevenueRow tone={PURPLE} title="Tool sponsorship + Sponsored Showcases"
               body="Cursor, Anthropic, Vercel sponsor seasonal Showcases tied to their stack. Sponsor pays the prize pool + retainer for branded events. Already templated in /admin/events (6 templates · ready)." />
+          </div>
+        </div>
+
+        <div className="mt-8 px-5 py-4" style={{ background: `${GOLD}0c`, borderLeft: `3px solid ${GOLD}`, borderRadius: '2px' }}>
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-1" style={{ color: GOLD }}>How we measure</div>
+          <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.55 }}>
+            We measure <strong style={{ color: 'var(--cream)' }}>activity density</strong> — daily audit runs, climbs, comments acted on, X share triggers fired — not DAU. A community institution is alive when participation density is high, not when traffic is high.
           </div>
         </div>
       </section>
@@ -354,13 +394,14 @@ export function PitchPage() {
               'CLI on npm — npx commitshow@latest audit',
               'MCP server on npm + listed on Anthropic MCP Registry',
             ]} />
-          <RoadCol tone={PURPLE} phase="V1.5 · Q3 2026" title="Library Marketplace"
+          <RoadCol tone={PURPLE} phase="V1.5 · Q3 2026" title="Library Marketplace + Distribution loops"
             items={[
               'Cursor rules · Claude Skills · MCP configs · prompt packs',
               'Auto-discovery scans graduated repos',
               'One-click apply-to-my-repo PR',
               '80/20 paid tier with Stripe',
               'Adoption stats → graduation provenance',
+              'X auto-share 8 triggers · Cursor Directory partner placement',
             ]} />
           <RoadCol tone={TEAL} phase="V1.8 · Q4 2026" title="Enterprise + Recruiter"
             items={[
@@ -408,7 +449,12 @@ export function PitchPage() {
           <WhyNowCard
             tone={TEAL}
             t="Discovery is broken on every legacy surface"
-            body="GitHub Trending optimizes for stars, ProductHunt for launch-day traffic, awesome-lists for authorship. Nothing surfaces 'this works in production today.' The category is empty."
+            body={
+              <>
+                GitHub Trending optimizes for stars, ProductHunt for launch-day traffic, awesome-lists for authorship. Nothing surfaces 'this works in production today.' The category is empty.{' '}
+                <span style={{ color: GOLD, fontWeight: 600 }}>The permanent discovery surface for AI-built products is empty. We own that surface.</span>
+              </>
+            }
           />
         </div>
       </section>
@@ -418,14 +464,15 @@ export function PitchPage() {
       {/* ─── Moat ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="08" label="Moat" accent={GOLD} />
-        <SectionH>Six layers a copycat can't bolt on</SectionH>
+        <SectionH>Seven layers a copycat can't bolt on</SectionH>
         <div className="grid md:grid-cols-2 gap-3 mt-4">
           <MoatRow n="1" t="Calibration set"      body="Five reference projects re-scored on every prompt change. Six months of drift data. A new entrant starts at zero." />
-          <MoatRow n="2" t="Scout track record"   body="Every Scout's hit-rate is public and accumulates per season. A two-season-deep Scout brand can't be fast-followed." />
+          <MoatRow n="2" t="Reputation graph as substrate" body="Every Scout's hit-rate, every Creator's audited journey, every 'first spotter' attribution accumulates in the open. This is not a directory — it's a public reputation graph that compounds with every audit. By Phase 3, hiring managers and partners look up creators by their commit.show Grade the way recruiters look up GitHub. Trajectory and story density (climb deltas, acted-on comments, support graph) matter more than snapshot scores. A clone cannot retroactively manufacture this history." />
           <MoatRow n="3" t="Graduation provenance" body="Library artifacts cite the audited projects that graduated using them. Adoption → graduation is a closed loop competitors don't have data for." />
           <MoatRow n="4" t="Apply-to-my-repo PR"  body="One-click PR generation from artifact to user repo. GitHub OAuth + variable substitution + multi-file Skill bundles. Wappalyzer / awesome-cursorrules are read-only — we ship code." />
-          <MoatRow n="5" t="Three-side flywheel"  body="Creator audit → Scout forecast → Library adoption. Each side feeds the other. Single-side competitors (just-Lighthouse, just-recruiter, just-marketplace) never ignite a cross-side compound." />
+          <MoatRow n="5" t="Four-side flywheel"  body="Creator audit → Scout forecast → Library adoption → User attestation. Each side feeds the next. Single-side competitors (just-Lighthouse, just-recruiter, just-marketplace) never ignite a cross-side compound." />
           <MoatRow n="6" t="Brand position"        body="'Every commit, on stage' has clean ownership. 'Hall of Fame' / 'Audition' / 'Audit' verbs are pre-empted. A new entrant has to invent vocabulary while we own the URL." />
+          <MoatRow n="7" t="Ecosystem coverage"    body="Cursor Directory (300k+ developers), Vercel skills.sh, MCP server (Claude Code · Cursor · Codex), GitHub Marketplace, CLI on npm. One install across the AI-native developer surface. A clone has to negotiate registration with each platform — measured in weeks per platform, not days. Our surface coverage compounds while a fast-follower is still in approval queues." />
         </div>
       </section>
 
@@ -446,7 +493,7 @@ export function PitchPage() {
             </thead>
             <tbody style={{ color: 'var(--text-primary)' }}>
               <CompRow s="GitHub Trending" what="Star-weighted ranking" win="Stars ≠ working in production. We measure what ships." />
-              <CompRow s="ProductHunt"     what="Launch-day attention surface" win="One-day spike, no follow-up audit. We measure week-to-week craft." />
+              <CompRow s="ProductHunt"     what="Launch-day attention surface" win="One-day spike — no follow-up — no real-user trail. We surface week-to-week craft AND give audited products a permanent ranked home." />
               <CompRow s="awesome-cursorrules" what="Curated copy-paste lists" win="Read-only, no provenance. Our artifacts cite graduated repos and ship via one-click PR." />
               <CompRow s="Wappalyzer / BuiltWith" what="Tech-stack detection" win="Detection only. We score, rank, and credentialize." />
               <CompRow s="Lighthouse direct" what="Performance audit" win="Single signal. We combine LH + repo + scout + community in one rubric." />
@@ -499,7 +546,7 @@ export function PitchPage() {
               <ul className="space-y-1.5 mb-3 list-none">
                 <li>· <span style={{ color: 'var(--cream)' }}>30% Marketing &amp; brand</span> — paid acquisition · launch campaign · creator partnerships · X · Discord · YouTube content</li>
                 <li>· <span style={{ color: 'var(--cream)' }}>25% Engineering</span> — one senior hire (Library Marketplace · API tier)</li>
-                <li>· <span style={{ color: 'var(--cream)' }}>20% Ecosystem &amp; BD</span> — Tool-partner outreach (Cursor · Anthropic · Vercel) · sponsorship pipeline</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>20% Ecosystem &amp; Distribution</span> — Tool-partner outreach (Cursor · Anthropic · Vercel) · sponsorship pipeline · X auto-share infra · ecosystem registrations</li>
                 <li>· <span style={{ color: 'var(--cream)' }}>15% Calibration &amp; infra</span> — Claude API at scale · evaluation infra · CF Browser Rendering</li>
                 <li>· <span style={{ color: 'var(--cream)' }}>10% Legal &amp; ops</span> — counsel · accounting · SOC 2 prep</li>
               </ul>
@@ -654,7 +701,7 @@ function RoadCol({ tone, phase, title, items }: { tone: string; phase: string; t
   )
 }
 
-function WhyNowCard({ tone, t, body }: { tone: string; t: string; body: string }) {
+function WhyNowCard({ tone, t, body }: { tone: string; t: string; body: React.ReactNode }) {
   return (
     <div className="px-5 py-5" style={{ background: `${tone}08`, border: `1px solid ${tone}30`, borderRadius: '2px' }}>
       <div className="font-display font-bold text-base mb-2" style={{ color: tone }}>{t}</div>

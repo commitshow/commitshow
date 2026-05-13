@@ -171,7 +171,7 @@ function RoadCol({ tone, phase, title, items }: { tone: string; phase: string; t
   )
 }
 
-function WhyNowCard({ tone, t, body }: { tone: string; t: string; body: string }) {
+function WhyNowCard({ tone, t, body }: { tone: string; t: string; body: React.ReactNode }) {
   return (
     <div className="px-5 py-5" style={{ background: `${tone}08`, border: `1px solid ${tone}30`, borderRadius: '2px' }}>
       <div className="font-display font-bold text-base mb-2" style={{ color: tone }}>{t}</div>
@@ -229,7 +229,7 @@ export function PitchKPage() {
         </h1>
         <p className="font-light mb-8" style={{ color: 'var(--text-primary)', fontSize: 'clamp(1.1rem, 2vw, 1.4rem)', lineHeight: 1.6, maxWidth: 880 }}>
           AI 는 코드를 빠르게 만듭니다. 그리고 동시에 빈 곳도 만듭니다.{' '}
-          <span style={{ color: 'var(--cream)' }}>commit.show</span> 는 바이브코딩 세대를 위한 검증 레이어입니다. Cursor · Claude Code · Lovable 로 제품을 만드는 전 세계 3,000만 명의 빌더에게 <strong>재현 가능한 품질 증거</strong>를 제공합니다.
+          <span style={{ color: 'var(--cream)' }}>commit.show</span> 는 <strong>AI 가 만든 제품을 진짜로 만들고</strong>, 진짜 사용자가 그 제품을 찾도록 돕는 곳입니다. Cursor · Claude Code · Lovable 로 제품을 만드는 전 세계 3,000만 명의 빌더를 위한 <strong>감사 · 유통 레이어</strong>입니다.
         </p>
         <div className="flex flex-wrap gap-3 mb-12">
           <Link to="/" className="inline-block px-5 py-2.5 font-mono text-[12px] tracking-widest uppercase"
@@ -259,15 +259,17 @@ export function PitchKPage() {
           Cursor 는 2025년 유료 사용자 100만 명을 돌파했습니다. Lovable 은 8주 만에 매출 0 → ARR 200억 원에 도달했습니다. Claude Code 는 Anthropic 의 엔터프라이즈 계약에 기본 포함되고 있습니다. 앞으로 투자하실 모든 제품 팀이 이 레이어 위에서 더 빠르게 출시할 것입니다.
         </SectionLead>
         <SectionLead>
-          그런데 이 흐름과 함께 세 가지 새로운 문제가 동시에 등장했고, 아직 어떤 디폴트 도구도 자리잡지 못한 상태입니다:
+          그런데 이 흐름과 함께 네 가지 새로운 문제가 동시에 등장했고, 아직 어떤 디폴트 도구도 자리잡지 못한 상태입니다:
         </SectionLead>
-        <div className="grid md:grid-cols-3 gap-4 mt-2">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
           <ProblemCard tone={SCARLET} title="품질 신호의 부재"
             body="AI 가 6시간 만에 만든 랜딩 페이지와, 6개월간 운영해온 제품이 URL 만으로는 구분되지 않습니다. 투자자도, 채용 담당자도, 사용자도 무엇이 진짜인지 가릴 방법이 없습니다." />
           <ProblemCard tone={SCARLET} title="AI 도구 간 분절"
             body="같은 프롬프트도 도구마다 결과가 다릅니다. 'Cursor 에서 이 룰이 작동했다' '이 Claude Skill 이 정확했다' 같은 노하우가 사적인 디스코드 스크린샷에 갇혀 있습니다. 공유 가능한 자산으로 굳어지지 못하고 있습니다." />
           <ProblemCard tone={SCARLET} title="신뢰 마켓의 부재"
             body="훌륭한 제품을 만드는 1인 빌더는 많지만 자기 포트폴리오를 보여줄 표준 surface 가 없습니다. 채용·인수 담당자는 결국 GitHub stars (틀린 신호) 나 VC 투자 이력 (편향된 필터) 으로 회귀합니다." />
+          <ProblemCard tone={SCARLET} title="진짜 사용자와의 접점 부재"
+            body="실제 문제를 해결하는 바이브코딩 제품이라도 사용자를 만날 자리가 없습니다. Product Hunt 는 하루짜리 spike, HN 은 AI 슬롭으로 포화, Indie Hackers 는 시작부터 청중을 요구합니다. '좋은 제품' 을 위한 영구 발견 surface 가 없습니다." />
         </div>
       </section>
 
@@ -281,7 +283,7 @@ export function PitchKPage() {
           commit.show 는 모든 출시 제품을 100점 만점의 투명한 루브릭으로 측정합니다. 결정론적인 기술 신호 (Lighthouse · 저장소 위생 · 보안 헤더 · 딥프로브) 와 두 개의 사람 신호 (Scout 예측 · Community 반응) 를 결합합니다. 결과는 <strong>이동 가능한 검증 점수</strong>입니다 — 사이트에서 추출되는 게 아니라 사이트와 함께 따라다니는 자산입니다.
         </SectionLead>
 
-        <div className="grid md:grid-cols-3 gap-4 mt-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
           <LaneCard
             tone={BLUE}
             num="01"
@@ -301,7 +303,31 @@ export function PitchKPage() {
             num="03"
             title="Member Audition"
             sub="풀 감사 · 영구 Ladder + Events"
-            body="Creator 가 제품과 Build Brief 를 제출합니다. 감사 엔진이 정밀 측정을 수행하고 Scout (등급제 예측가) 가 투표권을 행사하면, 프로젝트가 영구 Ladder 에 진입합니다 — 카테고리와 시간 윈도우 (오늘 · 이번 주 · 이번 달 · 누적) 별로 실시간 랭킹. 그 위에 6 종 이벤트 템플릿이 작동합니다: Quarterly Season (3주 · 상위 20% Hall of Fame 졸업), Tool Challenge, Theme Sprint, Quality Bar, Sponsored Showcase, Open Bounty."
+            body={
+              <>
+                Creator 가 제품과 Build Brief 를 제출합니다. 감사 엔진이 정밀 측정을 수행하고 Scout (등급제 예측가) 가 투표권을 행사하면, 프로젝트가 영구 Ladder 에 진입합니다 — 카테고리와 시간 윈도우 (오늘 · 이번 주 · 이번 달 · 누적) 별로 실시간 랭킹. 그 위에 6 종 이벤트 템플릿이 작동합니다: Quarterly Season (3주 · 상위 20% Hall of Fame 졸업), Tool Challenge, Theme Sprint, Quality Bar, Sponsored Showcase, Open Bounty.
+                <div className="mt-3 px-3 py-2.5" style={{ background: `${GOLD}10`, borderLeft: `2px solid ${GOLD}`, borderRadius: '2px' }}>
+                  <div className="font-mono text-[10px] tracking-widest uppercase mb-1" style={{ color: GOLD }}>Ladder 속도</div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: '0.88rem', lineHeight: 1.55 }}>
+                    Ladder 는 현재 점수만큼이나 <strong>상승 속도</strong>를 측정합니다. 2주 만에 +30 오른 프로젝트가 75 에 멈춘 프로젝트를 이깁니다. AI 제품은 빠르게 개선됩니다 — 우리는 현재 상태가 아니라 개선을 측정합니다.
+                  </div>
+                </div>
+              </>
+            }
+          />
+          <LaneCard
+            tone={GOLD}
+            num="04"
+            title="Community + Distribution"
+            sub="영구 발견 surface"
+            body={
+              <>
+                감사 후 프로젝트는 영구 Ladder 에 진입합니다 — 카테고리와 시간 윈도우 (오늘 · 이번 주 · 이번 달 · 누적) 별로 랭킹. X 자동 공유 루프 (8 트리거) 가 모든 상승·프레임 fix·앵코르·반영된 코멘트를 Creator 자신의 청중에게 전달합니다. Supporter 들이 climbs 를 추적하고, Library 가 검증된 아티팩트를 유통합니다. Cursor Directory (개발자 30만+), Vercel skills.sh, MCP server, GitHub Marketplace 가 인바운드 발견을 가져옵니다.
+                <div className="mt-3" style={{ color: 'var(--cream)', fontSize: '0.92rem', fontWeight: 600 }}>
+                  여기가 감사된 제품이 진짜 사용자를 만나는 곳입니다 — Phase 2 의 리그 모드 이전부터, 지금.
+                </div>
+              </>
+            }
           />
         </div>
       </section>
@@ -354,11 +380,11 @@ export function PitchKPage() {
               'Early Spotter 보너스 (Week 1 이전 정확 예측)',
               '활동량 OR 적중률 — 두 경로로 등급 승급 가능',
             ]} />
-          <PillarCard tone={TEAL} title="Community" weight="20"
-            lead="네트워크가 만드는 신호. 양보다 질로 가중합니다."
+          <PillarCard tone={TEAL} title="Community + Distribution" weight="20"
+            lead="네트워크 신호 + 진짜 사용자 신호. 양보다 질로 가중합니다."
             items={[
               '댓글 깊이 (판단 근거 댓글 우선 · 단순 +1 제외)',
-              '재방문율 가중',
+              'Used-by attestation + supporter 그래프',
               'Applaud 토글 (1 항목 1 박수 · 무제한)',
               '본인 콘텐츠 자가 반응 필터링',
               '코사인 유사도 봇 패턴은 silent zero-out',
@@ -379,17 +405,17 @@ export function PitchKPage() {
       {/* ─── Network effects ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="04" label="네트워크 효과" accent={GOLD} />
-        <SectionH>3 면이 하나의 플라이휠로</SectionH>
+        <SectionH>4 면이 하나의 플라이휠로</SectionH>
         <SectionLead>
-          매 감사가 세 개의 재사용 가능한 자산을 동시에 생성합니다 — 공개 점수 (Creator 측), 예측 적중 트랙 레코드 (Scout 측), Library 아티팩트 (감사된 저장소가 실제로 사용한 Cursor 룰 · Claude Skill · MCP 설정). 각 아티팩트는 그것을 사용해 졸업한 프로젝트를 역참조 합니다. 채택이 감사를 부르고, 감사가 다시 아티팩트를 만들어내는 구조입니다.
+          매 감사가 네 개의 재사용 가능한 자산을 생성합니다 — 공개 점수 (Creator), 예측 트랙 레코드 (Scout), Library 아티팩트 (Library), 그리고 사용자 attestation + supporter 그래프 (User). 각 면이 다음 면으로 흐릅니다.
         </SectionLead>
 
-        <div className="grid md:grid-cols-3 gap-4 mt-2">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
           <FlowCard
             tone={GOLD}
             label="Creator"
             edges="감사 → 라이브 Ladder 랭킹 → 스트릭 + 마일스톤"
-            body="1인 빌더가 제품을 출시하면, 감사 엔진이 점수를 매기고 프로젝트가 영구 Ladder 에 진입합니다 — 카테고리 × 시간 윈도우별로 실시간 랭킹. 스트릭 (Top 50 100일 유지) 과 마일스톤 (첫 Top 10 진입 · 전 카테고리 Top 50 동시 점유) 이 영구 배지로 누적됩니다. 그 위에 Quarterly Season 이벤트가 코호트 기반 졸업과 Hall of Fame 등재를 제공합니다."
+            body="1인 빌더가 제품을 출시하면, 감사 엔진이 점수를 매기고 프로젝트가 영구 Ladder 에 진입합니다. 스트릭 (Top 50 100일) 과 마일스톤이 영구 배지로 누적됩니다. Quarterly Season 이벤트가 코호트 기반 졸업과 Hall of Fame 등재를 제공합니다."
           />
           <FlowCard
             tone={PURPLE}
@@ -402,6 +428,12 @@ export function PitchKPage() {
             label="Library"
             edges="자동 발굴 → PR 한 번으로 적용 → 졸업 인용"
             body="감사된 저장소가 자동 스캔되어 재사용 가능한 아티팩트 (Cursor 룰 · MCP 설정 · 프롬프트 팩) 가 발굴됩니다. apply-to-my-repo 는 GitHub OAuth 로 PR 한 번에 적용됩니다. 채택 통계가 곧 신뢰도이며, 별점이나 다운로드 수가 아닙니다."
+          />
+          <FlowCard
+            tone={BLUE}
+            label="User"
+            edges="감사된 제품 발견 → 공개 지지 → 실제 사용"
+            body="진짜 사용자는 Ladder (이번 주 climbers 같은 시간 필터), X 자동 공유 루프 (creator-owned distribution), Cursor Directory / Vercel skills.sh 등록을 통해 감사된 제품을 찾습니다. Used-by attestation ('14명이 사용 중') 은 creator 가 위조 못 하는 사회적 증거가 됩니다. 사용자 피드백이 다시 감사로 돌아옵니다 — 코멘트가 점수를 개선하고 supporter 가 climbs 를 증폭합니다."
           />
         </div>
       </section>
@@ -427,6 +459,8 @@ export function PitchKPage() {
               body="프리미엄 아티팩트 판매 시 Creator 80 / 플랫폼 20 분배. 프리 티어는 출시 첫 날부터 공급을 부트스트랩하고, 유료 티어는 졸업 프로젝트가 인용한 아티팩트만 잠금 해제됩니다. V1.5 출시 예정." />
             <RevenueRow tone={GOLD} title="장식 + 영속성"
               body="Hall of Fame 업그레이드, 커스텀 배지 디자인, 시즌 기념품. 빈도는 낮지만 마진이 높은 surface — 자격증명 위에 얹는 Steam 식 모델." />
+            <RevenueRow tone={GOLD} title="유통 슬롯"
+              body="Ladder 시간 윈도우 (오늘 · 이번 주 · 이번 달) 의 Sponsored Discovery 슬롯. 도구 파트너가 카테고리 placement 비용을 지불합니다. V1.5+." />
           </div>
 
           {/* B2B */}
@@ -443,6 +477,13 @@ export function PitchKPage() {
               body="채용팀을 위한 ATS 형 티어. 졸업 Creator 를 Audit pillar · Stack Fingerprint · Scout 추천 등으로 필터링합니다. 시트당 구독 — §01 의 'GitHub stars 는 잘못된 신호' 문제를 직접 해결합니다." />
             <RevenueRow tone={PURPLE} title="툴 스폰서십 + Sponsored Showcase"
               body="Cursor · Anthropic · Vercel 같은 도구 회사가 자사 스택 기반 시즌 Showcase 를 후원합니다. 스폰서가 상금 풀 + 브랜드 이벤트 retainer 를 부담. /admin/events 에 6 템플릿이 이미 템플릿화되어 있습니다." />
+          </div>
+        </div>
+
+        <div className="mt-8 px-5 py-4" style={{ background: `${GOLD}0c`, borderLeft: `3px solid ${GOLD}`, borderRadius: '2px' }}>
+          <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-1" style={{ color: GOLD }}>측정 기준</div>
+          <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+            우리는 <strong style={{ color: 'var(--cream)' }}>활동 밀도</strong> 를 측정합니다 — 일일 감사 횟수, climbs, 반영된 코멘트, X 공유 트리거 발사 수 — DAU 가 아닙니다. 커뮤니티 기관은 참여 밀도가 높을 때 살아있는 것이지, 트래픽이 높을 때가 아닙니다.
           </div>
         </div>
       </section>
@@ -467,13 +508,14 @@ export function PitchKPage() {
               'CLI npm 배포 — npx commitshow@latest audit',
               'MCP 서버 npm 배포 + Anthropic 공식 MCP Registry 등재',
             ]} />
-          <RoadCol tone={PURPLE} phase="V1.5 · 2026 Q3" title="Library 마켓플레이스"
+          <RoadCol tone={PURPLE} phase="V1.5 · 2026 Q3" title="Library 마켓플레이스 + 유통 루프"
             items={[
               'Cursor 룰 · Claude Skill · MCP 설정 · 프롬프트 팩',
               '졸업 저장소 자동 스캔 발굴',
               'apply-to-my-repo · PR 한 번으로 적용',
               '80/20 유료 티어 + Stripe 정산',
               '채택 통계 → 졸업 provenance',
+              'X 자동 공유 8 트리거 · Cursor Directory 파트너 placement',
             ]} />
           <RoadCol tone={TEAL} phase="V1.8 · 2026 Q4" title="엔터프라이즈 + 채용"
             items={[
@@ -521,7 +563,12 @@ export function PitchKPage() {
           <WhyNowCard
             tone={TEAL}
             t="기존 디스커버리 surface 의 붕괴"
-            body="GitHub Trending 은 stars, ProductHunt 는 출시일 트래픽, awesome-list 는 작성자 권위에 최적화됐습니다. '오늘 production 에서 작동한다' 를 surface 하는 곳은 어디에도 없습니다. 카테고리 자체가 비어 있습니다."
+            body={
+              <>
+                GitHub Trending 은 stars, ProductHunt 는 출시일 트래픽, awesome-list 는 작성자 권위에 최적화됐습니다. '오늘 production 에서 작동한다' 를 surface 하는 곳은 어디에도 없습니다. 카테고리 자체가 비어 있습니다.{' '}
+                <span style={{ color: GOLD, fontWeight: 600 }}>AI 가 만든 제품을 위한 영구 발견 surface 는 비어 있습니다. 우리가 그 자리를 차지합니다.</span>
+              </>
+            }
           />
         </div>
       </section>
@@ -531,20 +578,22 @@ export function PitchKPage() {
       {/* ─── Moat ─── */}
       <section className="px-4 md:px-8 lg:px-16 py-20 max-w-6xl mx-auto">
         <SectionEyebrow n="08" label="진입장벽" accent={GOLD} />
-        <SectionH>후발주자가 따라잡을 수 없는 6개 자산</SectionH>
+        <SectionH>후발주자가 따라잡을 수 없는 7개 자산</SectionH>
         <div className="grid md:grid-cols-2 gap-3 mt-4">
           <MoatRow n="1" t="보정 데이터셋"
             body="prompt 변경마다 5개 reference 프로젝트의 점수를 재산출. 6개월치 drift 데이터 누적. 신규 진입자는 이 데이터를 가지고 시작할 수 없습니다." />
-          <MoatRow n="2" t="Scout 트랙 레코드"
-            body="모든 Scout 의 적중률이 시즌별로 공개 누적됩니다. 두 시즌 깊이의 Scout 평판은 fast-follow 가 불가능합니다." />
+          <MoatRow n="2" t="평판 그래프 자체"
+            body="모든 Scout 의 적중률, 모든 Creator 의 감사 여정, 모든 'first spotter' attribution 이 공개적으로 누적됩니다. 디렉토리가 아니라 — 매 감사로 복리 누적되는 공공 평판 그래프입니다. Phase 3 에 이르면 채용 담당자와 파트너가 GitHub 을 보듯 commit.show Grade 로 creator 를 조회합니다. 궤적과 스토리 밀도 (climb 델타 · 반영된 코멘트 · supporter 그래프) 가 snapshot 점수보다 중요합니다. 후발주자는 이 역사를 소급해서 만들 수 없습니다." />
           <MoatRow n="3" t="졸업 provenance"
             body="Library 아티팩트가 그것을 사용해 졸업한 프로젝트를 인용. '채택 → 졸업' 의 닫힌 루프는 경쟁자가 데이터 자체를 갖고 있지 않습니다." />
           <MoatRow n="4" t="apply-to-my-repo PR"
             body="아티팩트에서 사용자 저장소로의 one-click PR. GitHub OAuth + 변수 치환 + 멀티파일 Skill 번들. Wappalyzer · awesome-cursorrules 는 read-only — 우리는 코드를 직접 ship 합니다." />
-          <MoatRow n="5" t="3-side 플라이휠"
-            body="Creator 감사 → Scout 예측 → Library 채택 — 3 면이 서로 강화. 단면 경쟁자 (Lighthouse only · 채용 only · 마켓 only) 는 cross-side 복리를 점화하지 못합니다." />
+          <MoatRow n="5" t="4-side 플라이휠"
+            body="Creator 감사 → Scout 예측 → Library 채택 → User attestation — 4 면이 서로 강화. 단면 경쟁자 (Lighthouse only · 채용 only · 마켓 only) 는 cross-side 복리를 점화하지 못합니다." />
           <MoatRow n="6" t="브랜드 선점"
             body="'모든 커밋, 무대 위로' 슬로건과 'Hall of Fame · Audition · Audit' 어휘 체계가 이미 우리에게 귀속됐습니다. 후발주자는 어휘부터 새로 만들어야 하지만 우리는 이미 도메인을 갖고 있습니다." />
+          <MoatRow n="7" t="생태계 커버리지"
+            body="Cursor Directory (개발자 30만+), Vercel skills.sh, MCP server (Claude Code · Cursor · Codex), GitHub Marketplace, npm 의 CLI. AI-native 개발자 surface 전체에 한 번의 설치로 닿습니다. 후발주자는 각 플랫폼과 등록 협상을 새로 해야 하고 — 플랫폼당 일 단위가 아니라 주 단위로 측정됩니다. 우리 surface 커버리지는 fast-follower 가 승인 큐에 있는 동안에도 복리로 쌓입니다." />
         </div>
       </section>
 
@@ -565,7 +614,7 @@ export function PitchKPage() {
             </thead>
             <tbody style={{ color: 'var(--text-primary)' }}>
               <CompRow s="GitHub Trending"          what="Star 가중 랭킹"            win="Star ≠ production 작동성. 우리는 실제로 ship 된 것을 측정합니다." />
-              <CompRow s="ProductHunt"              what="출시일 어텐션 surface"      win="하루 스파이크 후 follow-up 감사 없음. 우리는 주 단위 craft 변화를 측정합니다." />
+              <CompRow s="ProductHunt"              what="출시일 어텐션 surface"      win="하루 스파이크 — follow-up 없음 — 진짜 사용자 추적 없음. 우리는 주 단위 craft 변화를 측정하고, 감사된 제품에 영구 ranked home 을 제공합니다." />
               <CompRow s="awesome-cursorrules"      what="큐레이티드 copy-paste 리스트" win="Read-only · provenance 없음. 우리 아티팩트는 졸업 저장소 인용 + one-click PR." />
               <CompRow s="Wappalyzer · BuiltWith"   what="기술 스택 감지"             win="감지만 가능. 우리는 점수 · 랭킹 · 자격증명까지." />
               <CompRow s="Lighthouse 단독"          what="성능 감사"                  win="단일 신호. 우리는 LH + 저장소 + scout + community 를 하나의 루브릭으로 결합." />
@@ -618,7 +667,7 @@ export function PitchKPage() {
               <ul className="space-y-1.5 mb-3 list-none">
                 <li>· <span style={{ color: 'var(--cream)' }}>30% 마케팅 · 브랜드</span> — 유료 획득 · 런칭 캠페인 · 크리에이터 파트너십 · X · Discord · YouTube 콘텐츠</li>
                 <li>· <span style={{ color: 'var(--cream)' }}>25% 엔지니어링</span> — 시니어 1명 채용 (Library 마켓플레이스 · API 티어)</li>
-                <li>· <span style={{ color: 'var(--cream)' }}>20% 생태계 · BD</span> — 도구 파트너 outreach (Cursor · Anthropic · Vercel) · 스폰서십 파이프라인</li>
+                <li>· <span style={{ color: 'var(--cream)' }}>20% 생태계 · 유통</span> — 도구 파트너 outreach (Cursor · Anthropic · Vercel) · 스폰서십 파이프라인 · X 자동 공유 인프라 · 생태계 등록</li>
                 <li>· <span style={{ color: 'var(--cream)' }}>15% 보정 · 인프라</span> — Claude API 스케일 · 평가 인프라 · CF Browser Rendering</li>
                 <li>· <span style={{ color: 'var(--cream)' }}>10% 법무 · 운영</span> — 외부 카운슬 · 회계 · SOC 2 준비</li>
               </ul>
