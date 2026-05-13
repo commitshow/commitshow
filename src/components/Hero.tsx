@@ -101,7 +101,7 @@ export function Hero(_props: HeroProps) {
           </p>
           <p
             className="stagger-3 max-w-lg mb-10 font-light"
-            style={{ color: 'rgba(248,245,238,0.55)', fontSize: '1.05rem', lineHeight: 1.65 }}
+            style={{ color: 'rgba(248,245,238,0.55)', fontSize: '0.92rem', lineHeight: 1.6 }}
           >
             We catch what your prompts forgot. First 3 audits are free.
           </p>
