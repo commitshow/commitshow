@@ -31,6 +31,8 @@ interface UserRow {
   total_graduated: number
   is_admin:        boolean
   created_at:      string
+  // ISO 3166-1 alpha-2 captured at first sign-in via /cdn-cgi/trace.
+  signup_country:  string | null
   // Populated by admin_member_login_methods RPC · provider keys are
   // 'email' · 'google' · 'github' · 'twitter' · 'linkedin_oidc'.
   providers?:      string[]
@@ -211,7 +213,7 @@ export function AdminPage() {
     const [{ data }, { data: methods }] = await Promise.all([
       supabase
         .from('members')
-        .select('id, display_name, tier, creator_grade, activity_points, total_graduated, is_admin, created_at')
+        .select('id, display_name, tier, creator_grade, activity_points, total_graduated, is_admin, created_at, signup_country')
         .order('created_at', { ascending: false })
         .limit(50),
       // admin_member_login_methods · SECURITY DEFINER · admin-gated RPC
@@ -999,9 +1001,10 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
                     <span>Encore <span style={{ color: '#fff' }}>{u.total_graduated ?? 0}</span></span>
                     <span>{new Date(u.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
                   </div>
-                  {(u.providers ?? []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
+                  {((u.providers ?? []).length > 0 || u.signup_country) && (
+                    <div className="flex flex-wrap gap-1 mt-1.5 items-center">
                       {u.providers!.map(p => <ProviderBadge key={p} provider={p} />)}
+                      {u.signup_country && <CountryBadge code={u.signup_country} />}
                     </div>
                   )}
                 </div>
@@ -1014,11 +1017,12 @@ function UsersTab({ stats, list, currentUserId, onToggleAdmin, grantBusyId, gran
                     {isSelf && <span className="ml-2 px-1.5 py-0.5" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)', borderRadius: '2px', fontSize: '10px' }}>본인</span>}
                   </span>
                   <span className="font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{u.id.slice(0, 8)}</span>
-                  <span className="flex flex-wrap gap-1">
-                    {(u.providers ?? []).length === 0 && (
+                  <span className="flex flex-wrap gap-1 items-center">
+                    {(u.providers ?? []).length === 0 && !u.signup_country && (
                       <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>—</span>
                     )}
                     {(u.providers ?? []).map(p => <ProviderBadge key={p} provider={p} />)}
+                    {u.signup_country && <CountryBadge code={u.signup_country} />}
                   </span>
                   <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.tier ?? '—'}</span>
                   <span className="font-mono text-[11px]" style={{ color: 'rgba(255,255,255,0.88)' }}>{u.creator_grade ?? '—'}</span>
@@ -2301,6 +2305,46 @@ function ProviderBadge({ provider }: { provider: string }) {
       aria-label={`Provider: ${label}`}
     >
       <ProviderIcon provider={provider} size={14} />
+    </span>
+  )
+}
+
+// Country chip sits next to the provider chips. Renders the ISO code as a
+// short text label rather than an emoji flag — emoji flag glyphs are
+// inconsistent across desktop platforms (Windows Chrome falls back to
+// 'KR' text anyway) and CLAUDE.md §4 Iconography rules out emoji as UI
+// surface chrome. Tooltip carries the long-form name.
+const COUNTRY_NAME: Record<string, string> = {
+  KR: 'South Korea', US: 'United States', JP: 'Japan',  CN: 'China',
+  IN: 'India',       DE: 'Germany',       GB: 'United Kingdom',
+  FR: 'France',      CA: 'Canada',        AU: 'Australia',
+  BR: 'Brazil',      VN: 'Vietnam',       SG: 'Singapore',
+  TW: 'Taiwan',      HK: 'Hong Kong',     NL: 'Netherlands',
+  ES: 'Spain',       IT: 'Italy',         MX: 'Mexico',
+  ID: 'Indonesia',   PH: 'Philippines',   TH: 'Thailand',
+  RU: 'Russia',      UA: 'Ukraine',       PL: 'Poland',
+  TR: 'Turkey',      SE: 'Sweden',        NO: 'Norway',
+  FI: 'Finland',     DK: 'Denmark',
+}
+function CountryBadge({ code }: { code: string }) {
+  const upper = code.toUpperCase()
+  const name  = COUNTRY_NAME[upper] ?? upper
+  return (
+    <span
+      className="inline-flex items-center justify-center font-mono tabular-nums"
+      style={{
+        height: 24, padding: '0 6px',
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 3,
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: '10px',
+        letterSpacing: '0.04em',
+      }}
+      title={`Signed up from ${name}`}
+      aria-label={`Country: ${name}`}
+    >
+      {upper}
     </span>
   )
 }

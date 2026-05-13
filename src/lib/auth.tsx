@@ -5,6 +5,27 @@ import { supabase, PUBLIC_MEMBER_COLUMNS, type Member } from './supabase'
 
 export type OAuthProvider = 'google' | 'github' | 'twitter' | 'linkedin_oidc'
 
+// Sign-in country backfill · reads /cdn-cgi/trace (free Cloudflare endpoint
+// served by the same edge that fronts commit.show), parses the `loc=KR`
+// line, writes members.signup_country if it's still null. Silent on every
+// failure mode — fetch error, parse miss, RLS reject — country is purely
+// internal analytics so we never block on it.
+async function syncSignupCountry(memberId: string): Promise<void> {
+  try {
+    const res = await fetch('/cdn-cgi/trace', { credentials: 'omit' })
+    if (!res.ok) return
+    const txt  = await res.text()
+    const m    = txt.match(/^loc=([A-Z]{2})$/m)
+    const code = m?.[1]
+    if (!code) return
+    await supabase
+      .from('members')
+      .update({ signup_country: code })
+      .eq('id', memberId)
+      .is('signup_country', null)
+  } catch { /* silent · best-effort backfill */ }
+}
+
 type AuthState = {
   session: Session | null
   user: User | null
@@ -57,6 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', uid)
       .maybeSingle()
     setMember(data as Member | null)
+    // Sign-in country backfill · idempotent · only writes when the row is
+    // missing a country. /cdn-cgi/trace is Cloudflare's free request-info
+    // endpoint (same Cloudflare edge that fronts commit.show), returns a
+    // small text body with `loc=KR` etc. No third-party IP-geo service,
+    // no CORS issues. Failures are silently ignored — country is a
+    // nice-to-have signal, not a blocking auth step.
+    if (data && !(data as unknown as Record<string, unknown>).signup_country) {
+      void syncSignupCountry(uid)
+    }
   }
 
   useEffect(() => {
