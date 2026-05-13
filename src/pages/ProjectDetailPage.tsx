@@ -482,17 +482,31 @@ export function ProjectDetailPage() {
               when wrapping; owner buttons fall to the second line. */}
           <div className="absolute top-3 right-3 z-10 flex flex-wrap-reverse justify-end items-center gap-1.5 max-w-[calc(100%-1.5rem)]">
             {project.live_url && (
+              // Icon-only on 2026-05-14 — the OPEN LIVE text was eating the
+              // top-right cluster's horizontal budget once owner buttons
+              // (Re-audit · EDIT) joined the row. Square 30px button keeps
+              // the gold tile recognizable as the primary 'go see it' CTA,
+              // SR-only label + title for accessibility.
               <a href={project.live_url} target="_blank" rel="noopener noreferrer"
-                className="font-mono text-[11px] tracking-wide px-3 py-1.5"
+                className="inline-flex items-center justify-center"
+                title="Open live site"
+                aria-label="Open live site"
                 style={{
+                  width: 30, height: 30,
                   background: 'var(--gold-500)',
                   color: 'var(--navy-900)',
                   border: 'none',
                   borderRadius: '2px',
                   textDecoration: 'none',
-                  fontWeight: 600,
                 }}>
-                OPEN LIVE ↗
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                     stroke="currentColor" strokeWidth="2.2"
+                     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14L21 3" />
+                  <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                </svg>
+                <span className="sr-only">Open live site</span>
               </a>
             )}
             {isOwner && (
