@@ -17,10 +17,11 @@ import { supabase } from '../lib/supabase'
 import type { ApplaudTargetType, Project } from '../lib/supabase'
 
 const SEGMENT_TO_TYPE: Record<string, PostWithAuthor['type']> = {
-  'build-logs': 'build_log',
-  'stacks':     'stack',
-  'asks':       'ask',
+  'build-logs':   'build_log',
+  'stacks':       'stack',
+  'asks':         'ask',
   'office-hours': 'office_hours',
+  'open-mic':     'open_mic',
 }
 
 export function CommunityPostDetailPage() {
@@ -247,6 +248,7 @@ function typeAccent(type: PostWithAuthor['type']): string {
     case 'stack':        return '#60A5FA'
     case 'ask':          return '#A78BFA'
     case 'office_hours': return '#00D4AA'
+    case 'open_mic':     return '#F0C040'
   }
 }
 
@@ -256,6 +258,7 @@ function labelFor(type: PostWithAuthor['type']): string {
     case 'stack':        return 'Stack'
     case 'ask':          return 'Ask'
     case 'office_hours': return 'Office Hours'
+    case 'open_mic':     return 'Open Mic'
   }
 }
 
@@ -265,6 +268,7 @@ function listPathFor(type: PostWithAuthor['type']): string {
     case 'stack':        return '/community/stacks'
     case 'ask':          return '/community/asks'
     case 'office_hours': return '/community/office-hours'
+    case 'open_mic':     return '/community/open-mic'
   }
 }
 

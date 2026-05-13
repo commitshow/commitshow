@@ -105,7 +105,7 @@ export async function countPostsByType(): Promise<Record<CommunityPostType, numb
     .select('type, status')
     .eq('status', 'published')
   const tally: Record<CommunityPostType, number> = {
-    build_log: 0, stack: 0, ask: 0, office_hours: 0,
+    build_log: 0, stack: 0, ask: 0, office_hours: 0, open_mic: 0,
   }
   ;(data ?? []).forEach((r: unknown) => {
     const t = (r as { type: CommunityPostType }).type

@@ -411,7 +411,7 @@ export type Applaud = {
 }
 
 // v2 Community Posts (§13-B)
-export type CommunityPostType  = 'build_log' | 'stack' | 'ask' | 'office_hours'
+export type CommunityPostType  = 'build_log' | 'stack' | 'ask' | 'office_hours' | 'open_mic'
 export type CommunityPostStatus = 'draft' | 'published' | 'archived' | 'resolved' | 'expired'
 
 export type CommunityPost = {

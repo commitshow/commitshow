@@ -12,17 +12,23 @@ interface Props {
 }
 
 interface Tab {
-  to:    string
-  label: string
-  type?: CommunityPostType
-  hint:  string
+  to:        string
+  label:     string
+  type?:     CommunityPostType
+  hint:      string
+  /** V1 launch · only Open Mic is interactive. The other four are pinned
+   *  in the tab strip so users see the roadmap, but the labels render
+   *  greyed-out and the link is a no-op. Removed in V1.5 when the rest
+   *  light up. */
+  disabled?: boolean
 }
 
 const TABS: Tab[] = [
-  { to: '/community/build-logs',   label: 'Build Logs',   type: 'build_log',    hint: 'Shipping journeys' },
-  { to: '/community/stacks',       label: 'Stacks',       type: 'stack',        hint: 'Reusable recipes · prompts · tool reviews' },
-  { to: '/community/asks',         label: 'Asks',         type: 'ask',          hint: 'Looking for · Available · Feedback' },
-  { to: '/community/office-hours', label: 'Office Hours', type: 'office_hours', hint: 'Live sessions · AMAs · pair builds' },
+  { to: '/community/open-mic',     label: 'Open Mic',     type: 'open_mic',     hint: 'Drop a one-liner · what you shipped, what tripped you up' },
+  { to: '/community/build-logs',   label: 'Build Logs',   type: 'build_log',    hint: 'Shipping journeys',                                       disabled: true },
+  { to: '/community/stacks',       label: 'Stacks',       type: 'stack',        hint: 'Reusable recipes · prompts · tool reviews',                disabled: true },
+  { to: '/community/asks',         label: 'Asks',         type: 'ask',          hint: 'Looking for · Available · Feedback',                       disabled: true },
+  { to: '/community/office-hours', label: 'Office Hours', type: 'office_hours', hint: 'Live sessions · AMAs · pair builds',                       disabled: true },
 ]
 
 export function CommunityLayout({ children }: Props) {
@@ -59,30 +65,60 @@ export function CommunityLayout({ children }: Props) {
           }}
         >
           <div className="max-w-7xl mx-auto flex items-center gap-1 overflow-x-auto">
-            {TABS.map(t => (
-              <NavLink
-                key={t.to}
-                to={t.to}
-                className="font-mono text-[11px] tracking-widest uppercase px-3 py-1.5 transition-colors whitespace-nowrap flex items-center gap-2"
-                style={({ isActive }) => ({
-                  background: isActive ? 'rgba(240,192,64,0.14)' : 'transparent',
-                  color:      isActive ? 'var(--gold-500)' : 'var(--text-secondary)',
-                  border:     `1px solid ${isActive ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.06)'}`,
-                  borderRadius: '2px',
-                  textDecoration: 'none',
-                })}
-              >
-                {t.label}
-                {counts && t.type && counts[t.type] > 0 && (
+            {TABS.map(t => {
+              if (t.disabled) {
+                // V1 launch · render as a non-interactive chip with a
+                // 'soon' caption so the future roadmap is visible but
+                // un-clickable.
+                return (
                   <span
-                    className="font-mono text-[9px] tabular-nums px-1 py-0.5"
-                    style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}
+                    key={t.to}
+                    className="font-mono text-[11px] tracking-widest uppercase px-3 py-1.5 whitespace-nowrap flex items-center gap-2"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text-faint)',
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      borderRadius: '2px',
+                      cursor: 'not-allowed',
+                      opacity: 0.6,
+                    }}
+                    title={`${t.hint} · coming soon`}
                   >
-                    {counts[t.type]}
+                    {t.label}
+                    <span
+                      className="font-mono text-[9px] tabular-nums px-1 py-0.5"
+                      style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)', borderRadius: '2px' }}
+                    >
+                      soon
+                    </span>
                   </span>
-                )}
-              </NavLink>
-            ))}
+                )
+              }
+              return (
+                <NavLink
+                  key={t.to}
+                  to={t.to}
+                  className="font-mono text-[11px] tracking-widest uppercase px-3 py-1.5 transition-colors whitespace-nowrap flex items-center gap-2"
+                  style={({ isActive }) => ({
+                    background: isActive ? 'rgba(240,192,64,0.14)' : 'transparent',
+                    color:      isActive ? 'var(--gold-500)' : 'var(--text-secondary)',
+                    border:     `1px solid ${isActive ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.06)'}`,
+                    borderRadius: '2px',
+                    textDecoration: 'none',
+                  })}
+                >
+                  {t.label}
+                  {counts && t.type && counts[t.type] > 0 && (
+                    <span
+                      className="font-mono text-[9px] tabular-nums px-1 py-0.5"
+                      style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}
+                    >
+                      {counts[t.type]}
+                    </span>
+                  )}
+                </NavLink>
+              )
+            })}
           </div>
         </div>
 

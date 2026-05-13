@@ -129,7 +129,8 @@ export function CommunityFeedPage() {
           case 'stack':        return 'stacks'
           case 'ask':          return 'asks'
           case 'office_hours': return 'office-hours'
-          default:             return 'build-logs'
+          case 'open_mic':     return 'open-mic'
+          default:             return 'open-mic'
         }
       }
 
@@ -200,7 +201,7 @@ export function CommunityFeedPage() {
           </div>
           {user && (
             <Link
-              to="/community/build-logs/new"
+              to="/community/open-mic/new"
               className="font-mono text-xs tracking-wide px-3 py-2 flex-shrink-0"
               style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}
             >POST →</Link>
@@ -212,10 +213,7 @@ export function CommunityFeedPage() {
           <div className="flex gap-1.5 mb-5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             {[
               { to: '/community',                label: 'All' },
-              { to: '/community/build-logs',     label: 'Build Logs' },
-              { to: '/community/stacks',         label: 'Stacks' },
-              { to: '/community/asks',           label: 'Asks' },
-              { to: '/community/office-hours',   label: 'Office Hours' },
+              { to: '/community/open-mic',       label: 'Open Mic' },
             ].map(({ to, label }) => (
               <NavLink
                 key={to}

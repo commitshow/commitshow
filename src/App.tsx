@@ -29,6 +29,7 @@ const BuildLogsPage           = lazy(() => import('./pages/BuildLogsPage').then(
 const StacksPage              = lazy(() => import('./pages/StacksPage').then(m => ({ default: m.StacksPage })))
 const AsksPage                = lazy(() => import('./pages/AsksPage').then(m => ({ default: m.AsksPage })))
 const OfficeHoursPage         = lazy(() => import('./pages/OfficeHoursPage').then(m => ({ default: m.OfficeHoursPage })))
+const OpenMicPage             = lazy(() => import('./pages/OpenMicPage').then(m => ({ default: m.OpenMicPage })))
 const NewCommunityPostPage    = lazy(() => import('./pages/NewCommunityPostPage').then(m => ({ default: m.NewCommunityPostPage })))
 const CommunityPostDetailPage = lazy(() => import('./pages/CommunityPostDetailPage').then(m => ({ default: m.CommunityPostDetailPage })))
 const LeaderboardPage         = lazy(() => import('./pages/LeaderboardPage').then(m => ({ default: m.LeaderboardPage })))
@@ -127,6 +128,7 @@ export default function App() {
               project comments so the page feels alive even when posts
               are sparse. Category sub-pages still work directly. */}
           <Route path="/community"                     element={<CommunityFeedPage />} />
+          <Route path="/community/open-mic"            element={<OpenMicPage />} />
           <Route path="/community/build-logs"          element={<BuildLogsPage />} />
           <Route path="/community/stacks"              element={<StacksPage />} />
           <Route path="/community/asks"                element={<AsksPage />} />

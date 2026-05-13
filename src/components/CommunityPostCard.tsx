@@ -106,6 +106,7 @@ function typeAccent(type: PostWithAuthor['type']): string {
     case 'stack':        return '#60A5FA'   // blue
     case 'ask':          return '#A78BFA'   // violet
     case 'office_hours': return '#00D4AA'   // teal
+    case 'open_mic':     return '#F0C040'   // gold (matches the V1 'this is THE active surface' framing)
   }
 }
 
@@ -115,6 +116,7 @@ function basePathFor(type: PostWithAuthor['type']): string {
     case 'stack':        return '/community/stacks'
     case 'ask':          return '/community/asks'
     case 'office_hours': return '/community/office-hours'
+    case 'open_mic':     return '/community/open-mic'
   }
 }
 

@@ -19,6 +19,7 @@ const TYPE_BY_SEGMENT: Record<string, CommunityPostType> = {
   'build-logs': 'build_log',
   'stacks':     'stack',
   'asks':       'ask',
+  'open-mic':   'open_mic',
 }
 
 const TITLE_MAX: Record<CommunityPostType, number> = {
@@ -26,6 +27,7 @@ const TITLE_MAX: Record<CommunityPostType, number> = {
   stack:     100,
   ask:        60,   // §13-B.5 rule
   office_hours: 120,
+  open_mic:   100,  // one-liner format · keep titles tight
 }
 
 export function NewCommunityPostPage() {
@@ -313,6 +315,7 @@ function heroTitle(type: CommunityPostType): string {
     case 'stack':        return 'Share a stack recipe, prompt, or review'
     case 'ask':          return 'Post a quick ask'
     case 'office_hours': return 'Host an Office Hours session'
+    case 'open_mic':     return 'Drop a one-liner on the mic'
   }
 }
 
@@ -322,6 +325,7 @@ function labelFor(type: CommunityPostType): string {
     case 'stack':        return 'Stack'
     case 'ask':          return 'Ask'
     case 'office_hours': return 'Office Hours'
+    case 'open_mic':     return 'Open Mic'
   }
 }
 
@@ -331,6 +335,7 @@ function listPathFor(type: CommunityPostType): string {
     case 'stack':        return '/community/stacks'
     case 'ask':          return '/community/asks'
     case 'office_hours': return '/community/office-hours'
+    case 'open_mic':     return '/community/open-mic'
   }
 }
 
@@ -340,6 +345,7 @@ function placeholderFor(type: CommunityPostType): string {
     case 'stack':        return 'Cursor + Supabase + Vercel for SaaS MVPs under $20/mo'
     case 'ask':          return 'Looking for a designer for 2 weeks (paid)'
     case 'office_hours': return 'Cursor AMA with the Cursor team'
+    case 'open_mic':     return 'Shipped a Stripe → Supabase webhook in 40 min. Worth it.'
   }
 }
 
@@ -349,5 +355,6 @@ function bodyPlaceholder(type: CommunityPostType): string {
     case 'stack':        return 'Paste the config / prompt / review here.\nMarkdown + code blocks supported.'
     case 'ask':          return 'Give responders enough to act — scope, constraint, link.'
     case 'office_hours': return 'Intro the session, the guest, and what folks should bring.'
+    case 'open_mic':     return 'Optional · one short paragraph if there\'s more to it.'
   }
 }
