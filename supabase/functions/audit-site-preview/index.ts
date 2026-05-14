@@ -49,22 +49,42 @@ const RATE_AUTHED_PER_IP   = 10                        // 2026-05-09 · was 50 �
 const RATE_PER_DOMAIN      = 5                         // §15-E.4 abuse defense — same domain ≤5/day
 const RATE_GLOBAL_DAILY    = 2000                      // shared global ceiling with audit-preview
 
+// Reject result tag · the caller can distinguish 'malformed input' from
+// 'GitHub repo URL accidentally pasted here'.
+type CanonResult =
+  | { ok: true;  origin: string; host: string }
+  | { ok: false; reason: 'invalid' | 'blocked_host' | 'repo_url' }
+
 // Canonical origin: `https://Example.COM/path?x=1#h` → `https://example.com`.
 // `www.` stripped so foo.com / www.foo.com dedupe to the same row.
-function canonicalSiteUrl(input: string): { origin: string; host: string } | null {
+//
+// Special case · GitHub repo URLs (`github.com/owner/repo[/...]`). Before
+// 2026-05-15 these silently collapsed to `https://github.com` and audited
+// the GitHub homepage — every repo paste produced the same useless row.
+// Now we reject them with reason='repo_url' so the caller can route the
+// request to the CLI walk-on path (audit-preview · which actually reads
+// the repo).
+function canonicalSiteUrl(input: string): CanonResult {
   try {
     const trimmed = input.trim()
-    if (!/^https?:\/\//i.test(trimmed)) return null
+    if (!/^https?:\/\//i.test(trimmed)) return { ok: false, reason: 'invalid' }
     const u = new URL(trimmed)
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return { ok: false, reason: 'invalid' }
     const host = u.host.toLowerCase().replace(/^www\./, '')
-    // Block obvious non-product hosts. Localhost / private IPs / our own
-    // domain are blocked since auditing them is meaningless or reflexive.
-    if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return null
-    if (host === 'commit.show' || host.endsWith('.commit.show')) return null
-    return { origin: `${u.protocol}//${host}`, host }
+    if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) {
+      return { ok: false, reason: 'blocked_host' }
+    }
+    if (host === 'commit.show' || host.endsWith('.commit.show')) {
+      return { ok: false, reason: 'blocked_host' }
+    }
+    // GitHub repo URL · 'github.com/owner/repo' (path with at least 2 segments)
+    // belongs on the CLI walk-on path, not the URL fast lane.
+    if (host === 'github.com' && /^\/[^/]+\/[^/]+/.test(u.pathname)) {
+      return { ok: false, reason: 'repo_url' }
+    }
+    return { ok: true, origin: `${u.protocol}//${host}`, host }
   } catch {
-    return null
+    return { ok: false, reason: 'invalid' }
   }
 }
 
@@ -266,11 +286,48 @@ Deno.serve(async (req) => {
   const source = (body.source ?? '').toString().trim().slice(0, 64) || null
 
   const canon = canonicalSiteUrl(body.site_url)
-  if (!canon) return json({
-    error:   'invalid_url',
-    message: 'Provide a public https URL (e.g. https://yoursite.com). Localhost · private IPs · commit.show itself are blocked.',
-    input:   body.site_url,
-  }, 400)
+  if (!canon.ok) {
+    if (canon.reason === 'repo_url') {
+      // GitHub repo URL pasted into the URL fast lane · forward to the
+      // CLI walk-on path (audit-preview) which actually reads the repo.
+      // Response shape is identical (same buildEnvelope output), so the
+      // Hero hook renders the result with no extra branching.
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+      const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      try {
+        const upstream = await fetch(`${SUPABASE_URL}/functions/v1/audit-preview`, {
+          method: 'POST',
+          headers: {
+            'Content-Type':     'application/json',
+            'Authorization':    `Bearer ${SERVICE_KEY}`,
+            'cf-connecting-ip': req.headers.get('cf-connecting-ip') ?? '',
+            'User-Agent':       req.headers.get('user-agent') ?? '',
+          },
+          body: JSON.stringify({
+            github_url: body.site_url,
+            force:      body.force === true,
+            source:     body.source ?? 'hero-hook-repo-redirect',
+          }),
+        })
+        const upstreamText = await upstream.text()
+        return new Response(upstreamText, {
+          status:  upstream.status,
+          headers: { ...CORS, 'content-type': 'application/json' },
+        })
+      } catch (e) {
+        return json({
+          error:   'repo_url_forward_failed',
+          message: `Couldn't reach the CLI walk-on audit path · ${(e as Error)?.message ?? 'unknown error'}`,
+          input:   body.site_url,
+        }, 502)
+      }
+    }
+    return json({
+      error:   'invalid_url',
+      message: 'Provide a public https URL (e.g. https://yoursite.com). Localhost · private IPs · commit.show itself are blocked.',
+      input:   body.site_url,
+    }, 400)
+  }
 
   // Resolve authenticated caller (browser session JWT). When present, stamp
   // creator_id on newly created previews so claim flow short-circuits.
