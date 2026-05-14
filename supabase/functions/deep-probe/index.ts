@@ -77,6 +77,12 @@ interface DeepProbeResult {
   // through to null when the screenshot endpoint fails or storage upload
   // errors — never fatal to the audit.
   screenshot_url:           string | null
+  // 2026-05-15 · internal route paths extracted from post-hydration HTML.
+  // Used by analyze-project's inspectMultiRoutes as a route-discovery
+  // fallback when the Tier A cheap fetch is bot-walled. Reachability is
+  // NOT measured here — these are "routes that exist on the page" only.
+  // Capped at 25 dedup'd same-origin paths.
+  internal_links:           string[]
   error:                    string | null
 }
 
@@ -92,6 +98,7 @@ const BLANK: DeepProbeResult = {
   },
   proven_reachable: false,
   screenshot_url: null,
+  internal_links: [],
   error: null,
 }
 
@@ -162,6 +169,41 @@ function extractMetaTags(html: string, pageUrl: string): DeepProbeResult['meta_t
     h1_text:            h1Text,
     og_image_url:       ogImageUrl,
   }
+}
+
+// Pull same-origin <a href> paths out of the post-hydration HTML so the
+// caller can show "routes that exist" even when the cheap Tier A fetch is
+// bot-walled and can't probe them. Returns deduped paths only (no host),
+// capped at 25 entries (enough for evidence — listing more is noise).
+//
+// Filters out: external hosts, anchors (#), mailto/tel/javascript schemes,
+// and obvious tracking/utility paths. Doesn't try to be exhaustive — we
+// just need the highest-confidence routes for "site has these surfaces".
+function extractInternalLinks(html: string, pageUrl: string): string[] {
+  if (!html) return []
+  let origin: string
+  try { origin = new URL(pageUrl).origin } catch { return [] }
+  const seen = new Set<string>()
+  const out:  string[] = []
+  // Scan up to 400KB · most rendered pages put nav links in the first chunk.
+  const slice = html.slice(0, 400_000)
+  const re = /<a\b[^>]*\shref=["']([^"']+)["']/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(slice)) !== null && out.length < 25) {
+    const raw = m[1].trim()
+    if (!raw) continue
+    if (raw.startsWith('#') || raw.startsWith('mailto:') || raw.startsWith('tel:') || raw.startsWith('javascript:')) continue
+    let abs: string
+    try { abs = new URL(raw, pageUrl).toString() } catch { continue }
+    if (!abs.startsWith(origin)) continue
+    const path = abs.slice(origin.length).split('#')[0].split('?')[0] || '/'
+    if (!path || path === '/' || seen.has(path)) continue
+    // Skip obvious utility / asset paths
+    if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf|map|json|xml|pdf|mp4)(\?|$)/i.test(path)) continue
+    seen.add(path)
+    out.push(path)
+  }
+  return out
 }
 
 function plainTextLength(html: string): number {
@@ -362,6 +404,7 @@ Deno.serve(async (req) => {
     proven_reachable:           true,
     screenshot_url:             screenshotUrl,
     screenshot_error:           screenshotError,    // surface to caller for debug · null on success
+    internal_links:             extractInternalLinks(html, body.url),
     error:                      null,
   }
   return json(result)

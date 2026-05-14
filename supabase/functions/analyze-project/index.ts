@@ -2252,6 +2252,13 @@ interface RoutesHealth {
   broken_paths:       string[]   // Claude evidence prompt surface
   sitemap_present:    boolean
   sitemap_url_count:  number
+  // 2026-05-15 · "routes that exist but we couldn't probe". Populated from
+  // deep_probe.internal_links when Tier A cheap fetch is bot-walled and
+  // multi-route probing all returns 0/403. These are EVIDENCE that the
+  // site has structure — they don't enter the reachable_rate calculation
+  // (no measurement of reachability) but they do prevent the audit from
+  // claiming "site has no internal routes" when really it has 12+.
+  detected_only:      string[]
 }
 
 const PRIORITY_ROUTE_PATHS = [
@@ -2416,6 +2423,10 @@ interface DeepProbeResult {
   meta_tags:                  DeepProbeMetaTags
   proven_reachable:           boolean
   screenshot_url:             string | null     // §15-E.3 wave 5 · uploaded to audit-screenshots bucket
+  // 2026-05-15 · same-origin route paths extracted from post-hydration HTML.
+  // Reachability NOT measured here — used as a route-discovery fallback when
+  // Tier A multi-route is bot-walled. Surfaced as evidence in transparency.
+  internal_links:             string[]
   error:                      string | null
 }
 const DEEP_PROBE_BLANK: DeepProbeResult = {
@@ -2429,6 +2440,7 @@ const DEEP_PROBE_BLANK: DeepProbeResult = {
   },
   proven_reachable: false,
   screenshot_url: null,
+  internal_links: [],
   error: null,
 }
 
@@ -2479,6 +2491,7 @@ async function inspectMultiRoutes(baseUrl: string): Promise<RoutesHealth> {
     probed: 0, reachable: 0, broken: 0, reachable_rate: 0,
     items: [], broken_paths: [],
     sitemap_present: false, sitemap_url_count: 0,
+    detected_only: [],
   }
   if (!baseUrl) return blank
 
@@ -2496,6 +2509,7 @@ async function inspectMultiRoutes(baseUrl: string): Promise<RoutesHealth> {
   const broken    = items.length - reachable
 
   return {
+    detected_only: [],   // Tier A succeeded · detected_only reserved for the bot-wall fallback path
     probed: items.length,
     reachable,
     broken,
@@ -2683,6 +2697,276 @@ function combineLh(m: LighthouseScores, d: LighthouseScores): LighthouseScores {
     accessibility: avg(m.accessibility, d.accessibility),
     bestPractices: avg(m.bestPractices, d.bestPractices),
     seo:           avg(m.seo,           d.seo),
+  }
+}
+
+// ── Audit transparency · per-probe accountability (§15-E · 2026-05-15) ──
+// Builds a structured "what we tried, what worked, what failed, why" block
+// so the result card can show users exactly which evidence the score is
+// grounded in. Critical for bot-walled sites — without this, a low score
+// reads as "engine thinks site is bad" when the reality is "engine
+// couldn't measure half the signals."
+type ProbeStatus =
+  | 'measured'        // probe ran successfully, gave usable evidence
+  | 'blocked'         // probe attempted but was refused (403 / 0 / TLS fingerprint)
+  | 'recovered_via'   // primary probe failed but a fallback source filled the slot
+  | 'unavailable'     // probe doesn't apply to this lane (e.g. repo probe on URL fast lane)
+  | 'inferred'        // signal derived from other measurements (e.g. routes detected via Tier B HTML)
+interface ProbeReport {
+  id:           string
+  label:        string
+  status:       ProbeStatus
+  detail:       string          // human-readable specific evidence (numbers / IDs / observed shape)
+  source?:      string          // for recovered_via / inferred
+  blocked_by?:  string          // for blocked
+  contributes_to?: string[]     // score slots this probe feeds
+}
+interface AuditTransparency {
+  lane:                    'url_fast_lane' | 'platform' | 'walk_on'
+  bot_walled:              boolean        // any cheap fetch blocked while lab/Chromium passed
+  bot_walled_reason?:      string         // human-readable summary if bot_walled
+  probes:                  ProbeReport[]
+  score_slot_basis: Array<{
+    slot:       string
+    points:     number
+    of:         number
+    evidence:   string       // what the points are grounded in (or why partial / zero)
+    measured:   boolean
+  }>
+}
+
+function buildAuditTransparency(input: {
+  isUrlFastLane: boolean
+  health:        { status: number; ok: boolean; elapsed_ms: number; error?: string }
+  routesHealth:  RoutesHealth
+  completeness:  CompletenessSignals
+  mergedCompleteness: CompletenessSignals
+  deepProbe:     DeepProbeResult
+  lh:            LighthouseScores
+  lhDesktop:     LighthouseScores
+  liveHealthPts: number
+  isAppForm:     boolean
+  useWebSlots:   boolean
+}): AuditTransparency {
+  const { isUrlFastLane, health, routesHealth, completeness, mergedCompleteness, deepProbe, lh, lhDesktop, liveHealthPts, useWebSlots } = input
+
+  const lane: AuditTransparency['lane'] = isUrlFastLane ? 'url_fast_lane' : 'platform'
+  const probes: ProbeReport[] = []
+
+  const lhOk = lh.performance >= 0 || lh.accessibility >= 0 || lh.bestPractices >= 0 || lh.seo >= 0
+  const lhDeskOk = lhDesktop.performance >= 0 || lhDesktop.accessibility >= 0
+  if (lhOk) {
+    probes.push({
+      id: 'lighthouse_mobile',
+      label: 'Lighthouse mobile (Google PageSpeed lab)',
+      status: 'measured',
+      detail: `Perf ${lh.performance} · A11y ${lh.accessibility} · BP ${lh.bestPractices} · SEO ${lh.seo}`,
+      contributes_to: ['Lighthouse 20pt'],
+    })
+  } else {
+    probes.push({
+      id: 'lighthouse_mobile',
+      label: 'Lighthouse mobile (Google PageSpeed lab)',
+      status: 'blocked',
+      detail: 'PageSpeed API returned no score · usually means the page itself errored or hit a hard timeout',
+      blocked_by: 'PageSpeed lab failure',
+      contributes_to: ['Lighthouse 20pt'],
+    })
+  }
+  if (lhDeskOk) {
+    probes.push({
+      id: 'lighthouse_desktop',
+      label: 'Lighthouse desktop',
+      status: 'measured',
+      detail: `Perf ${lhDesktop.performance} · A11y ${lhDesktop.accessibility} · BP ${lhDesktop.bestPractices} · SEO ${lhDesktop.seo}`,
+      contributes_to: ['Lighthouse 20pt', 'Responsive 2pt'],
+    })
+  }
+
+  // Live URL Health · cheap fetch
+  if (health.status === 0 || !health.ok) {
+    probes.push({
+      id: 'live_url_fetch',
+      label: 'Live URL health (Deno fetch)',
+      status: 'blocked',
+      detail: health.status === 0
+        ? `Edge-runtime fetch refused (status 0 · TLS fingerprint or DNS denied)`
+        : `Server returned HTTP ${health.status} (likely bot protection · DataDome / Akamai / Cloudflare bot fight)`,
+      blocked_by: 'TLS fingerprint or bot wall',
+      contributes_to: ['Live URL Health 5pt'],
+    })
+  } else {
+    probes.push({
+      id: 'live_url_fetch',
+      label: 'Live URL health (Deno fetch)',
+      status: 'measured',
+      detail: `HTTP ${health.status} · TTFB ${health.elapsed_ms}ms`,
+      contributes_to: ['Live URL Health 5pt'],
+    })
+  }
+
+  // Multi-route probe
+  if (routesHealth.probed > 0) {
+    probes.push({
+      id: 'multi_route',
+      label: 'Multi-route reachability',
+      status: 'measured',
+      detail: `${routesHealth.reachable}/${routesHealth.probed} reachable${routesHealth.broken > 0 ? ` · ${routesHealth.broken} broken` : ''}${routesHealth.sitemap_present ? ` · sitemap found (${routesHealth.sitemap_url_count} URLs)` : ''}`,
+      contributes_to: ['Live URL Health 5pt fold-in'],
+    })
+  } else if (routesHealth.detected_only.length > 0) {
+    probes.push({
+      id: 'multi_route',
+      label: 'Multi-route reachability',
+      status: 'inferred',
+      detail: `${routesHealth.detected_only.length} routes detected in post-hydration HTML but reachability unmeasured (same bot wall as live URL fetch)`,
+      source: 'Tier B Chromium HTML',
+      contributes_to: ['Evidence-only · no score impact'],
+    })
+  } else {
+    probes.push({
+      id: 'multi_route',
+      label: 'Multi-route reachability',
+      status: 'blocked',
+      detail: 'Could not extract internal routes from homepage (homepage fetch refused) and Tier B Chromium found no <a href> links',
+      blocked_by: 'TLS fingerprint or bot wall',
+      contributes_to: ['Live URL Health 5pt fold-in'],
+    })
+  }
+
+  // Completeness · 10 meta signals
+  if (completeness.fetched && deepProbe.fetched) {
+    probes.push({
+      id: 'completeness',
+      label: 'Meta + completeness (10 signals)',
+      status: 'measured',
+      detail: `${mergedCompleteness.filled}/10 signals present · UNION of Tier A head + Tier B post-hydration meta`,
+      contributes_to: ['Completeness 2pt'],
+    })
+  } else if (!completeness.fetched && deepProbe.fetched) {
+    probes.push({
+      id: 'completeness',
+      label: 'Meta + completeness (10 signals)',
+      status: 'recovered_via',
+      detail: `${mergedCompleteness.filled}/10 signals present · Tier A head fetch blocked, recovered from Tier B Chromium post-hydration HTML`,
+      source: 'Tier B Chromium HTML',
+      contributes_to: ['Completeness 2pt'],
+    })
+  } else if (completeness.fetched) {
+    probes.push({
+      id: 'completeness',
+      label: 'Meta + completeness (10 signals)',
+      status: 'measured',
+      detail: `${mergedCompleteness.filled}/10 signals present · Tier A only (Tier B Chromium not run)`,
+      contributes_to: ['Completeness 2pt'],
+    })
+  } else {
+    probes.push({
+      id: 'completeness',
+      label: 'Meta + completeness (10 signals)',
+      status: 'blocked',
+      detail: 'Both Tier A head fetch and Tier B Chromium failed · no meta tags recoverable',
+      blocked_by: 'cheap fetch + Chromium both refused',
+      contributes_to: ['Completeness 2pt'],
+    })
+  }
+
+  // Deep probe Chromium
+  if (deepProbe.fetched) {
+    probes.push({
+      id: 'deep_probe',
+      label: 'Deep probe (Cloudflare Browser Rendering Chromium)',
+      status: 'measured',
+      detail: [
+        deepProbe.hydration_framework ? `${deepProbe.hydration_framework} framework` : 'unknown framework',
+        `${deepProbe.html_length.toLocaleString()} chars HTML`,
+        `${deepProbe.post_hydration_text_length.toLocaleString()} chars post-hydration text`,
+        deepProbe.screenshot_url ? 'screenshot captured' : 'screenshot disabled',
+      ].join(' · '),
+      contributes_to: ['Live URL fallback', 'Completeness recovery', 'Routes detection'],
+    })
+  } else if (input.isUrlFastLane) {
+    probes.push({
+      id: 'deep_probe',
+      label: 'Deep probe (Cloudflare Browser Rendering Chromium)',
+      status: 'blocked',
+      detail: deepProbe.error ?? 'Chromium render failed or refused',
+      blocked_by: 'CF Browser Rendering refused or rate-limited',
+      contributes_to: ['Live URL fallback', 'Completeness recovery'],
+    })
+  } else {
+    probes.push({
+      id: 'deep_probe',
+      label: 'Deep probe (Cloudflare Browser Rendering Chromium)',
+      status: 'unavailable',
+      detail: 'Tier B Chromium runs on URL fast lane only · platform audits have full repo evidence so the cost-gated probe is skipped',
+      contributes_to: [],
+    })
+  }
+
+  // Live URL Health slot final basis
+  const liveSlotBasis = (() => {
+    if (health.ok && health.elapsed_ms < 3000) {
+      return { evidence: `homepage HTTP ${health.status} in ${health.elapsed_ms}ms${routesHealth.probed > 0 ? ` · multi-route ${(routesHealth.reachable_rate * 100).toFixed(0)}% reachable` : ''}`, measured: true }
+    }
+    if (routesHealth.probed > 0 && routesHealth.reachable >= routesHealth.probed * 0.8) {
+      return { evidence: `homepage fetch refused but ${routesHealth.reachable}/${routesHealth.probed} internal routes reachable · partial credit`, measured: false }
+    }
+    if (deepProbe.proven_reachable) {
+      return { evidence: 'homepage fetch refused but Tier B Chromium rendered the page · partial credit · TTFB unknown', measured: false }
+    }
+    const lhSucceeded = lh.performance > 0 || lh.accessibility > 0 || lh.bestPractices > 0 || lh.seo > 0
+    if (lhSucceeded) {
+      return { evidence: 'homepage fetch refused but Google PageSpeed lab scored the page · partial credit · TTFB unknown', measured: false }
+    }
+    return { evidence: 'no probe could reach the site · 0pt', measured: false }
+  })()
+
+  const lighthouseSucceeded = lhOk || lhDeskOk
+  const botWalled = !health.ok && (lighthouseSucceeded || deepProbe.proven_reachable)
+  const botWalledReason = botWalled
+    ? `${[
+        health.status === 0 ? 'Edge fetch TLS-blocked' : `Server returned HTTP ${health.status}`,
+        routesHealth.probed === 0 ? 'multi-route blocked' : null,
+      ].filter(Boolean).join(' · ')} · but ${[
+        lighthouseSucceeded ? 'Lighthouse passed' : null,
+        deepProbe.proven_reachable ? 'Chromium passed' : null,
+      ].filter(Boolean).join(' + ')} prove the site is live`
+    : undefined
+
+  return {
+    lane,
+    bot_walled: botWalled,
+    bot_walled_reason: botWalledReason,
+    probes,
+    score_slot_basis: [
+      {
+        slot: 'Lighthouse',
+        points: 0,    // analyze-project final scoring fills these in caller-side
+        of: 20,
+        measured: lhOk || lhDeskOk,
+        evidence: lhOk || lhDeskOk
+          ? `mobile ${lh.performance}/${lh.accessibility}/${lh.bestPractices}/${lh.seo}${lhDeskOk ? ` · desktop ${lhDesktop.performance}/${lhDesktop.accessibility}/${lhDesktop.bestPractices}/${lhDesktop.seo}` : ''}`
+          : 'PageSpeed lab failed · no Lighthouse score available',
+      },
+      {
+        slot: 'Live URL Health',
+        points: liveHealthPts,
+        of: 5,
+        measured: liveSlotBasis.measured,
+        evidence: liveSlotBasis.evidence,
+      },
+      {
+        slot: 'Completeness',
+        points: 0,
+        of: 2,
+        measured: completeness.fetched || deepProbe.fetched,
+        evidence: completeness.fetched || deepProbe.fetched
+          ? `${mergedCompleteness.filled}/10 meta signals present`
+          : 'no meta access · 0pt',
+      },
+      ...(useWebSlots ? [] : []),  // placeholder · could add Tech / Brief slots when relevant
+    ],
   }
 }
 
@@ -4358,10 +4642,23 @@ Deno.serve(async (req) => {
       probed: 0, reachable: 0, broken: 0, reachable_rate: 0,
       items: [], broken_paths: [],
       sitemap_present: false, sitemap_url_count: 0,
+      detected_only: [],
     } satisfies RoutesHealth),
     // Tier B · only fires on URL Fast Lane projects (cost gate)
     isUrlFastLane ? callDeepProbe(project.live_url!) : Promise.resolve(DEEP_PROBE_BLANK),
   ])
+
+  // ── Bot-wall fallback · detected-only routes (§15-E · 2026-05-15) ──
+  // When the Tier A cheap fetch can't extract internal route paths
+  // (homepage 0/403 from TLS-fingerprint / DataDome / Akamai), but the
+  // Tier B Chromium render saw the page, mine the post-hydration HTML
+  // for <a href> paths. These are structural EVIDENCE — they don't enter
+  // reachable_rate (we can't probe them either, same blockage), but they
+  // surface in transparency so we don't claim "no routes" when there are
+  // really 12+. naver / claude.ai class.
+  if (routesHealth.probed === 0 && deepProbe.fetched && deepProbe.internal_links.length > 0) {
+    routesHealth.detected_only = deepProbe.internal_links.slice(0, 25)
+  }
 
   // Score components · v3 form-aware (2026-04-28).
   //
@@ -5018,6 +5315,36 @@ Deno.serve(async (req) => {
   // is meant for the public analysis payload, not internal cost data.
   const { _engine_usage: engineUsage, ...claudeForSnapshot } = (claude ?? {}) as Record<string, unknown> & { _engine_usage?: EngineUsage }
 
+  // ── Audit transparency block (§15-E · 2026-05-15) ──
+  // Per-probe status so the result card can show "what we measured /
+  // what we couldn't / what we recovered via fallback" — the score
+  // breakdown then attaches to specific evidence, not just a number.
+  // Especially load-bearing for bot-walled sites where multiple cheap
+  // probes return 0/403 but Google PageSpeed + CF Chromium pass; users
+  // need to see that the LOW score reflects the BLOCKED measurements,
+  // not site quality.
+  const auditTransparency = buildAuditTransparency({
+    isUrlFastLane,
+    health,
+    routesHealth,
+    completeness,
+    mergedCompleteness,
+    deepProbe,
+    lh,
+    lhDesktop,
+    liveHealthPts,
+    isAppForm,
+    useWebSlots,
+  })
+  // Back-fill slot point values now that we know the final scoring math.
+  // The block was built earlier with placeholder zeros so the helper's
+  // narrative copy could stay in one place; this is just numeric injection.
+  for (const slot of auditTransparency.score_slot_basis) {
+    if (slot.slot === 'Lighthouse')      slot.points = useWebSlots ? lhScore.total : 0
+    if (slot.slot === 'Live URL Health') slot.points = liveHealthPts
+    if (slot.slot === 'Completeness')    slot.points = completenessPts
+  }
+
   const { data: snapshot, error: snapErr } = await admin.from('analysis_snapshots').insert([{
     project_id:         projectId,
     trigger_type:       triggerType,
@@ -5046,6 +5373,7 @@ Deno.serve(async (req) => {
       lighthouse_desktop:   lhDesktop,
       live_url_health:      health,
       security_headers:     securityHeaders,
+      audit_transparency:   auditTransparency,
     },
     parent_snapshot_id: parent?.id ?? null,
     delta_from_parent:  Object.keys(deltaFromParent).length ? deltaFromParent : null,

@@ -93,6 +93,35 @@ interface LiveUrlHealth {
   elapsed_ms?: number
 }
 
+// Per-probe accountability · §15-E 2026-05-15. The engine writes a
+// structured "what we tried · what worked · what failed · why" block
+// into rich_analysis.audit_transparency. Surfaced verbatim in the
+// result card so the score is grounded in specific evidence rather
+// than a black-box number — especially load-bearing for bot-walled
+// sites where Live URL / multi-route get refused but Lighthouse +
+// Chromium pass. See analyze-project buildAuditTransparency().
+interface AuditTransparency {
+  lane:               'url_fast_lane' | 'platform' | 'walk_on'
+  bot_walled:         boolean
+  bot_walled_reason?: string
+  probes: Array<{
+    id:              string
+    label:           string
+    status:          'measured' | 'blocked' | 'recovered_via' | 'unavailable' | 'inferred'
+    detail:          string
+    source?:         string
+    blocked_by?:     string
+    contributes_to?: string[]
+  }>
+  score_slot_basis: Array<{
+    slot:     string
+    points:   number
+    of:       number
+    evidence: string
+    measured: boolean
+  }>
+}
+
 interface SnapshotRich {
   // Canonical scout_brief shape · matches recentAudits.ts and the Edge
   // Function output (strengths / weaknesses, not strengths / concerns).
@@ -106,10 +135,11 @@ interface SnapshotRich {
   lighthouse_mobile?:    LighthouseSlot
   lighthouse_desktop?:   LighthouseSlot
   live_url_health?:      LiveUrlHealth
-  routes_health?:        RoutesHealth
+  routes_health?:        RoutesHealth & { detected_only?: string[] }
   completeness_signals?: CompletenessSignals
   security_headers?:     SecurityHeaders
   deep_probe?:           DeepProbeSummary
+  audit_transparency?:   AuditTransparency
 }
 
 interface SiteAuditResult {
@@ -879,6 +909,178 @@ function formatAge(ts: number): string {
   return `${days} day${days === 1 ? '' : 's'}`
 }
 
+// Audit transparency · per-probe accountability + score basis · §15-E.
+// The result card's most load-bearing block when the site is bot-walled.
+// Without this, a 38/100 on naver.com reads as "engine thinks naver is
+// bad" when the reality is "engine could not measure half the slots."
+//
+// Renders three layers:
+//   1. Bot-wall notice (if applicable) — explains the underlying refusal
+//      and which probes still passed, so the user knows the site is OK
+//   2. Score slot basis — for each scoring slot: points / of / evidence /
+//      measured. Failed slots show "0/5 · why 0pt"
+//   3. Probe ledger — every probe attempted: status chip + detail + what
+//      it contributes to. Always expandable, default open when bot-walled
+//      so the explanation is immediately visible
+function TransparencyPanel({ transparency }: { transparency?: AuditTransparency }) {
+  // Open by default when bot-walled · we WANT the user to see the
+  // explanation. Plain audits collapse to keep the result hero clean.
+  const [open, setOpen] = useState(transparency?.bot_walled === true)
+  if (!transparency || !transparency.probes || transparency.probes.length === 0) return null
+
+  const { bot_walled, bot_walled_reason, probes, score_slot_basis } = transparency
+  const measuredCount = probes.filter(p => p.status === 'measured').length
+  const blockedCount  = probes.filter(p => p.status === 'blocked').length
+  const recoveredCount = probes.filter(p => p.status === 'recovered_via').length
+  const inferredCount  = probes.filter(p => p.status === 'inferred').length
+
+  return (
+    <div
+      className="mb-6"
+      style={{
+        border: bot_walled ? '1px solid rgba(0,212,170,0.25)' : '1px solid rgba(248,245,238,0.08)',
+        borderRadius: '2px',
+        background: bot_walled ? 'rgba(0,212,170,0.04)' : 'rgba(6,12,26,0.35)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 font-mono text-xs tracking-widest"
+        style={{
+          background: 'transparent',
+          color: bot_walled ? '#00D4AA' : 'var(--gold-500)',
+          border: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        <span>
+          {bot_walled ? '⚠ BOT-WALLED · TRANSPARENCY' : '// AUDIT TRANSPARENCY'}
+          <span style={{ color: 'var(--text-muted)' }}>
+            {' · '}{measuredCount} measured
+            {recoveredCount > 0 && <> · {recoveredCount} recovered</>}
+            {inferredCount > 0 && <> · {inferredCount} inferred</>}
+            {blockedCount > 0 && <> · <span style={{ color: 'var(--scarlet)' }}>{blockedCount} blocked</span></>}
+          </span>
+        </span>
+        <span style={{ color: 'var(--text-muted)' }}>{open ? '−' : '+'}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-5 pt-1 space-y-5">
+          {/* Bot-wall explainer · only when the site refused our cheap probes
+              but lab/Chromium got through. Frames bot protection as a polish
+              signal, not a fault, and explains why some slots scored low. */}
+          {bot_walled && (
+            <div
+              className="px-3 py-3 font-mono text-xs"
+              style={{
+                background: 'rgba(0,212,170,0.06)',
+                border: '1px dashed rgba(0,212,170,0.3)',
+                borderRadius: '2px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
+              }}
+            >
+              <div className="mb-2" style={{ color: '#00D4AA' }}>
+                This site uses production-grade bot protection.
+              </div>
+              <div className="mb-2">
+                {bot_walled_reason ?? 'Our cheap probes were refused, but Google PageSpeed and Cloudflare Chromium got through — proof the site is live and serving real users.'}
+              </div>
+              <div style={{ color: 'var(--text-muted)' }}>
+                The slots that score below show evidence we recovered from sources that passed. Slots marked "blocked" couldn't be measured at all and contribute 0pt — not because the site is weak there, but because we had no way to check.
+              </div>
+            </div>
+          )}
+
+          {/* Score slot basis · per-slot point grounding */}
+          {score_slot_basis && score_slot_basis.length > 0 && (
+            <div>
+              <SectionLabel>Score basis · per slot</SectionLabel>
+              <div className="space-y-2">
+                {score_slot_basis.map(slot => {
+                  const ratio = slot.of > 0 ? slot.points / slot.of : 0
+                  const color = ratio >= 0.8 ? 'var(--gold-500)' : ratio >= 0.5 ? 'var(--cream)' : ratio > 0 ? '#E0B341' : 'var(--scarlet)'
+                  return (
+                    <div key={slot.slot} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs">
+                      <span style={{ color: 'var(--text-secondary)', minWidth: 130 }}>{slot.slot}</span>
+                      <span className="tabular-nums" style={{ color, fontWeight: 600 }}>
+                        {slot.points}/{slot.of}
+                      </span>
+                      {!slot.measured && (
+                        <span
+                          className="px-1.5 py-0.5 text-[10px] tracking-widest"
+                          style={{
+                            background: 'rgba(200,16,46,0.08)',
+                            border: '1px solid rgba(200,16,46,0.35)',
+                            color: 'var(--scarlet)',
+                            borderRadius: '2px',
+                          }}
+                        >
+                          UNMEASURED
+                        </span>
+                      )}
+                      <span style={{ color: 'var(--text-muted)', flex: '1 1 100%', paddingLeft: 130, lineHeight: 1.5 }}>
+                        {slot.evidence}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Probe ledger · every attempt + status + detail */}
+          <div>
+            <SectionLabel>Probe ledger</SectionLabel>
+            <div className="space-y-2">
+              {probes.map(p => <ProbeRow key={p.id} probe={p} />)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProbeRow({ probe }: { probe: AuditTransparency['probes'][number] }) {
+  const chip =
+    probe.status === 'measured'       ? { bg: 'rgba(0,212,170,0.08)',  border: 'rgba(0,212,170,0.35)',  color: '#00D4AA',          label: 'MEASURED' }
+  : probe.status === 'recovered_via'  ? { bg: 'rgba(240,192,64,0.08)', border: 'rgba(240,192,64,0.35)', color: 'var(--gold-500)',  label: 'RECOVERED' }
+  : probe.status === 'inferred'       ? { bg: 'rgba(96,165,250,0.08)', border: 'rgba(96,165,250,0.4)',  color: '#60A5FA',          label: 'INFERRED' }
+  : probe.status === 'unavailable'    ? { bg: 'rgba(248,245,238,0.04)',border: 'rgba(248,245,238,0.15)',color: 'var(--text-muted)',label: 'N/A' }
+  :                                     { bg: 'rgba(200,16,46,0.08)',  border: 'rgba(200,16,46,0.4)',   color: 'var(--scarlet)',   label: 'BLOCKED' }
+  return (
+    <div className="font-mono text-xs" style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span
+          className="px-1.5 py-0.5 text-[10px] tracking-widest"
+          style={{
+            background:   chip.bg,
+            border:       `1px solid ${chip.border}`,
+            color:        chip.color,
+            borderRadius: '2px',
+            flexShrink:   0,
+          }}
+        >
+          {chip.label}
+        </span>
+        <span style={{ color: 'var(--cream)' }}>{probe.label}</span>
+      </div>
+      <div className="pl-1 mt-1" style={{ color: 'var(--text-muted)' }}>
+        {probe.detail}
+        {probe.source && <span> · via <span style={{ color: 'var(--text-secondary)' }}>{probe.source}</span></span>}
+      </div>
+      {probe.contributes_to && probe.contributes_to.length > 0 && (
+        <div className="pl-1 mt-0.5 text-[10px] tracking-wide" style={{ color: 'var(--text-faint)' }}>
+          → feeds: {probe.contributes_to.join(' · ')}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Per-probe evidence panel · shows what the engine actually measured.
 // Replaces the old single-line "ROUTES PROBED · 6/6 reachable" with a
 // 3-block expandable structure:
@@ -1393,6 +1595,8 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
           </div>
         </div>
       )}
+
+      <TransparencyPanel transparency={rich.audit_transparency} />
 
       <ProbedSignals
         lhMobile={lhMobile}
