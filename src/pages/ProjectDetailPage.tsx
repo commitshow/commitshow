@@ -46,6 +46,7 @@ import { recordProjectView } from '../lib/projectViews'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { OwnerBriefPanel } from '../components/OwnerBriefPanel'
 import { BackstagePanel } from '../components/BackstagePanel'
+import { AuditCoachPanel } from '../components/AuditCoachPanel'
 import { ProjectComments } from '../components/ProjectComments'
 import { ShareToXModal } from '../components/ShareToXModal'
 import { ShareOnXMenu, type ShareOption } from '../components/ShareOnXMenu'
@@ -114,6 +115,21 @@ export function ProjectDetailPage() {
   // scrolling past Activity.
   const [heroRerunBusy, setHeroRerunBusy] = useState(false)
   const [heroRerunError, setHeroRerunError] = useState<string | null>(null)
+  // §16.2 Coach · remember the band right BEFORE each re-audit so the
+  // panel can detect "you climbed from Early → Building" and fire the
+  // soft audition prompt. null on first paint · gets stamped at the
+  // moment the re-audit kicks off, so the post-audit currentBand can
+  // diff against it.
+  const [preReauditBand, setPreReauditBand] = useState<ReturnType<typeof laneScoreBand> | null>(null)
+  // §16.2 Coach · stash the raw snapshot JSON columns so the Coach
+  // panel can read rich_analysis / lighthouse / github_signals without
+  // forcing snapshotResult (the AnalysisResult shape) to grow. Set in
+  // the initial fetch + on every re-audit.
+  const [latestSnapRaw, setLatestSnapRaw] = useState<{
+    rich:          Record<string, unknown> | null
+    lighthouse:    Record<string, unknown> | null
+    githubSignals: Record<string, unknown> | null
+  } | null>(null)
   // Score-jump share prompt · opens after a re-audit lands a delta ≥
   // SHARE_PROMPT_THRESHOLD. Captures the post-audit number so the modal
   // shows the new score even if `project` is mid-refresh.
@@ -223,6 +239,13 @@ export function ProjectDetailPage() {
           github_ok:  proj.github_accessible,
           rich:       (latest.rich_analysis as AnalysisResult['rich']) ?? null,
         })
+        // §16.2 Coach raw snapshot · same set, kept verbatim so the
+        // detection catalog reads the same shape the engine wrote.
+        setLatestSnapRaw({
+          rich:          (latest.rich_analysis as Record<string, unknown>) ?? null,
+          lighthouse:    (latest.lighthouse    as Record<string, unknown>) ?? null,
+          githubSignals: (latest.github_signals as Record<string, unknown>) ?? null,
+        })
       }
       setTimeline(tlPts)
       setForecasts(fcRows)
@@ -259,6 +282,11 @@ export function ProjectDetailPage() {
   // top-of-page button instead of the SCOUT BRIEF header.
   const handleHeroReanalyze = async () => {
     if (!project || heroRerunBusy) return
+    // Stamp the band BEFORE the re-audit so the Coach can detect a
+    // band climb on the next render (after setProject has fired with
+    // the new score). Doing it here in the handler — not on every
+    // render — keeps the comparison stable.
+    setPreReauditBand(laneScoreBand(displayScore(project)))
     setHeroRerunBusy(true)
     setHeroRerunError(null)
     try {
@@ -281,6 +309,24 @@ export function ProjectDetailPage() {
       if (refreshed) setProject(refreshed)
       setTimeline(tl)
       setApplauds(ap)
+      // §16.2 Coach raw refresh · re-fetch the new snapshot's raw JSON
+      // columns so detectQuickWins runs against fresh evidence. Cheap
+      // single-row read; doesn't block the score sync above.
+      void supabase
+        .from('analysis_snapshots')
+        .select('rich_analysis, lighthouse, github_signals')
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!data) return
+          setLatestSnapRaw({
+            rich:          (data.rich_analysis as Record<string, unknown>) ?? null,
+            lighthouse:    (data.lighthouse    as Record<string, unknown>) ?? null,
+            githubSignals: (data.github_signals as Record<string, unknown>) ?? null,
+          })
+        })
       window.setTimeout(() => {
         window.scrollTo({ top: 0, behavior: 'auto' })
       }, 0)
@@ -466,7 +512,7 @@ export function ProjectDetailPage() {
                 // BACKSTAGE · ONLY YOU CAN SEE
               </div>
               <div className="font-mono text-[11px] mt-1" style={{ color: 'rgba(248,245,238,0.65)' }}>
-                Backstage is private. Audition to join the MVPs already on stage · lands on the live ladder · Encore at score 85+.
+                Backstage is private. Climb the coach below first, then audition to share with the MVPs already on stage.
               </div>
             </div>
             <a
@@ -483,6 +529,26 @@ export function ProjectDetailPage() {
               BRING IT ON STAGE →
             </a>
           </div>
+        )}
+
+        {/* ── Pre-audition Coach · §16.2 (2026-05-15) ──
+              Backstage-only owner surface. Lists 3-6 detected quick wins
+              with how-to + checkbox + Re-audit CTA. Reuses the existing
+              handleHeroReanalyze pipeline so a successful re-audit cycles
+              the panel with fresh evidence + fires the soft audition
+              prompt when the band climbs. Hidden once the project is on
+              stage (status='active') — by then the audit + AnalysisResultCard
+              already cover the same ground. */}
+        {project.status === 'backstage' && isOwner && (
+          <AuditCoachPanel
+            project={project}
+            snapshotRich={latestSnapRaw?.rich ?? null}
+            lighthouse={latestSnapRaw?.lighthouse ?? null}
+            githubSignals={latestSnapRaw?.githubSignals ?? null}
+            onReanalyze={handleHeroReanalyze}
+            reanalyzing={heroRerunBusy}
+            previousBand={preReauditBand}
+          />
         )}
 
         {/* ── Compact Hero (description moved to Overview pullquote) ── */}
