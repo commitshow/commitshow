@@ -57,6 +57,7 @@ interface CliUsage {
     project_name: string
     github_url:   string | null
     score_total:  number
+    score_auto:   number
     trigger_type: string
     created_at:   string
   }>
@@ -306,7 +307,7 @@ export function AdminPage() {
       // §11-NEW.7 admin · latest 10 CLI calls = snapshots whose project is
       // status='preview' (the walk-on bucket). Inner join via embedded select.
       supabase.from('analysis_snapshots')
-        .select('id, project_id, score_total, trigger_type, created_at, projects!inner(project_name, github_url, status)')
+        .select('id, project_id, score_total, score_auto, trigger_type, created_at, projects!inner(project_name, github_url, status)')
         .eq('projects.status', 'preview')
         .order('created_at', { ascending: false })
         .limit(10),
@@ -332,7 +333,8 @@ export function AdminPage() {
     const globalCount = (globalRes.data as { count?: number } | null)?.count ?? 0
     type RecentRaw = {
       id: string; project_id: string | null
-      score_total: number | null; trigger_type: string | null; created_at: string
+      score_total: number | null; score_auto: number | null
+      trigger_type: string | null; created_at: string
       projects: { project_name: string; github_url: string | null } | null
     }
     const recentCalls = ((recentRes.data as unknown as RecentRaw[]) ?? []).map(r => ({
@@ -341,6 +343,7 @@ export function AdminPage() {
       project_name: r.projects?.project_name ?? '(unknown)',
       github_url:   r.projects?.github_url ?? null,
       score_total:  r.score_total ?? 0,
+      score_auto:   r.score_auto ?? 0,
       trigger_type: r.trigger_type ?? '?',
       created_at:   r.created_at,
     }))
@@ -1087,7 +1090,10 @@ function AuditsTab({ stats, recent, onForceRefresh, rowBusy, rowOut, hasToken }:
                     </div>
                     <div className="font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.github_url ?? ''}</div>
                   </div>
-                  <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : '#fff' }}>{r.score_total}</span>
+                  <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : '#fff' }}>
+                    {r.score_total}<span style={{ color: 'rgba(255,255,255,0.45)' }}>/100</span>
+                    <span className="ml-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>(raw {r.score_auto})</span>
+                  </span>
                   <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.trigger_type}</span>
                   <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{new Date(r.created_at).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}</span>
                   <button
@@ -1211,7 +1217,8 @@ function CliTab({ usage, onForceRefresh, rowBusy, rowOut, hasToken }: {
                     {r.trigger_type}
                   </span>
                   <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--gold-500)' }}>
-                    {r.score_total}/100
+                    {r.score_total}<span style={{ color: 'rgba(255,255,255,0.4)' }}>/100</span>
+                    <span className="ml-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>(raw {r.score_auto})</span>
                   </span>
                   <button
                     disabled={busy || !r.github_url || !hasToken}
