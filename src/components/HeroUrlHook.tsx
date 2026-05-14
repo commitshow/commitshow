@@ -1464,6 +1464,13 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
   // the score card stop visitors from mistaking 100/100 for a full audit.
   const polishScore = urlLanePolish(snap?.score_auto ?? result.project.score_auto ?? 0)
 
+  // Bot-walled audits get a different visual treatment: gray score + gray
+  // accent border instead of confident gold. The number is still valid (it
+  // reflects what we could measure), but the visual demotion stops users
+  // from reading the score as a verdict on the site's quality. The
+  // TransparencyPanel below carries the explanation.
+  const isBotWalled = rich.audit_transparency?.bot_walled === true
+
   const band =
     polishScore >= 90 ? 'Top-tier polish' :
     polishScore >= 75 ? 'Strong'          :
@@ -1477,15 +1484,21 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
       className="max-w-3xl"
       style={{
         background: 'rgba(6,12,26,0.55)',
-        border: '1px solid rgba(240,192,64,0.18)',
+        // Border accent flips to gray (--text-faint at low alpha) when the
+        // audit was bot-walled — visually demotes the score from "confident
+        // gold finding" to "incomplete measurement". Same number, different
+        // visual weight, because the user shouldn't read 38/100 as a verdict.
+        border: isBotWalled ? '1px solid rgba(248,245,238,0.15)' : '1px solid rgba(240,192,64,0.18)',
         borderRadius: '2px',
         padding: '28px 24px',
       }}
     >
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 mb-6">
         <div>
-          <div className="font-mono text-xs tracking-widest mb-1" style={{ color: 'var(--gold-500)' }}>
-            URL AUDIT · partial · repo signals not seen
+          <div className="font-mono text-xs tracking-widest mb-1" style={{ color: isBotWalled ? 'var(--text-muted)' : 'var(--gold-500)' }}>
+            {isBotWalled
+              ? 'URL AUDIT · partial · bot-walled · see transparency below'
+              : 'URL AUDIT · partial · repo signals not seen'}
           </div>
           <div className="font-display font-black text-2xl sm:text-3xl truncate" style={{ color: 'var(--cream)' }}>
             {result.project.project_name}
@@ -1493,12 +1506,15 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
         </div>
         <div className="ml-auto text-right">
           <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--text-muted)' }}>POLISH</div>
-          <div className="font-display font-black" style={{ color: 'var(--gold-500)', fontSize: '2.5rem', lineHeight: 1 }}>
+          {/* Score color · gold (confident measurement) vs gray (bot-walled ·
+              incomplete). Gray uses var(--text-secondary) instead of full
+              cream so it reads as "we hedged this", not "we shipped 0pt." */}
+          <div className="font-display font-black" style={{ color: isBotWalled ? 'var(--text-secondary)' : 'var(--gold-500)', fontSize: '2.5rem', lineHeight: 1 }}>
             {polishScore}<span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}> / 100</span>
           </div>
           <div className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{band}</div>
           <div className="font-mono text-[10px] tracking-widest mt-1" style={{ color: 'var(--text-muted)' }}>
-            URL signals only
+            {isBotWalled ? 'unmeasured slots' : 'URL signals only'}
           </div>
         </div>
       </div>
