@@ -5016,7 +5016,22 @@ Deno.serve(async (req) => {
     github_signals:     gh.signals,
     // Mix in the completeness signals so the snapshot is self-contained:
     // future reruns / UI ledgers can reference exactly what was checked.
-    rich_analysis:      { ...claudeForSnapshot, completeness_signals: mergedCompleteness, routes_health: routesHealth, deep_probe: deepProbe },
+    // Probed-signal echo · 2026-05-15. The URL fast lane result card surfaces
+    // a per-signal breakdown (LH mobile + desktop · completeness checklist ·
+    // deep probe · routes · live URL health) so the wait pays back in detail
+    // proportional to the analysis depth. Mobile LH already lives in the
+    // top-level `lighthouse` column, but desktop / health were prompt-only
+    // before this change.
+    rich_analysis:      {
+      ...claudeForSnapshot,
+      completeness_signals: mergedCompleteness,
+      routes_health:        routesHealth,
+      deep_probe:           deepProbe,
+      lighthouse_mobile:    lh,
+      lighthouse_desktop:   lhDesktop,
+      live_url_health:      health,
+      security_headers:     securityHeaders,
+    },
     parent_snapshot_id: parent?.id ?? null,
     delta_from_parent:  Object.keys(deltaFromParent).length ? deltaFromParent : null,
     score_total_delta:  scoreTotalDelta,

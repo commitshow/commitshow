@@ -23,6 +23,76 @@ import { AuthModal } from './AuthModal'
 import { openTweetIntent } from '../lib/shareTweet'
 import { urlLanePolish } from '../lib/laneScore'
 
+// Per-signal echo · what the engine actually probed. Surfaced verbatim
+// in the result card so the wait reads as "we measured X, Y, Z" rather
+// than a single black-box number. Mirrors what analyze-project writes to
+// analysis_snapshots.rich_analysis (see backend `rich_analysis: { ... }`).
+interface LighthouseSlot {
+  performance?:   number | null     // 0-100 · -1 (LH_NOT_ASSESSED) when unassessed
+  accessibility?: number | null
+  bestPractices?: number | null
+  seo?:           number | null
+  total_byte_weight_kb?: number | null
+  dom_size?:             number | null
+  console_errors_count?: number | null
+  network_failures_count?: number | null
+}
+interface RoutesHealth {
+  probed:           number
+  reachable:        number
+  broken:           number
+  reachable_rate:   number
+  broken_paths?:    string[]
+  sitemap_present?: boolean
+  sitemap_url_count?: number
+  items?: Array<{ path?: string; status?: number; elapsed_ms?: number }>
+}
+interface CompletenessSignals {
+  has_og_image?: boolean
+  has_og_title?: boolean
+  has_og_description?: boolean
+  has_twitter_card?: boolean
+  has_apple_touch?: boolean
+  has_manifest?: boolean
+  has_theme_color?: boolean
+  has_favicon?: boolean
+  has_canonical?: boolean
+  has_meta_desc?: boolean
+  filled?: number
+  of?:     number
+}
+interface SecurityHeaders {
+  has_csp?: boolean
+  has_hsts?: boolean
+  has_frame_protection?: boolean
+  has_content_type_opt?: boolean
+  has_referrer_policy?: boolean
+  has_permissions_policy?: boolean
+  filled?: number
+  of?:     number
+}
+interface DeepProbeSummary {
+  fetched?:             boolean
+  via?:                 string
+  proven_reachable?:    boolean
+  hydration_framework?: string | null
+  html_length?:                number
+  post_hydration_text_length?: number
+  screenshot_url?:      string | null
+  meta_tags?: {
+    has_og_title?:    boolean
+    has_og_image?:    boolean
+    has_canonical?:   boolean
+    has_meta_desc?:   boolean
+    has_h1?:          boolean
+  }
+}
+interface LiveUrlHealth {
+  status?:     number
+  ok?:         boolean
+  elapsed_ms?: number
+}
+
 interface SnapshotRich {
   // Canonical scout_brief shape · matches recentAudits.ts and the Edge
   // Function output (strengths / weaknesses, not strengths / concerns).
@@ -30,34 +100,49 @@ interface SnapshotRich {
     strengths?:  Array<{ axis?: string | null; bullet?: string }>
     weaknesses?: Array<{ axis?: string | null; bullet?: string }>
   }
-  routes_health?: { probed: number; reachable: number; broken: number; reachable_rate: number; broken_paths?: string[] }
-  deep_probe?: {
-    screenshot_url?: string | null
-    proven_reachable?: boolean
-    hydration_framework?: string | null
-  }
+  // Per-probe echo · 2026-05-15. Engine writes both mobile + desktop LH,
+  // live URL stopwatch, completeness checklist, security headers, deep
+  // probe summary into rich_analysis so the result card can show the work.
+  lighthouse_mobile?:    LighthouseSlot
+  lighthouse_desktop?:   LighthouseSlot
+  live_url_health?:      LiveUrlHealth
+  routes_health?:        RoutesHealth
+  completeness_signals?: CompletenessSignals
+  security_headers?:     SecurityHeaders
+  deep_probe?:           DeepProbeSummary
 }
 
 interface SiteAuditResult {
   project_id: string
   project: { id: string; slug?: string | null; project_name: string; live_url: string; score_total: number; score_auto: number; status: string; creator_id: string | null }
-  latest_snapshot: { id: string; created_at: string; score_total: number; score_auto: number; rich_analysis: SnapshotRich } | null
+  // `lighthouse` is the snapshot's top-level mobile LH column · we also
+  // pull `lighthouse_desktop` from rich_analysis so the result card can
+  // render both form factors side-by-side. score_total_delta surfaces the
+  // self-delta chip when this isn't the first snapshot for the project.
+  latest_snapshot: { id: string; created_at: string; score_total: number; score_auto: number; score_total_delta?: number | null; lighthouse?: LighthouseSlot | null; rich_analysis: SnapshotRich } | null
   status: 'running' | 'ready'
   cache_hit?: boolean
 }
 
 type Phase = 'idle' | 'running' | 'ready' | 'error'
 
-// 3 quick probes (~5.5s) + the long-running engine reasoning step. Engine
-// step uses an indeterminate progress bar capped at 95% so the wait feels
-// purposeful — analyze-project's Claude call alone is 60-90s.
-const STEP_LABELS = [
-  'Lighthouse mobile',
-  'Live URL probe',
-  'Multi-route check',
-  'Audit findings',
+// Surface probes are scripted to feel sequential, but the Edge Function
+// actually runs them in parallel (Promise.all · analyze-project line ~4335).
+// The animated cadence buys ~9s of "we're really measuring" perception
+// before the Claude reasoning step takes over the wait (60-120s). Each
+// label carries a sublabel describing the actual probe — the wait should
+// read as professional depth, not opaque spinner. Stages map to the
+// engine's real evidence sources (see analyze-project rich_analysis).
+const STEP_LABELS: Array<{ label: string; sub: string }> = [
+  { label: 'Lighthouse · mobile',      sub: 'Moto G4 · Slow 4G · Perf · A11y · BP · SEO' },
+  { label: 'Lighthouse · desktop',     sub: '1366×768 · same 4 categories · throttling off' },
+  { label: 'Live URL health',          sub: 'TLS handshake · TTFB · 200 OK · redirect chain' },
+  { label: 'Multi-route reachability', sub: 'sitemap.xml + 6 internal paths · 2xx / 4xx / 5xx ratio' },
+  { label: 'Meta + completeness',      sub: 'og:image · twitter:card · manifest · canonical · favicon · 6 more' },
+  { label: 'Deep probe (post-hydration)', sub: 'Chromium render · console errors · network failures · screenshot' },
+  { label: 'Audit reasoning',          sub: 'cross-checking 14 vibe-coding failure frames · 5+3 ledger' },
 ]
-const ENGINE_STEP_INDEX = STEP_LABELS.length - 1     // 3 = "Audit findings"
+const ENGINE_STEP_INDEX = STEP_LABELS.length - 1     // last = "Audit reasoning"
 const ENGINE_FILL_TARGET_MS = 70_000                  // primary fill 0 → 90% over 70s
 const ENGINE_TAIL_FILL_MS   = 60_000                  // tail creep 90 → 99% over next 60s · keeps motion alive
 // Rotating reassurance copy · cycled every CYCLE_MS so the user sees the
@@ -205,9 +290,11 @@ export function HeroUrlHook() {
     setStep(0)
     setEnginePct(0)
 
-    // 3 quick probes (~1.8s each = 5.4s total) → settle on engine step ·
+    // 6 quick probes (~1.5s each = 9s total) → settle on engine step ·
     // engine step shows the long indeterminate bar while we poll for the
-    // analyze-project snapshot (~60-90s total).
+    // analyze-project snapshot (~60-120s total). Cadence is theatrical —
+    // probes really run in parallel — but the sequential reveal gives the
+    // wait a "we're measuring N things" rhythm.
     if (typeof window !== 'undefined' &&
         !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       let s = 0
@@ -218,7 +305,7 @@ export function HeroUrlHook() {
           if (stepTimer.current) { window.clearInterval(stepTimer.current); stepTimer.current = null }
           startEngineProgress()
         }
-      }, 1800)
+      }, 1500)
     } else {
       setStep(ENGINE_STEP_INDEX)
       startEngineProgress()
@@ -300,7 +387,7 @@ export function HeroUrlHook() {
       try {
         const { data: snap } = await supabase
           .from('analysis_snapshots')
-          .select('id, created_at, score_total, score_auto, score_total_delta, rich_analysis')
+          .select('id, created_at, score_total, score_auto, score_total_delta, lighthouse, rich_analysis')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -447,29 +534,45 @@ export function HeroUrlHook() {
 
         {phase === 'running' && (
           <div className="max-w-2xl">
-            <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>
+            <div className="font-mono text-xs tracking-widest mb-1" style={{ color: 'var(--gold-500)' }}>
               AUDITING {prettyHost(url)}
             </div>
-            <ul className="space-y-2.5 mb-4">
-              {STEP_LABELS.map((label, i) => {
+            <div className="font-mono text-[10px] tracking-widest mb-4" style={{ color: 'var(--text-muted)' }}>
+              {STEP_LABELS.length} STAGES · SURFACE PROBES THEN ENGINE REASONING
+            </div>
+            <ul className="space-y-2 mb-4">
+              {STEP_LABELS.map(({ label, sub }, i) => {
                 const state = i < step ? 'done' : i === step ? 'active' : 'pending'
                 const isEngineActive = i === ENGINE_STEP_INDEX && state === 'active'
                 return (
                   <li key={label}>
-                    <div className="flex items-center gap-3 font-mono text-sm" style={{
+                    <div className="flex items-baseline gap-3 font-mono text-sm" style={{
                       color: state === 'done'    ? 'var(--cream)'
                            : state === 'active'  ? 'var(--gold-500)'
                            :                       'var(--text-muted)',
                     }}>
-                      <span style={{ width: 14, display: 'inline-block', textAlign: 'center' }}>
+                      <span style={{ width: 14, display: 'inline-block', textAlign: 'center', flexShrink: 0 }}>
                         {state === 'done' ? '✓' : state === 'active' ? <span className="pulse-dot" style={{ width: 6, height: 6, display: 'inline-block', background: 'var(--gold-500)', borderRadius: '50%' }} /> : '·'}
                       </span>
-                      {label}
+                      <span style={{ flexShrink: 0 }}>{label}</span>
                       {isEngineActive && (
                         <span className="ml-auto font-mono text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
                           {engineElapsedSec}s
                         </span>
                       )}
+                    </div>
+                    {/* Sublabel · always visible · describes what the probe
+                        actually measures. Dimmer for pending/done so the
+                        active row remains the focal point. */}
+                    <div
+                      className="ml-7 font-mono text-[10px] tracking-wide"
+                      style={{
+                        color: state === 'active' ? 'var(--text-secondary)' : 'var(--text-faint)',
+                        opacity: state === 'pending' ? 0.5 : 1,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {sub}
                     </div>
                     {/* Engine step · two-phase progress (0-70s easeOut to 90%
                         · 70s+ linear creep to 99%) + shimmer overlay so the
@@ -500,7 +603,7 @@ export function HeroUrlHook() {
             <p className="font-mono text-xs" style={{ color: 'var(--text-muted)', minHeight: '1.2em' }}>
               {step >= ENGINE_STEP_INDEX
                 ? ENGINE_REASSURE_LINES[reassureIdx]
-                : '~30 seconds for the surface probes · then the engine takes over'}
+                : `~9 seconds for the ${ENGINE_STEP_INDEX} surface probes · then the engine reasons`}
             </p>
           </div>
         )}
@@ -714,6 +817,292 @@ function useCountdown(resetAt: string | null): string | null {
   return `${hours}h ${mins.toString().padStart(2, '0')}m`
 }
 
+// Per-probe evidence panel · shows what the engine actually measured.
+// Replaces the old single-line "ROUTES PROBED · 6/6 reachable" with a
+// 3-block expandable structure:
+//
+//   1. Lighthouse table · Perf / A11y / BP / SEO · mobile vs desktop
+//   2. Reachability table · Live URL TTFB · routes · sitemap · broken paths
+//   3. Coverage checklists · 10 completeness signals · 6 security headers
+//   4. Deep probe summary · hydration framework · console / network counts ·
+//      total bytes · DOM size
+//
+// Each block hides itself if the underlying probe was unavailable. Default
+// collapsed to keep the result hero clean; tap to expand. Mobile = single
+// column; desktop = 2 columns for the checklists. All numbers come from
+// rich_analysis (mirrored from analyze-project line ~5019) plus the
+// snapshot's top-level `lighthouse` column.
+interface ProbedSignalsProps {
+  lhMobile?:     LighthouseSlot
+  lhDesktop?:    LighthouseSlot
+  liveHealth?:   LiveUrlHealth
+  routes?:       RoutesHealth
+  completeness?: CompletenessSignals
+  security?:     SecurityHeaders
+  deepProbe?:    DeepProbeSummary
+}
+function ProbedSignals({ lhMobile, lhDesktop, liveHealth, routes, completeness, security, deepProbe }: ProbedSignalsProps) {
+  const [open, setOpen] = useState(false)
+  const lhAny  = !!(lhMobile?.performance != null || lhMobile?.accessibility != null)
+  const anyDeep = !!(deepProbe?.fetched)
+  const hasAny =
+    lhAny ||
+    !!(routes?.probed && routes.probed > 0) ||
+    !!liveHealth ||
+    !!completeness ||
+    !!security ||
+    anyDeep
+  if (!hasAny) return null
+
+  // Quick header summary so collapsed state still carries information.
+  const probeCount =
+    (lhAny ? 1 : 0) +
+    (lhDesktop?.performance != null ? 1 : 0) +
+    ((liveHealth?.status ?? 0) > 0 ? 1 : 0) +
+    ((routes?.probed ?? 0) > 0 ? 1 : 0) +
+    ((completeness?.filled ?? 0) > 0 ? 1 : 0) +
+    ((security?.filled ?? 0) > 0 ? 1 : 0) +
+    (anyDeep ? 1 : 0)
+
+  return (
+    <div
+      className="mb-6"
+      style={{
+        border: '1px solid rgba(248,245,238,0.08)',
+        borderRadius: '2px',
+        background: 'rgba(6,12,26,0.35)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 font-mono text-xs tracking-widest"
+        style={{
+          background: 'transparent',
+          color: 'var(--gold-500)',
+          border: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        <span>// PROBED SIGNALS · {probeCount} sources</span>
+        <span style={{ color: 'var(--text-muted)' }}>{open ? '−' : '+'}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-5 pt-1 space-y-5">
+          {/* ── Lighthouse mobile vs desktop ── */}
+          {lhAny && (
+            <div>
+              <SectionLabel>Lighthouse</SectionLabel>
+              <div className="overflow-x-auto">
+                <table className="w-full font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <thead>
+                    <tr style={{ color: 'var(--text-muted)' }}>
+                      <th className="text-left font-normal py-1 pr-3">CATEGORY</th>
+                      <th className="text-right font-normal py-1 px-3">MOBILE</th>
+                      <th className="text-right font-normal py-1 pl-3">DESKTOP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <LhRow label="Performance"   m={lhMobile?.performance}   d={lhDesktop?.performance} />
+                    <LhRow label="Accessibility" m={lhMobile?.accessibility} d={lhDesktop?.accessibility} />
+                    <LhRow label="Best practices" m={lhMobile?.bestPractices} d={lhDesktop?.bestPractices} />
+                    <LhRow label="SEO"           m={lhMobile?.seo}           d={lhDesktop?.seo} />
+                  </tbody>
+                </table>
+              </div>
+              {(lhMobile?.total_byte_weight_kb != null || lhMobile?.dom_size != null) && (
+                <div className="mt-2 font-mono text-[10px] tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                  {lhMobile?.total_byte_weight_kb != null && <span>page weight · <span style={{ color: 'var(--text-secondary)' }}>{(lhMobile.total_byte_weight_kb / 1024).toFixed(1)} MB</span></span>}
+                  {lhMobile?.total_byte_weight_kb != null && lhMobile?.dom_size != null && <span> · </span>}
+                  {lhMobile?.dom_size != null && <span>dom · <span style={{ color: 'var(--text-secondary)' }}>{lhMobile.dom_size.toLocaleString()} nodes</span></span>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Reachability · live URL + routes ── */}
+          {((liveHealth?.status ?? 0) > 0 || (routes?.probed ?? 0) > 0) && (
+            <div>
+              <SectionLabel>Reachability</SectionLabel>
+              <div className="font-mono text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+                {liveHealth && (liveHealth.status ?? 0) > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>live URL · </span>
+                    <span style={{ color: liveHealth.ok ? 'var(--cream)' : 'var(--scarlet)' }}>
+                      HTTP {liveHealth.status}
+                    </span>
+                    {liveHealth.elapsed_ms != null && (
+                      <span style={{ color: 'var(--text-muted)' }}> · TTFB {liveHealth.elapsed_ms}ms</span>
+                    )}
+                  </div>
+                )}
+                {routes && routes.probed > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>routes · </span>
+                    <span style={{ color: 'var(--cream)' }}>{routes.reachable}/{routes.probed} reachable</span>
+                    {routes.broken > 0 && (
+                      <span style={{ color: 'var(--scarlet)' }}> · {routes.broken} broken</span>
+                    )}
+                    {routes.sitemap_present != null && (
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {' · sitemap '}
+                        <span style={{ color: routes.sitemap_present ? 'var(--cream)' : 'var(--text-secondary)' }}>
+                          {routes.sitemap_present ? `found (${routes.sitemap_url_count ?? '?'} URLs)` : 'absent'}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )}
+                {routes?.broken && routes.broken > 0 && routes.broken_paths && routes.broken_paths.length > 0 && (
+                  <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    broken paths · <span style={{ color: 'var(--scarlet)' }}>{routes.broken_paths.slice(0, 4).join(' · ')}</span>
+                    {routes.broken_paths.length > 4 && <span> · +{routes.broken_paths.length - 4} more</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Coverage checklists · 10 completeness + 6 security ── */}
+          {(completeness || security) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {completeness && (
+                <div>
+                  <SectionLabel>
+                    Completeness <span style={{ color: 'var(--text-muted)' }}>· {completeness.filled ?? 0}/{completeness.of ?? 10}</span>
+                  </SectionLabel>
+                  <SignalChips
+                    items={[
+                      ['og:image',       !!completeness.has_og_image],
+                      ['og:title',       !!completeness.has_og_title],
+                      ['og:description', !!completeness.has_og_description],
+                      ['twitter:card',   !!completeness.has_twitter_card],
+                      ['canonical',      !!completeness.has_canonical],
+                      ['meta-desc',      !!completeness.has_meta_desc],
+                      ['manifest',       !!completeness.has_manifest],
+                      ['theme-color',    !!completeness.has_theme_color],
+                      ['apple-touch',    !!completeness.has_apple_touch],
+                      ['favicon',        !!completeness.has_favicon],
+                    ]}
+                  />
+                </div>
+              )}
+              {security && (security.filled ?? 0) >= 0 && (
+                <div>
+                  <SectionLabel>
+                    Security headers <span style={{ color: 'var(--text-muted)' }}>· {security.filled ?? 0}/{security.of ?? 6}</span>
+                  </SectionLabel>
+                  <SignalChips
+                    items={[
+                      ['CSP',                !!security.has_csp],
+                      ['HSTS',               !!security.has_hsts],
+                      ['X-Frame-Options',    !!security.has_frame_protection],
+                      ['X-Content-Type',     !!security.has_content_type_opt],
+                      ['Referrer-Policy',    !!security.has_referrer_policy],
+                      ['Permissions-Policy', !!security.has_permissions_policy],
+                    ]}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Deep probe summary · post-hydration evidence ── */}
+          {anyDeep && (
+            <div>
+              <SectionLabel>Deep probe</SectionLabel>
+              <div className="font-mono text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>render · </span>
+                  <span style={{ color: 'var(--cream)' }}>{deepProbe?.via ?? 'unknown'}</span>
+                  {deepProbe?.hydration_framework && (
+                    <span style={{ color: 'var(--text-muted)' }}> · framework <span style={{ color: 'var(--cream)' }}>{deepProbe.hydration_framework}</span></span>
+                  )}
+                </div>
+                {(deepProbe?.post_hydration_text_length ?? 0) > 0 && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>post-hydration text · </span>
+                    <span style={{ color: 'var(--cream)' }}>{deepProbe?.post_hydration_text_length?.toLocaleString()} chars</span>
+                  </div>
+                )}
+                {(lhMobile?.console_errors_count != null || lhMobile?.network_failures_count != null) && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>runtime · </span>
+                    {lhMobile?.console_errors_count != null && (
+                      <span style={{ color: (lhMobile.console_errors_count ?? 0) > 0 ? 'var(--scarlet)' : 'var(--cream)' }}>
+                        {lhMobile.console_errors_count} console errors
+                      </span>
+                    )}
+                    {lhMobile?.console_errors_count != null && lhMobile?.network_failures_count != null && <span style={{ color: 'var(--text-muted)' }}> · </span>}
+                    {lhMobile?.network_failures_count != null && (
+                      <span style={{ color: (lhMobile.network_failures_count ?? 0) > 0 ? 'var(--scarlet)' : 'var(--cream)' }}>
+                        {lhMobile.network_failures_count} network failures
+                      </span>
+                    )}
+                  </div>
+                )}
+                {deepProbe?.screenshot_url && (
+                  <div style={{ color: 'var(--text-muted)' }}>
+                    screenshot · <span style={{ color: 'var(--cream)' }}>captured (above)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--text-muted)' }}>
+      {children}
+    </div>
+  )
+}
+
+function LhRow({ label, m, d }: { label: string; m?: number | null; d?: number | null }) {
+  // LH_NOT_ASSESSED (-1) and null both render as "—" · we don't know enough
+  // to score that axis. Positive numbers get the bucket color so the table
+  // reads as a quick heat map (90+ gold · 70-89 cream · 50-69 amber · <50 scarlet).
+  const cell = (v: number | null | undefined) => {
+    if (v == null || v < 0) return <span style={{ color: 'var(--text-faint)' }}>—</span>
+    const c = v >= 90 ? 'var(--gold-500)' : v >= 70 ? 'var(--cream)' : v >= 50 ? '#E0B341' : 'var(--scarlet)'
+    return <span style={{ color: c }}>{v}</span>
+  }
+  return (
+    <tr style={{ borderTop: '1px solid rgba(248,245,238,0.04)' }}>
+      <td className="py-1.5 pr-3" style={{ color: 'var(--text-secondary)' }}>{label}</td>
+      <td className="py-1.5 px-3 text-right tabular-nums">{cell(m)}</td>
+      <td className="py-1.5 pl-3 text-right tabular-nums">{cell(d)}</td>
+    </tr>
+  )
+}
+
+function SignalChips({ items }: { items: Array<[string, boolean]> }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map(([name, present]) => (
+        <span
+          key={name}
+          className="font-mono text-[10px] tracking-wide px-2 py-0.5"
+          style={{
+            background: present ? 'rgba(0,212,170,0.08)' : 'rgba(248,245,238,0.04)',
+            border: `1px solid ${present ? 'rgba(0,212,170,0.3)' : 'rgba(248,245,238,0.12)'}`,
+            color: present ? '#00D4AA' : 'var(--text-muted)',
+            borderRadius: '2px',
+          }}
+        >
+          {present ? '✓' : '·'} {name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function prettyHost(raw: string): string {
   try {
     const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
@@ -782,6 +1171,16 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
   const concerns    = concernsRaw.filter(c => !c.bullet || !REPO_ABSENCE_PATTERNS.test(c.bullet)).slice(0, 2)
   const routes      = rich.routes_health
   const screenshot  = rich.deep_probe?.screenshot_url ?? null
+  // Per-probe echo · feeds the "PROBED SIGNALS" expandable panel below.
+  // `snap?.lighthouse` is the snapshot's top-level mobile LH column;
+  // `rich.lighthouse_mobile` mirrors it (2026-05-15+ snapshots). Older
+  // snapshots only have the column, so fall back to it as primary.
+  const lhMobile    = (snap?.lighthouse ?? rich.lighthouse_mobile) as LighthouseSlot | undefined
+  const lhDesktop   = rich.lighthouse_desktop
+  const completeness = rich.completeness_signals
+  const security     = rich.security_headers
+  const deepProbe    = rich.deep_probe
+  const liveHealth   = rich.live_url_health
 
   // URL Polish Score · §15-E.3 separate scale.
   // The full /50 audit pillar can't be the denominator for URL-only audits
@@ -927,14 +1326,15 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
         </div>
       )}
 
-      {routes && routes.probed > 0 && (
-        <div className="mb-6 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
-          ROUTES PROBED · {routes.reachable}/{routes.probed} reachable
-          {routes.broken > 0 && routes.broken_paths && routes.broken_paths.length > 0 && (
-            <span> · broken: <span style={{ color: 'var(--scarlet)' }}>{routes.broken_paths.slice(0, 3).join(' · ')}</span></span>
-          )}
-        </div>
-      )}
+      <ProbedSignals
+        lhMobile={lhMobile}
+        lhDesktop={lhDesktop}
+        liveHealth={liveHealth}
+        routes={routes}
+        completeness={completeness}
+        security={security}
+        deepProbe={deepProbe}
+      />
 
       {/* Action row · mobile stacks full-width · sm+ rows side-by-side with
           consistent button widths. Primary gold · secondaries outline ·

@@ -483,7 +483,7 @@ async function buildEnvelope(admin: any, projectId: string, cacheHit: boolean) {
 
   const { data: snap } = await admin
     .from('analysis_snapshots')
-    .select('id, project_id, created_at, trigger_type, score_total, score_auto, score_total_delta, rich_analysis')
+    .select('id, project_id, created_at, trigger_type, score_total, score_auto, score_total_delta, lighthouse, rich_analysis')
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
     .limit(1)
