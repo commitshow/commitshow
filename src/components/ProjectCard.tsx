@@ -4,6 +4,8 @@ import { useAuth } from '../lib/auth'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { IconForecast, IconApplaud } from './icons'
 import { resolveCreatorName } from '../lib/creatorName'
+import { useViewer } from '../lib/useViewer'
+import { ScoreOrBandBadge } from './ScoreOrBandBadge'
 
 /**
  * How clicking the card body behaves. The grid intercepts with `preview` so
@@ -24,25 +26,17 @@ const STATUS_COLORS: Record<string, { fg: string; border: string }> = {
   retry:         { fg: '#C8102E',               border: 'rgba(200,16,46,0.35)' },
 }
 
-function ScoreBadge({ score, hidden }: { score: number; hidden?: boolean }) {
-  if (hidden) {
-    return (
-      <span className="font-mono text-xs px-2 py-1" style={{
-        background: 'rgba(255,255,255,0.04)',
-        color: 'var(--text-secondary)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '2px',
-      }}>
-        —
-      </span>
-    )
-  }
-  const color = score >= 75 ? '#00D4AA' : score >= 50 ? '#F0C040' : '#C8102E'
+// Blind-stage placeholder · keeps the legacy hideScore behavior (Week 1
+// blind ladder · §11). The band-or-digit decision lives in ScoreOrBandBadge.
+function BlindBadge() {
   return (
     <span className="font-mono text-xs px-2 py-1" style={{
-      background: `${color}15`, color, border: `1px solid ${color}30`, borderRadius: '2px',
+      background: 'rgba(255,255,255,0.04)',
+      color: 'var(--text-secondary)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: '2px',
     }}>
-      {score} pts
+      —
     </span>
   )
 }
@@ -72,6 +66,11 @@ function timeAgo(iso: string): string {
 export function ProjectCard({ project: p, delta, hideScore, onForecast, showForecastButton = true, creator, applaudCount, openMode = 'navigate', onOpen }: ProjectCardProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
+  // §1-A ⑥ shame mitigation · public surfaces show band, creator/admin/
+  // paid-Patron see digit. Encore-graduated projects always reveal digit
+  // (handled inside viewerCanSeeDigit). hideScore (blind stage) still wins
+  // over the gate — shows the dash placeholder regardless.
+  const viewer = useViewer()
   const handleCardOpen = () => {
     if (openMode === 'preview' && onOpen) onOpen(p)
     else navigate(`/projects/${p.id}`)
@@ -138,7 +137,7 @@ export function ProjectCard({ project: p, delta, hideScore, onForecast, showFore
           <h3 className="font-display font-bold text-lg leading-tight group-hover:text-gold-400 transition-colors" style={{ color: 'var(--cream)' }}>
             {p.project_name}
           </h3>
-          <ScoreBadge score={p.score_total} hidden={hideScore} />
+          {hideScore ? <BlindBadge /> : <ScoreOrBandBadge project={p} viewer={viewer} variant="pill" />}
         </div>
 
         {/* Creator strip — avatar + display name */}

@@ -4,6 +4,8 @@ import type { CreatorIdentity } from '../lib/projectQueries'
 import { IconForecast, IconApplaud } from './icons'
 import { EncoreBadge } from './EncoreBadge'
 import { resolveCreatorName } from '../lib/creatorName'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 // Editorial-style card. Treat every submission as a crafted piece —
 // generous image, Playfair headline, paragraph-scale description. Replaces
@@ -38,9 +40,13 @@ export function ProjectCardEditorial({
 }: Props) {
   const navigate = useNavigate()
   const handleOpen = () => onOpen ? onOpen(p) : navigate(`/projects/${p.id}`)
+  // §1-A ⑥ band gate · creator/admin/paid-Patron see digit. Encore reveals.
+  const viewer       = useViewer()
+  const canSeeDigit  = viewerCanSeeDigit(p, viewer)
+  const band         = scoreBand(p.score_total ?? 0)
 
   const gc = GRADE_COLORS[p.creator_grade] || '#9CA3AF'
-  const sc = hideScore ? 'rgba(255,255,255,0.35)' : scoreColor(p.score_total)
+  const sc = hideScore ? 'rgba(255,255,255,0.35)' : (canSeeDigit ? scoreColor(p.score_total) : bandTone(band))
   const metaBits = (p.tech_layers ?? []).slice(0, 3).map(t => t.toUpperCase())
   if (metaBits.length === 0 && p.creator_grade) metaBits.push(p.creator_grade.toUpperCase())
   // 2026-05-05 rebrand · "Graduated" / "Valedictorian" labels replaced
@@ -188,7 +194,9 @@ export function ProjectCardEditorial({
             {applaudCount ? (
               <span className="inline-flex items-center gap-1"><IconApplaud size={11} /> {applaudCount}</span>
             ) : null}
-            <span style={{ color: sc }}>{hideScore ? '—' : `${p.score_total} pts`}</span>
+            <span style={{ color: sc, textTransform: canSeeDigit ? undefined : 'uppercase', letterSpacing: canSeeDigit ? undefined : '0.05em' }}>
+              {hideScore ? '—' : canSeeDigit ? `${p.score_total} pts` : bandLabel(band)}
+            </span>
           </div>
         </div>
 

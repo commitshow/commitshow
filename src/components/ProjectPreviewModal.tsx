@@ -7,6 +7,8 @@ import { fetchProjectCreator, type CreatorIdentity } from '../lib/projectQueries
 import { ForecastModal } from './ForecastModal'
 import { IconForecast } from './icons'
 import { resolveCreatorName } from '../lib/creatorName'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 interface Props {
   project: Project
@@ -30,6 +32,7 @@ const GRADE_COLORS: Record<string, string> = {
  */
 export function ProjectPreviewModal({ project: p, onClose, creator: creatorProp, applaudCount }: Props) {
   const { user } = useAuth()
+  const viewer = useViewer()
   const navigate = useNavigate()
   const [creator, setCreator] = useState<CreatorIdentity | null>(creatorProp ?? null)
   const [forecastOpen, setForecastOpen] = useState(false)
@@ -46,6 +49,12 @@ export function ProjectPreviewModal({ project: p, onClose, creator: creatorProp,
 
   const isOwner = !!user && user.id === p.creator_id
   const canForecast = !!user && !isOwner
+  // §1-A ⑥ band gate · viewer-aware digit reveal. Public viewers see the
+  // band chip ("Strong" / "Building") · creator/admin/paid-Patron see the
+  // raw digit. Encore-graduated projects auto-reveal to everyone.
+  const canSeeDigit = viewerCanSeeDigit(p, viewer)
+  const band        = scoreBand(p.score_total ?? 0)
+  const bandColor   = bandTone(band)
   const scoreColor = p.score_total >= 75 ? '#00D4AA' : p.score_total >= 50 ? '#F0C040' : '#C8102E'
   const creatorLoading = !!p.creator_id && creator === undefined
   const creatorName = resolveCreatorName({
@@ -118,10 +127,21 @@ export function ProjectPreviewModal({ project: p, onClose, creator: creatorProp,
                 </h2>
               </div>
               <div className="flex-shrink-0 text-right">
-                <div className="font-display font-black text-3xl tabular-nums" style={{ color: scoreColor }}>
-                  {p.score_total}
-                </div>
-                <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/ 100</div>
+                {canSeeDigit ? (
+                  <>
+                    <div className="font-display font-black text-3xl tabular-nums" style={{ color: scoreColor }}>
+                      {p.score_total}
+                    </div>
+                    <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/ 100</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-display font-black text-xl tracking-widest uppercase" style={{ color: bandColor }}>
+                      {bandLabel(band)}
+                    </div>
+                    <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>band</div>
+                  </>
+                )}
               </div>
             </div>
 

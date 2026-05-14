@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { IconForecast, IconApplaud } from './icons'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit, displayScore } from '../lib/laneScore'
 
 // pump.fun-style dense card. Thumbnail + name + score + 1-line meta.
 // Used in the /projects grid where the goal is scan many projects fast.
@@ -32,9 +34,14 @@ export function ProjectCardCompact({
 }: Props) {
   const navigate = useNavigate()
   const handleOpen = () => onOpen ? onOpen(p) : navigate(`/projects/${p.id}`)
+  // §1-A ⑥ band gate · creator/admin/paid-Patron see digit. Encore reveals.
+  const viewer        = useViewer()
+  const canSeeDigit   = viewerCanSeeDigit(p, viewer)
+  const ds            = displayScore(p)
+  const band          = scoreBand(ds)
 
   const gc   = GRADE_COLORS[p.creator_grade] || '#6B7280'
-  const sc   = hideScore ? 'rgba(255,255,255,0.35)' : scoreColor(p.score_total)
+  const sc   = hideScore ? 'rgba(255,255,255,0.35)' : (canSeeDigit ? scoreColor(p.score_total) : bandTone(band))
   const name = p.project_name
 
   // Live pulse: green ring when recently-submitted (< 6h) or re-analyzed.
@@ -92,8 +99,12 @@ export function ProjectCardCompact({
           <span className="font-mono text-xs truncate" style={{ color: 'var(--cream)' }}>
             {name}
           </span>
-          <span className="font-mono text-xs tabular-nums flex-shrink-0" style={{ color: sc }}>
-            {hideScore ? '—' : p.score_total}
+          <span className="font-mono text-xs flex-shrink-0 tracking-widest uppercase" style={{ color: sc, fontWeight: 600 }}>
+            {hideScore
+              ? '—'
+              : canSeeDigit
+                ? <span className="tabular-nums">{p.score_total}</span>
+                : <span className="text-[10px]">{bandLabel(band)}</span>}
           </span>
         </div>
         {/* Line 2: creator grade + forecasts + applauds */}

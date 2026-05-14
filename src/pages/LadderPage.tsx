@@ -28,6 +28,8 @@ import { fetchCreatorsByIds, fetchApplaudCounts, type CreatorIdentity } from '..
 import { ProjectCardEditorial } from '../components/ProjectCardEditorial'
 import { FeaturedLanes } from '../components/FeaturedLanes'
 import { useAuth } from '../lib/auth'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 const WINDOWS: LadderWindow[] = ['today', 'week', 'month', 'all_time']
 type ViewMode = 'list' | 'cards'
@@ -363,6 +365,13 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
   const rankTone = row.rank === 1 ? 'var(--gold-500)' : row.rank <= 10 ? 'var(--cream)' : 'var(--text-secondary)'
   const audited  = row.audited_at ? new Date(row.audited_at) : null
   const ago      = audited ? formatAgo(audited) : '—'
+  // §1-A ⑥ band gate · LadderRow carries enough (creator_id + status +
+  // score_total) for viewerCanSeeDigit to decide. Encore-graduated rows
+  // reveal digit to everyone regardless of viewer.
+  const viewer      = useViewer()
+  const canSeeDigit = viewerCanSeeDigit(row, viewer)
+  const band        = scoreBand(row.score_total)
+  const bandColor   = bandTone(band)
 
   return (
     <li style={isFirst ? undefined : { borderTop: '1px solid rgba(255,255,255,0.04)' }}>
@@ -419,14 +428,21 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
             >
               ROUND 1
             </span>
-          ) : (
+          ) : canSeeDigit ? (
             <>
               <span className="font-display font-bold text-2xl tabular-nums" style={{ color: 'var(--gold-500)' }}>
                 {row.score_total}
               </span>
               <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/100</span>
-              {/* form_factor inline tag removed 2026-05-12 · B2B-only signal */}
             </>
+          ) : (
+            <span
+              className="font-display font-bold text-lg tracking-widest uppercase"
+              style={{ color: bandColor }}
+              title="Public ladder shows band only · Creator + admin + paid Patron see the digit"
+            >
+              {bandLabel(band)}
+            </span>
           )}
         </div>
       </button>

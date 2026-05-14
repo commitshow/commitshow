@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { resolveCreatorName } from '../lib/creatorName'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 export interface LaneCardAccent {
   tone: 'rookie' | 'climber' | 'graduating'
@@ -31,6 +33,11 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
   const navigate = useNavigate()
   const tone = TONE_COLOR[accent.tone]
   const gradeColor = GRADE_COLORS[p.creator_grade] || '#9CA3AF'
+  // §1-A ⑥ band gate · creator/admin/paid-Patron see digit. Encore reveals.
+  const viewer       = useViewer()
+  const canSeeDigit  = viewerCanSeeDigit(p, viewer)
+  const band         = scoreBand(p.score_total ?? 0)
+  const bandColor    = bandTone(band)
   const creatorLoading = !!p.creator_id && creator === undefined
   const creatorName = resolveCreatorName({
     display_name: creator?.display_name,
@@ -114,15 +121,16 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
           {p.project_name}
         </h4>
         <span
-          className="font-mono text-xs tabular-nums font-medium px-2 py-0.5 flex-shrink-0"
+          className="font-mono text-xs font-medium px-2 py-0.5 flex-shrink-0"
           style={{
-            background: hideScore ? 'rgba(255,255,255,0.04)' : 'rgba(240,192,64,0.1)',
-            color:      hideScore ? 'var(--text-secondary)' : 'var(--gold-500)',
-            border:     `1px solid ${hideScore ? 'rgba(255,255,255,0.08)' : 'rgba(240,192,64,0.3)'}`,
+            background: hideScore ? 'rgba(255,255,255,0.04)' : (canSeeDigit ? 'rgba(240,192,64,0.1)' : `${bandColor}1A`),
+            color:      hideScore ? 'var(--text-secondary)' : (canSeeDigit ? 'var(--gold-500)' : bandColor),
+            border:     `1px solid ${hideScore ? 'rgba(255,255,255,0.08)' : (canSeeDigit ? 'rgba(240,192,64,0.3)' : `${bandColor}4D`)}`,
             borderRadius: '2px',
+            ...(canSeeDigit ? { fontVariantNumeric: 'tabular-nums' } : { textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '10px' }),
           }}
         >
-          {hideScore ? '— pts' : `${p.score_total} pts`}
+          {hideScore ? '— pts' : canSeeDigit ? `${p.score_total} pts` : bandLabel(band)}
         </span>
       </div>
 

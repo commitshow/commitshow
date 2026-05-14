@@ -70,3 +70,111 @@ export function displayScore(
   if (lane === 'url_fast_lane') return urlLanePolish(project.score_auto)
   return project.score_total ?? 0
 }
+
+// ── Score band system · §1-A ⑥ vibe-coder shame mitigation (2026-05-15) ──
+//
+// Public surfaces (ladder · project cards · share cards · project detail for
+// non-creator viewers) display BAND not digit. Reason: vibe coders abandon
+// the audition step because the digit feels like a public verdict. Bands
+// preserve the comparison signal (Encore beats Strong beats Building) while
+// dropping the false precision of "82 vs 79" that drives shame.
+//
+// Digit stays visible to: creator (own project), admins, paid Patron Scouts
+// (V1.5+ tier · sees digit early as part of premium · acts as a real
+// gate vs the current "everyone-is-a-Scout" wide-open access). Once a
+// project graduates with Encore (score >= 85 captured permanently), the
+// digit auto-reveals to everyone — it becomes the trophy.
+
+export type ScoreBand = 'encore' | 'strong' | 'building' | 'early' | 'unknown'
+
+/** Map a display score (0-100) to its band.
+ *
+ *  Thresholds match the four-band convention used in AuditionPromoteCard
+ *  and elsewhere (encore 85+ · strong 70-84 · building 50-69 · early <50).
+ *  Returns 'unknown' for null/undefined/0-or-below. */
+export function scoreBand(displayScore: number | null | undefined): ScoreBand {
+  if (displayScore == null || displayScore <= 0) return 'unknown'
+  if (displayScore >= 85) return 'encore'
+  if (displayScore >= 70) return 'strong'
+  if (displayScore >= 50) return 'building'
+  return 'early'
+}
+
+/** Human label for a band · used in chips, badges, share cards, alt text. */
+export function bandLabel(band: ScoreBand): string {
+  switch (band) {
+    case 'encore':   return 'Encore'
+    case 'strong':   return 'Strong'
+    case 'building': return 'Building'
+    case 'early':    return 'Early'
+    case 'unknown':  return 'Pending'
+  }
+}
+
+/** CSS color for a band (CSS var or hex) · matches the existing 4-band
+ *  palette (gold / emerald / blue / scarlet / muted). Same values as the
+ *  AuditionPromoteCard bandColor map so the visual system stays uniform. */
+export function bandTone(band: ScoreBand): string {
+  switch (band) {
+    case 'encore':   return 'var(--gold-500)'
+    case 'strong':   return '#00D4AA'
+    case 'building': return '#60A5FA'
+    case 'early':    return 'var(--scarlet)'
+    case 'unknown':  return 'var(--text-muted)'
+  }
+}
+
+/** Convenience · maps project (any lane) directly to its band. */
+export function projectBand(
+  project: Pick<Project, 'status' | 'github_url' | 'live_url' | 'score_total' | 'score_auto'> | null | undefined,
+): ScoreBand {
+  return scoreBand(displayScore(project))
+}
+
+// ── Viewer gating · who sees the raw digit ──
+//
+// Layers of access (most permissive → most restrictive):
+//   1. Anonymous           → band only
+//   2. Member (Bronze · free Scout default) → band only
+//   3. Silver / Gold Scout (AP-based, free)   → band only
+//   4. Paid Patron Scout (V1.5+ paid tier)    → digit visible
+//   5. Project creator                        → digit visible (own only)
+//   6. Admin                                  → digit visible (everyone's)
+//   7. Encore graduate (status reflects)      → digit visible to everyone
+//
+// `paid_patron` field is reserved for the future paid Scout tier; today it
+// resolves to `false` for every viewer. The predicate already routes on it
+// so flipping the gate is a one-field change when the SKU lands.
+
+export interface ViewerScope {
+  member_id?:   string | null
+  is_admin?:    boolean
+  paid_patron?: boolean         // V1.5+ paid Scout tier · today always false
+}
+
+/** True when the given viewer should see the raw digit score for the project.
+ *
+ *  Encore-graduated projects always reveal the digit (trophy mechanic) — the
+ *  shame mitigation only applies during audition. Projects with no creator
+ *  (anonymous URL/CLI walk-on previews) only reveal to admins + Patrons since
+ *  there's no creator to claim the audit.
+ *
+ *  Status field accepts plain string so LadderRow + ProjectStatus shapes
+ *  both fit (we only compare to the literal 'preview'). */
+export function viewerCanSeeDigit(
+  project: { creator_id?: string | null; status?: string | null; score_total?: number | null } | null | undefined,
+  viewer:  ViewerScope | null | undefined,
+): boolean {
+  if (!project) return false
+  // 7. Encore graduate · digit becomes the trophy, reveal to everyone.
+  if ((project.score_total ?? 0) >= 85 && project.status !== 'preview') return true
+  if (!viewer) return false
+  // 6. Admin · always.
+  if (viewer.is_admin) return true
+  // 4. Paid Patron Scout · always (V1.5+).
+  if (viewer.paid_patron) return true
+  // 5. Project creator · digit for own project only.
+  if (viewer.member_id && project.creator_id && viewer.member_id === project.creator_id) return true
+  // 1-3. Everyone else → band only.
+  return false
+}

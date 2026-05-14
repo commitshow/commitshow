@@ -3,7 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { projectSlug, projectShareUrl } from '../lib/projectSlug'
-import { displayScore, laneOf } from '../lib/laneScore'
+import {
+  displayScore, laneOf, viewerCanSeeDigit,
+  scoreBand    as laneScoreBand,
+  bandLabel    as laneBandLabel,
+  bandTone     as laneBandTone,
+} from '../lib/laneScore'
+import { useViewer } from '../lib/useViewer'
 import {
   fetchProjectById,
   fetchProjectByIdOrSlug,
@@ -392,6 +398,13 @@ export function ProjectDetailPage() {
   const scoreHidden = !isOwner
                    && (project.status !== 'preview')
                    && ((project.audit_count ?? 0) <= 1)
+  // §1-A ⑥ band gate · public viewers see band ('Strong' / 'Building'),
+  // creator/admin/paid-Patron see digit. Encore-graduated projects reveal
+  // digit to everyone. URL Fast Lane previews stay digit-visible (no
+  // creator identity attached, audit was self-initiated).
+  const viewer       = useViewer()
+  const canSeeDigit  = project.status === 'preview' ? true : viewerCanSeeDigit(project, viewer)
+  const showAsBand   = !scoreHidden && !canSeeDigit
   // Forecast ballots are only accepted during the 3 active weeks (§11.2).
   const isVotingPhase = seasonPhase === 'week_1' || seasonPhase === 'week_2' || seasonPhase === 'week_3'
 
@@ -811,6 +824,7 @@ export function ProjectDetailPage() {
           totalDays={seasonProgress?.totalDays ?? 28}
           phaseLabel={seasonProgress?.phaseLabel ?? ''}
           scoreHidden={scoreHidden}
+          showAsBand={showAsBand}
           formFactor={formFactor}
         />
 
@@ -1279,7 +1293,7 @@ function ActivityRow({ primary, detail, secondary, time }: {
 // ── Scan strip · 5-6 metric pills in one row ────────────────────
 function ScanStrip({
   score, lane, roundCount, roundDelta, dayNumber, totalDays, phaseLabel,
-  scoreHidden, formFactor,
+  scoreHidden, showAsBand, formFactor,
 }: {
   score: number
   /** Which audit lane this project ran in · drives the sub-label so
@@ -1295,6 +1309,12 @@ function ScanStrip({
    *  Owner sees score · public sees "—" + tooltip. Score reveals on
    *  re-audit (audit_count >= 2). */
   scoreHidden?: boolean
+  /** §1-A ⑥ shame mitigation · render band chip ('Strong' / 'Building'
+   *  / 'Early') instead of the raw digit. Parent computes this via
+   *  viewerCanSeeDigit so creator/admin/paid-Patron still see digit
+   *  and Encore graduates reveal globally. Δ Round cell also dims when
+   *  band-only — delta arithmetic is meaningless without the absolute. */
+  showAsBand?: boolean
   /** Audited form factor · changes the Score cell's sub-label so
    *  viewers read 'app · score 85' vs 'library · score 85' as
    *  different things. Rubric IS form-aware; the absolute number
@@ -1310,6 +1330,12 @@ function ScanStrip({
   const deltaColor = roundDelta == null || roundDelta === 0 ? 'var(--text-muted)'
     : roundDelta > 0 ? '#00D4AA' : '#F88771'
   const deltaText  = roundDelta == null ? '—' : roundDelta === 0 ? '0' : (roundDelta > 0 ? `+${roundDelta}` : `${roundDelta}`)
+  // Band-mode override · scoreHidden (privacy) still wins. Band tone uses
+  // the same palette as the AuditionPromoteCard chip so the visual system
+  // stays consistent across surfaces.
+  const band       = laneScoreBand(score)
+  const bandColor  = laneBandTone(band)
+  const bandText   = laneBandLabel(band)
   return (
     <div
       className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-0 overflow-hidden"
@@ -1321,13 +1347,21 @@ function ScanStrip({
     >
       <ScanCell
         label="Score"
-        value={scoreHidden ? '—' : `${score}`}
-        sub={scoreHidden ? 'hidden until re-audit' : formLabel}
-        color={scoreHidden ? 'var(--text-muted)' : scoreColor}
-        tooltip={scoreHidden ? 'Score is hidden from public until the creator re-audits. Visible to the owner only.' : undefined}
+        value={scoreHidden ? '—' : showAsBand ? bandText : `${score}`}
+        sub={scoreHidden ? 'hidden until re-audit' : showAsBand ? 'band · creator sees digit' : formLabel}
+        color={scoreHidden ? 'var(--text-muted)' : showAsBand ? bandColor : scoreColor}
+        tooltip={
+          scoreHidden ? 'Score is hidden from public until the creator re-audits. Visible to the owner only.'
+        : showAsBand  ? 'Public surfaces show band only · creator + admin + paid Patron Scout see the raw digit · Encore graduates reveal to everyone'
+        : undefined}
       />
       <ScanCell label="Round"     value={roundCount > 0 ? `${roundCount}` : '—'} sub="analyses" color="var(--cream)" />
-      <ScanCell label="Δ Round"   value={scoreHidden ? '—' : deltaText}   sub={scoreHidden ? 'hidden' : 'vs last round'} color={scoreHidden ? 'var(--text-muted)' : deltaColor} />
+      <ScanCell
+        label="Δ Round"
+        value={scoreHidden || showAsBand ? '—' : deltaText}
+        sub={scoreHidden ? 'hidden' : showAsBand ? 'hidden in band view' : 'vs last round'}
+        color={scoreHidden || showAsBand ? 'var(--text-muted)' : deltaColor}
+      />
       {/* Forecasts + Applauds cells removed 2026-05-11 · duplicated
           the new CommunityPulseStrip tiles directly above. Score ·
           Round · Δ Round · Season remain because they're not on the
