@@ -817,6 +817,68 @@ function useCountdown(resetAt: string | null): string | null {
   return `${hours}h ${mins.toString().padStart(2, '0')}m`
 }
 
+// Cache hit indicator · 2026-05-15. URL fast lane caches every audit for
+// 7 days (preview_rate_limits.last_analysis_at gate inside audit-site-
+// preview line ~387). A 1-second response with a 7-day-old snapshot was
+// reading as "the engine just measured this" — users were treating stale
+// scores as fresh. This notice surfaces the cache + offers a one-click
+// fresh run. Hidden when cache_hit is false (most audits).
+function CacheNotice({
+  cacheHit,
+  snapshotAt,
+  onRerun,
+}: {
+  cacheHit:   boolean
+  snapshotAt: string | null
+  onRerun:    () => void
+}) {
+  if (!cacheHit || !snapshotAt) return null
+  const age = formatAge(Date.parse(snapshotAt))
+  return (
+    <div
+      className="mb-5 px-4 py-3 flex flex-wrap items-center gap-3"
+      style={{
+        background:   'rgba(240,192,64,0.05)',
+        border:       '1px dashed rgba(240,192,64,0.25)',
+        borderRadius: '2px',
+      }}
+    >
+      <div className="font-mono text-[11px] tracking-widest uppercase" style={{ color: 'var(--gold-500)' }}>
+        ⟳ Cached audit
+      </div>
+      <div className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+        Showing snapshot from <span style={{ color: 'var(--cream)' }}>{age} ago</span>. Cache holds for 7 days.
+      </div>
+      <button
+        onClick={onRerun}
+        className="ml-auto px-3 py-1.5 font-mono text-[11px] tracking-widest"
+        style={{
+          background:   'var(--gold-500)',
+          color:        'var(--navy-900)',
+          border:       'none',
+          borderRadius: '2px',
+          cursor:       'pointer',
+        }}
+      >
+        Run fresh →
+      </button>
+    </div>
+  )
+}
+
+function formatAge(ts: number): string {
+  if (!Number.isFinite(ts)) return 'recently'
+  const ms = Date.now() - ts
+  if (ms < 0) return 'just now'
+  const min = Math.floor(ms / 60_000)
+  if (min < 1)  return 'less than a minute'
+  if (min < 60) return `${min} minute${min === 1 ? '' : 's'}`
+  const hr = Math.floor(min / 60)
+  if (hr < 24)  return `${hr} hour${hr === 1 ? '' : 's'}`
+  const days = Math.floor(hr / 24)
+  return `${days} day${days === 1 ? '' : 's'}`
+}
+
 // Per-probe evidence panel · shows what the engine actually measured.
 // Replaces the old single-line "ROUTES PROBED · 6/6 reachable" with a
 // 3-block expandable structure:
@@ -1238,6 +1300,12 @@ function ResultCard({ result, onAudition, onTryAnother, onRerun }: ResultCardPro
           </div>
         </div>
       </div>
+
+      <CacheNotice
+        cacheHit={result.cache_hit === true}
+        snapshotAt={snap?.created_at ?? null}
+        onRerun={onRerun}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-6">
         <div>
