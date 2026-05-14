@@ -77,12 +77,32 @@ export function HeroUrlHook() {
   const [url,    setUrl]    = useState('')
   const [phase,  setPhase]  = useState<Phase>('idle')
   const [error,  setError]  = useState<string | null>(null)
+  // Server-side rate-limit details · drives the countdown + sign-in CTA
+  // when the global 2,000/day cap is hit. `null` for any non-rate-limit
+  // error so the plain text path still works for bad URLs etc.
+  const [rateLimit, setRateLimit] = useState<{ reason: string; reset_at: string | null } | null>(null)
   const [result, setResult] = useState<SiteAuditResult | null>(null)
   const [step,   setStep]   = useState(0)
   const [enginePct, setEnginePct] = useState(0)        // 0-99% during engine step · 100% when snapshot lands
   const [engineElapsedSec, setEngineElapsedSec] = useState(0)
   const [reassureIdx, setReassureIdx] = useState(0)
   const [authOpen, setAuthOpen] = useState(false)
+  // Track sign-in state so the cap-hit notice can show the "Sign in to
+  // raise your daily ceiling" CTA only to anonymous viewers (signed-in
+  // members get 50/IP/day and have ticket-gated /submit as a separate
+  // channel, so the CTA is noise for them).
+  const [isAnon, setIsAnon] = useState(true)
+  useEffect(() => {
+    let alive = true
+    supabase.auth.getUser().then(({ data }) => {
+      if (!alive) return
+      setIsAnon(!data.user)
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      setIsAnon(!session?.user)
+    })
+    return () => { alive = false; sub.subscription.unsubscribe() }
+  }, [])
   const pollTimer = useRef<number | null>(null)
   const stepTimer = useRef<number | null>(null)
   const engineTimer = useRef<number | null>(null)
@@ -179,6 +199,7 @@ export function HeroUrlHook() {
       return
     }
     setError(null)
+    setRateLimit(null)
     setResult(null)
     setPhase('running')
     setStep(0)
@@ -214,9 +235,14 @@ export function HeroUrlHook() {
         // (rate-limit / DNS opt-out / invalid URL all return JSON bodies with
         // a human-readable `message`). Falls through to the generic string
         // only if the body isn't parseable JSON.
-        const friendly = await extractFriendlyMessage(invokeError)
+        const friendly = await extractFriendlyError(invokeError)
         setPhase('error')
-        setError(friendly ?? 'Audit failed. Try again in a moment.')
+        setError(friendly?.message ?? 'Audit failed. Try again in a moment.')
+        setRateLimit(
+          friendly?.reason === 'global_cap' || friendly?.reason === 'ip_cap' || friendly?.reason === 'url_cap'
+            ? { reason: friendly.reason, reset_at: friendly.reset_at ?? null }
+            : null,
+        )
         return
       }
       if (!data || typeof data !== 'object') {
@@ -225,9 +251,18 @@ export function HeroUrlHook() {
         return
       }
       // Rate-limit / DNS opt-out / invalid URL surface as { error: '...' }
+      // — same envelope as the FunctionsHttpError path above. audit-site-
+      // preview returns 200 + envelope in some lanes (cache hit on a
+      // recently-rate-limited project) so we still need to handle it here.
       if ((data as { error?: string }).error) {
+        const body = data as { message?: string; error: string; reason?: string; quota?: { reset_at?: string | null } }
         setPhase('error')
-        setError((data as { message?: string; error: string }).message ?? (data as { error: string }).error)
+        setError(body.message ?? body.error)
+        setRateLimit(
+          body.reason === 'global_cap' || body.reason === 'ip_cap' || body.reason === 'url_cap'
+            ? { reason: body.reason, reset_at: body.quota?.reset_at ?? null }
+            : null,
+        )
         return
       }
 
@@ -326,6 +361,7 @@ export function HeroUrlHook() {
     if (reassureTimer.current) { window.clearInterval(reassureTimer.current); reassureTimer.current = null }
     setPhase('idle')
     setError(null)
+    setRateLimit(null)
     setResult(null)
     setStep(0)
     setEnginePct(0)
@@ -471,20 +507,33 @@ export function HeroUrlHook() {
 
         {phase === 'error' && (
           <div className="max-w-2xl">
-            <p className="font-mono text-sm mb-4" style={{ color: 'var(--scarlet)' }}>{error}</p>
-            <button
-              onClick={reset}
-              className="px-5 py-2.5 font-mono text-xs tracking-widest"
-              style={{
-                background: 'transparent',
-                color: 'var(--cream)',
-                border: '1px solid rgba(248,245,238,0.2)',
-                borderRadius: '2px',
-                cursor: 'pointer',
-              }}
-            >
-              Try again →
-            </button>
+            {rateLimit ? (
+              <RateLimitNotice
+                reason={rateLimit.reason}
+                resetAt={rateLimit.reset_at}
+                message={error}
+                isAnon={isAnon}
+                onTryAgain={reset}
+                onSignIn={() => setAuthOpen(true)}
+              />
+            ) : (
+              <>
+                <p className="font-mono text-sm mb-4" style={{ color: 'var(--scarlet)' }}>{error}</p>
+                <button
+                  onClick={reset}
+                  className="px-5 py-2.5 font-mono text-xs tracking-widest"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--cream)',
+                    border: '1px solid rgba(248,245,238,0.2)',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Try again →
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -526,6 +575,145 @@ export function HeroUrlHook() {
   )
 }
 
+// Cap-hit notice · keeps the server's "sold out, not broken" tone but
+// translates the absolute reset time (`UTC midnight`) into a relative
+// countdown, and surfaces a sign-in CTA for anonymous viewers (signed-in
+// members get a 10×-larger IP ceiling + can audit their own repo via
+// /submit as a separate channel).
+//
+// global_cap → platform-wide ceiling · sign-in helps but doesn't bypass
+//              the global counter. Frame it as "your own repo is a
+//              different channel · go that way."
+// ip_cap     → per-IP ceiling · anon hits 5/day fast. Sign-in raises to
+//              50/day. CTA is direct.
+// url_cap    → per-host ceiling · someone in front of you audited this
+//              same site 5× already today. Cache still works.
+function RateLimitNotice({
+  reason,
+  resetAt,
+  message,
+  isAnon,
+  onTryAgain,
+  onSignIn,
+}: {
+  reason:     string
+  resetAt:    string | null
+  message:    string | null
+  isAnon:     boolean
+  onTryAgain: () => void
+  onSignIn:   () => void
+}) {
+  const countdown = useCountdown(resetAt)
+  const showSignIn = isAnon && (reason === 'ip_cap' || reason === 'global_cap')
+  const headline =
+    reason === 'global_cap' ? 'Stage is sold out for today'
+  : reason === 'ip_cap'     ? 'You\'ve hit your daily ceiling'
+  : reason === 'url_cap'    ? 'This site has been audited the max times today'
+  :                            'Rate limit reached'
+  const secondary =
+    reason === 'global_cap'
+      ? 'Cached reports still load instantly. Fresh audits resume after the daily reset.'
+      : reason === 'ip_cap'
+        ? (isAnon
+            ? 'Anonymous viewers get a small daily allowance. Signing in lifts the cap 10×.'
+            : 'Cached reports still load. Fresh audits reset on the daily counter.')
+        : reason === 'url_cap'
+          ? 'Cached results stay valid for 7 days · just paste the same URL to load instantly.'
+          : (message ?? 'Try again after the daily reset.')
+
+  return (
+    <div
+      className="p-5"
+      style={{
+        background:   'rgba(240,192,64,0.06)',
+        border:       '1px solid rgba(240,192,64,0.25)',
+        borderRadius: '2px',
+      }}
+    >
+      <div
+        className="font-mono text-[11px] tracking-widest uppercase mb-2"
+        style={{ color: 'var(--gold-500)' }}
+      >
+        // CAPACITY
+      </div>
+      <h3
+        className="font-display font-bold mb-2"
+        style={{ color: 'var(--cream)', fontSize: '1.35rem', lineHeight: 1.3 }}
+      >
+        {headline}
+      </h3>
+      <p
+        className="font-light text-sm mb-4"
+        style={{ color: 'rgba(248,245,238,0.7)', lineHeight: 1.5 }}
+      >
+        {secondary}
+      </p>
+      {countdown && (
+        <p
+          className="font-mono text-xs mb-4"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          Resets in <span style={{ color: 'var(--gold-500)' }}>{countdown}</span>
+        </p>
+      )}
+      <div className="flex gap-3 flex-wrap">
+        {showSignIn && (
+          <button
+            onClick={onSignIn}
+            className="px-5 py-2.5 font-mono text-xs tracking-widest"
+            style={{
+              background:   'var(--gold-500)',
+              color:        'var(--navy-900)',
+              border:       'none',
+              borderRadius: '2px',
+              cursor:       'pointer',
+              boxShadow:    '0 0 30px rgba(240,192,64,0.18)',
+            }}
+          >
+            {reason === 'global_cap' ? 'Audition your own repo →' : 'Sign in for higher cap →'}
+          </button>
+        )}
+        <button
+          onClick={onTryAgain}
+          className="px-5 py-2.5 font-mono text-xs tracking-widest"
+          style={{
+            background:   'transparent',
+            color:        'var(--cream)',
+            border:       '1px solid rgba(248,245,238,0.2)',
+            borderRadius: '2px',
+            cursor:       'pointer',
+          }}
+        >
+          Try again →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Live countdown to `resetAt`. Ticks every 30s — fine for `Xh Ym` display
+// without burning a render budget. Returns null when no reset time or it
+// is already in the past (counter should have reset already · let the
+// user retry).
+function useCountdown(resetAt: string | null): string | null {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!resetAt) return
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [resetAt])
+  if (!resetAt) return null
+  const target = Date.parse(resetAt)
+  if (!Number.isFinite(target)) return null
+  const ms = target - now
+  if (ms <= 0) return null
+  const totalMin = Math.ceil(ms / 60_000)
+  const hours    = Math.floor(totalMin / 60)
+  const mins     = totalMin % 60
+  if (hours <= 0) return `${mins}m`
+  return `${hours}h ${mins.toString().padStart(2, '0')}m`
+}
+
 function prettyHost(raw: string): string {
   try {
     const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
@@ -540,18 +728,35 @@ function prettyHost(raw: string): string {
 // supabase-js may have already consumed it. Falls back to the generic
 // `error.message` ("Edge Function returned a non-2xx status code") only
 // if no body or it isn't JSON.
-async function extractFriendlyMessage(err: unknown): Promise<string | null> {
+//
+// Returns the structured shape so cap-hit UI (countdown + sign-in CTA)
+// can react to `reason` + `quota.reset_at` rather than just a flat string.
+interface FriendlyError {
+  message:  string
+  reason?:  string           // 'global_cap' | 'ip_cap' | 'url_cap' | 'dns_opt_out' | ...
+  reset_at?: string | null   // ISO timestamp (UTC midnight) when counters roll
+}
+async function extractFriendlyError(err: unknown): Promise<FriendlyError | null> {
   const ctx = (err as { context?: unknown })?.context
   if (ctx instanceof Response) {
     try {
-      const body = await ctx.clone().json() as { message?: string; error?: string }
-      if (typeof body?.message === 'string' && body.message.trim()) return body.message
-      if (typeof body?.error   === 'string' && body.error.trim())   return body.error
+      const body = await ctx.clone().json() as {
+        message?: string
+        error?:   string
+        reason?:  string
+        quota?:   { reset_at?: string | null }
+      }
+      const message =
+        (typeof body?.message === 'string' && body.message.trim()) ? body.message :
+        (typeof body?.error   === 'string' && body.error.trim())   ? body.error   : null
+      if (message) {
+        return { message, reason: body.reason, reset_at: body.quota?.reset_at ?? null }
+      }
     } catch { /* not JSON · ignore */ }
   }
   if (err && typeof err === 'object' && 'message' in err) {
     const m = (err as { message?: unknown }).message
-    if (typeof m === 'string') return m
+    if (typeof m === 'string') return { message: m }
   }
   return null
 }
