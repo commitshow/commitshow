@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { invalidateLadderCache } from '../lib/ladder'
+import { urlLanePolish } from '../lib/laneScore'
 import { EmailTemplatesPanel } from './AdminEmailsPage'
 
 const ADMIN_TOKEN_KEY = 'commitshow.admin.token'
@@ -1119,7 +1120,12 @@ function AuditsTab({ stats, recent, onForceRefresh, rowBusy, rowOut, hasToken }:
                   </div>
                   <LaneChip lane={r.lane} />
                   <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : '#fff' }}>
-                    {r.score_total}<span style={{ color: 'rgba(255,255,255,0.45)' }}>/100</span>
+                    {/* URL fast lane uses the Hero hook polish scale (score_auto / 33 ×
+                        100) instead of the stored score_total · admin row reads the
+                        same number the public-facing card shows. CLI walk-on +
+                        platform keep score_total as-is. */}
+                    {r.lane === 'url_fast_lane' ? urlLanePolish(r.score_auto) : r.score_total}
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>/100</span>
                     <span className="ml-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>(raw {r.score_auto})</span>
                   </span>
                   <span className="font-mono text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.trigger_type}</span>
@@ -1246,7 +1252,10 @@ function CliTab({ usage, onForceRefresh, rowBusy, rowOut, hasToken }: {
                     {r.trigger_type}
                   </span>
                   <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'var(--gold-500)' }}>
-                    {r.score_total}<span style={{ color: 'rgba(255,255,255,0.4)' }}>/100</span>
+                    {/* URL fast lane → Hero polish scale · CLI walk-on keeps the
+                        stored score_total. Matches the public-facing surface. */}
+                    {r.lane === 'url_fast_lane' ? urlLanePolish(r.score_auto) : r.score_total}
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>/100</span>
                     <span className="ml-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>(raw {r.score_auto})</span>
                   </span>
                   <button
