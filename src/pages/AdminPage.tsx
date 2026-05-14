@@ -59,6 +59,7 @@ interface CliUsage {
     score_total:  number
     score_auto:   number
     trigger_type: string
+    lane:         'walk_on' | 'url_fast_lane'
     created_at:   string
   }>
   // From cli_audit_calls · per-call telemetry (source · cli_version ·
@@ -79,6 +80,11 @@ interface RecentAudit {
   score_total:  number
   score_auto:   number
   trigger_type: string
+  /** Audit lane · derived from projects.status + github_url + live_url.
+   *  platform = member audition (status != 'preview'),
+   *  walk_on = anonymous CLI repo audit (status='preview' + github_url),
+   *  url_fast_lane = URL-only paste (status='preview' + no github_url). */
+  lane:         'platform' | 'walk_on' | 'url_fast_lane'
   created_at:   string
   has_error:    boolean
   error_msg:    string | null
@@ -307,7 +313,7 @@ export function AdminPage() {
       // §11-NEW.7 admin · latest 10 CLI calls = snapshots whose project is
       // status='preview' (the walk-on bucket). Inner join via embedded select.
       supabase.from('analysis_snapshots')
-        .select('id, project_id, score_total, score_auto, trigger_type, created_at, projects!inner(project_name, github_url, status)')
+        .select('id, project_id, score_total, score_auto, trigger_type, created_at, projects!inner(project_name, github_url, live_url, status)')
         .eq('projects.status', 'preview')
         .order('created_at', { ascending: false })
         .limit(10),
@@ -335,9 +341,15 @@ export function AdminPage() {
       id: string; project_id: string | null
       score_total: number | null; score_auto: number | null
       trigger_type: string | null; created_at: string
-      projects: { project_name: string; github_url: string | null } | null
+      projects: { project_name: string; github_url: string | null; live_url: string | null } | null
     }
-    const recentCalls = ((recentRes.data as unknown as RecentRaw[]) ?? []).map(r => ({
+    const recentCalls = ((recentRes.data as unknown as RecentRaw[]) ?? []).map(r => {
+      // All CLI tab rows are status='preview' by query · so the split is
+      // between CLI walk-on (github_url present) and URL fast lane (no
+      // github_url, only live_url).
+      const lane: 'walk_on' | 'url_fast_lane' =
+        r.projects?.github_url ? 'walk_on' : 'url_fast_lane'
+      return {
       id:           r.id,
       project_id:   r.project_id,
       project_name: r.projects?.project_name ?? '(unknown)',
@@ -345,8 +357,10 @@ export function AdminPage() {
       score_total:  r.score_total ?? 0,
       score_auto:   r.score_auto ?? 0,
       trigger_type: r.trigger_type ?? '?',
+      lane,
       created_at:   r.created_at,
-    }))
+      }
+    })
     // Aggregate per-call telemetry.
     type CallRow = { source: string | null; cli_version: string | null; platform: string | null; cache_hit: boolean | null }
     const calls = (callsTodayRes.data ?? []) as CallRow[]
@@ -395,20 +409,33 @@ export function AdminPage() {
   async function loadRecent() {
     const { data } = await supabase
       .from('analysis_snapshots')
-      .select('id, project_id, score_total, score_auto, trigger_type, created_at, rich_analysis, projects(project_name, github_url)')
+      .select('id, project_id, score_total, score_auto, trigger_type, created_at, rich_analysis, projects(project_name, github_url, live_url, status, creator_id)')
       .order('created_at', { ascending: false })
-      .limit(30)
+      // 30 → 100 so older platform audits (e.g. svelte 5/6) still surface
+      // when day-to-day walk-on / URL fast-lane volume crowds the list.
+      .limit(100)
     const rows = (data ?? []) as Array<any>
     const mapped: RecentAudit[] = rows.map(r => {
-      const err = r.rich_analysis?.error
+      const err  = r.rich_analysis?.error
+      const proj = r.projects ?? {}
+      // Lane inference · matches the laneOf() rules in src/lib/laneScore.ts
+      // but reproduced inline here because RecentAudit is a flat row, not
+      // a Project. status='preview' = anonymous walk-on / URL paste;
+      // anything else = a member who put it on stage.
+      const lane: 'platform' | 'walk_on' | 'url_fast_lane' =
+        proj.status !== 'preview'                                 ? 'platform'
+        : proj.github_url                                         ? 'walk_on'
+        : proj.live_url                                           ? 'url_fast_lane'
+        :                                                           'walk_on'
       return {
         id:           r.id,
         project_id:   r.project_id,
-        project_name: r.projects?.project_name ?? '(unknown)',
-        github_url:   r.projects?.github_url ?? null,
+        project_name: proj.project_name ?? '(unknown)',
+        github_url:   proj.github_url ?? null,
         score_total:  r.score_total ?? 0,
         score_auto:   r.score_auto ?? 0,
         trigger_type: r.trigger_type ?? '?',
+        lane,
         created_at:   r.created_at,
         has_error:    !!err,
         error_msg:    err ? String((err as any).message ?? (err as any).type ?? 'error') : null,
@@ -1082,7 +1109,7 @@ function AuditsTab({ stats, recent, onForceRefresh, rowBusy, rowOut, hasToken }:
                 border:     r.has_error ? '1px solid rgba(200,16,46,0.25)' : '1px solid rgba(255,255,255,0.04)',
                 borderRadius: '2px',
               }}>
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center px-3 py-2 text-xs">
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-3 items-center px-3 py-2 text-xs">
                   <div className="min-w-0">
                     <div className="font-mono truncate" style={{ color: '#fff' }}>
                       {r.project_name}
@@ -1090,6 +1117,7 @@ function AuditsTab({ stats, recent, onForceRefresh, rowBusy, rowOut, hasToken }:
                     </div>
                     <div className="font-mono text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.github_url ?? ''}</div>
                   </div>
+                  <LaneChip lane={r.lane} />
                   <span className="font-mono tabular-nums" style={{ color: r.has_error ? 'var(--scarlet)' : '#fff' }}>
                     {r.score_total}<span style={{ color: 'rgba(255,255,255,0.45)' }}>/100</span>
                     <span className="ml-1 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>(raw {r.score_auto})</span>
@@ -1213,6 +1241,7 @@ function CliTab({ usage, onForceRefresh, rowBusy, rowOut, hasToken }: {
                   <span className="font-mono truncate flex-1 min-w-0" style={{ color: '#fff' }} title={r.github_url ?? r.project_name}>
                     {r.project_name}
                   </span>
+                  <LaneChip lane={r.lane} />
                   <span className="font-mono tabular-nums whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.55)' }}>
                     {r.trigger_type}
                   </span>
@@ -2294,6 +2323,34 @@ function ProviderIcon({ provider, size = 14 }: { provider: string; size?: number
         </svg>
       )
   }
+}
+
+// Lane chip · matches the AuditShowcase / HeroTerminal taxonomy so a
+// glance at /admin tells which entry surface each audit row came from.
+// platform = member audition · walk_on = CLI repo audit · url_fast_lane
+// = URL-only paste. Tones picked to read at a tabular-density list.
+const LANE_META: Record<'platform' | 'walk_on' | 'url_fast_lane', { label: string; tone: string }> = {
+  platform:      { label: 'PLATFORM', tone: '#F0C040' },   // gold
+  walk_on:       { label: 'CLI',      tone: '#F8F5EE' },   // cream
+  url_fast_lane: { label: 'URL',      tone: '#00D4AA' },   // teal
+}
+function LaneChip({ lane }: { lane: 'platform' | 'walk_on' | 'url_fast_lane' }) {
+  const m = LANE_META[lane]
+  return (
+    <span
+      className="font-mono text-[9px] tracking-widest uppercase px-1.5 py-0.5"
+      style={{
+        background: `${m.tone}1F`,
+        border:     `1px solid ${m.tone}66`,
+        color:      m.tone,
+        borderRadius: '2px',
+        whiteSpace: 'nowrap',
+      }}
+      title={`Audit lane · ${m.label}`}
+    >
+      {m.label}
+    </span>
+  )
 }
 
 function ProviderBadge({ provider }: { provider: string }) {
