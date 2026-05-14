@@ -62,6 +62,20 @@ function bandLabel(score: number | null | undefined): string {
   return 'early'
 }
 
+// §1-A ⑥ band gate · OG cards are the most public surface (any unfurl
+// of the project URL on Twitter/Slack/Discord shows them). Only reveal
+// the raw digit when:
+//   1. score >= 85 (Encore tier — the trophy mechanic intentionally
+//      reveals the number as bragging right), AND
+//   2. status != 'preview' (anonymous URL fast lane previews never
+//      participate in the trophy reveal — they're not on stage)
+// Anything else falls back to "BAND · STRONG" type framing — the OG
+// reader sees the project tier without the digit. Same gate as
+// laneScore.viewerCanSeeDigit's Encore branch.
+function isDigitPubliclyRevealed(score: number | null | undefined, status: string | null | undefined): boolean {
+  return (score ?? 0) >= 85 && status !== 'preview'
+}
+
 async function loadProject(env: Env, id: string): Promise<ProjectCard | null> {
   const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
   const anonKey = env.SUPABASE_ANON_KEY ?? ''
@@ -175,10 +189,9 @@ const FOOTER_TAGLINE = `<text x="1128" y="590" font-family="DM Sans, Helvetica, 
 function cardAudit(p: ProjectCard): string {
   const score    = p.score
   const isEncore = (score ?? 0) >= 85
+  const reveal   = isDigitPubliclyRevealed(score, p.status)
   const accent   = isEncore ? '#F0C040' : '#60A5FA'
   const projName  = escapeXml(fitName(p.project_name, 22))
-  const scoreText = score == null ? '—' : String(score)
-  const slashX    = score == null ? 120 : 72 + (scoreText.length * 96) + 24
 
   const encoreChip = p.encore_kind ? `
     <g transform="translate(870, 64)">
@@ -187,6 +200,24 @@ function cardAudit(p: ProjectCard): string {
       <text x="56" y="31" font-family="Playfair Display, Georgia, serif" font-size="22" letter-spacing="2" fill="#F0C040">${escapeXml(`${ENCORE_LABEL[p.encore_kind].label.toUpperCase()}${p.encore_serial != null ? ` #${p.encore_serial}` : ''}`)}</text>
     </g>` : ''
 
+  // §1-A ⑥ band-first OG when the digit isn't publicly revealed (sub-85
+  // or preview lane). Card becomes "PROJECT NAME · band chip large +
+  // 'awaiting Encore' subline" — keeps the same visual weight slot but
+  // drops the precise number from public unfurl previews.
+  if (!reveal) {
+    const bandText = (p.band ?? 'unrated').toUpperCase()
+    return `${BG}${BRAND_TOP}${encoreChip}
+      <text x="72" y="330" font-family="Playfair Display, Georgia, serif" font-size="64" fill="#F8F5EE" letter-spacing="-1">${projName}</text>
+      <text x="72" y="510" font-family="Playfair Display, Georgia, serif" font-size="140" fill="${accent}" letter-spacing="-2">${escapeXml(bandText)}</text>
+      <text x="72" y="556" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="22" fill="rgba(248,245,238,0.45)" letter-spacing="3">BAND · DIGIT REVEALS AT ENCORE</text>
+      ${FOOTER_RULE}
+      <text x="72" y="590" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="20" fill="rgba(248,245,238,0.55)" letter-spacing="4">AUDITED ON COMMIT.SHOW · CREATOR SEES THE NUMBER</text>
+      ${FOOTER_TAGLINE}`
+  }
+
+  // Digit revealed (Encore tier) · original big-digit layout.
+  const scoreText = String(score)
+  const slashX    = 72 + (scoreText.length * 96) + 24
   return `${BG}${BRAND_TOP}${encoreChip}
     <text x="72" y="330" font-family="Playfair Display, Georgia, serif" font-size="64" fill="#F8F5EE" letter-spacing="-1">${projName}</text>
     <text x="72" y="510" font-family="Playfair Display, Georgia, serif" font-size="180" fill="${accent}" letter-spacing="-4">${escapeXml(scoreText)}</text>
@@ -218,8 +249,13 @@ function cardEncore(p: ProjectCard): string {
 function cardMilestone(p: ProjectCard, milestoneLabel: string): string {
   const projName  = escapeXml(fitName(p.project_name, 22))
   const labelText = escapeXml(milestoneLabel.toUpperCase())
-  const score     = p.score
-  const scoreText = score == null ? '—' : String(score)
+  const reveal    = isDigitPubliclyRevealed(p.score, p.status)
+  // §1-A ⑥ secondary score line drops to band when digit isn't publicly
+  // revealed yet — keeps the milestone headline (climb, top_10, etc.)
+  // as the focal point either way.
+  const subLine   = reveal && p.score != null
+    ? `CURRENT SCORE ${escapeXml(String(p.score))} / 100`
+    : `BAND · ${escapeXml((p.band ?? 'unrated').toUpperCase())}`
 
   return `${BG}${BRAND_TOP}
     <!-- Milestone tag · top-right small -->
@@ -228,9 +264,9 @@ function cardMilestone(p: ProjectCard, milestoneLabel: string): string {
     <!-- Label is the headline -->
     <text x="72" y="320" font-family="Playfair Display, Georgia, serif" font-size="84" fill="#F0C040" letter-spacing="-1">${labelText}</text>
 
-    <!-- Project name + current score on a smaller secondary line -->
+    <!-- Project name + current score (or band) on a smaller secondary line -->
     <text x="72" y="400" font-family="Playfair Display, Georgia, serif" font-size="48" fill="#F8F5EE" letter-spacing="-0.5">${projName}</text>
-    <text x="72" y="450" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="22" fill="rgba(248,245,238,0.55)" letter-spacing="3">CURRENT SCORE ${escapeXml(scoreText)} / 100</text>
+    <text x="72" y="450" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="22" fill="rgba(248,245,238,0.55)" letter-spacing="3">${subLine}</text>
 
     ${FOOTER_RULE}
     <text x="72" y="590" font-family="DM Sans, Helvetica, Arial, sans-serif" font-size="20" fill="rgba(248,245,238,0.6)" letter-spacing="4">BAND · ${escapeXml(p.band.toUpperCase())}</text>
@@ -444,7 +480,15 @@ function cardTrajectory(p: ProjectCard): string {
     const labelSize = isLast ? 30 : 16
     const labelWeight = isLast ? '700' : '500'
     const labelFill = isLast ? '#F0C040' : 'rgba(248,245,238,0.85)'
-    return `${halo}<circle cx="${cx}" cy="${cy}" r="${r}" fill="${accent}" stroke="#060C1A" stroke-width="2"/><text x="${cx}" y="${labelY}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-weight="${labelWeight}" font-size="${labelSize}" fill="${labelFill}">${pt.score_total}</text>`
+    // §1-A ⑥ trajectory · digit labels drop when not publicly revealed.
+    // Line + dots stay (shape of the journey survives), but each round's
+    // exact score doesn't leak. Last point also strips its bigger digit
+    // chip and uses an arrow marker instead.
+    const showDigit = isDigitPubliclyRevealed(p.score, p.status)
+    const digitLabel = showDigit
+      ? `<text x="${cx}" y="${labelY}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-weight="${labelWeight}" font-size="${labelSize}" fill="${labelFill}">${pt.score_total}</text>`
+      : (isLast ? `<text x="${cx}" y="${labelY}" text-anchor="middle" font-family="DM Mono, Menlo, Consolas, monospace" font-weight="700" font-size="20" fill="${labelFill}" letter-spacing="2">${escapeXml((p.band ?? 'unrated').toUpperCase())}</text>` : '')
+    return `${halo}<circle cx="${cx}" cy="${cy}" r="${r}" fill="${accent}" stroke="#060C1A" stroke-width="2"/>${digitLabel}`
   }).join('')
 
   // X-axis labels · first/last anchor "Day 0" / "Day N" + every
@@ -460,13 +504,19 @@ function cardTrajectory(p: ProjectCard): string {
   }).join('')
 
   // Summary strip · "+42 in 22 days · BAND".
+  // §1-A ⑥ band-mode summary drops the precise delta (which implies the
+  // digit by arithmetic) and reports direction only — "climbing" or
+  // "dipped" — paired with the band.
   const startScore  = pts[0].score_total
   const endScore    = pts[pts.length - 1].score_total
   const delta       = endScore - startScore
   const totalDays   = Math.max(0, Math.round((tN - t0) / 86400000))
+  const revealDelta = isDigitPubliclyRevealed(p.score, p.status)
   const deltaSign   = delta > 0 ? '+' : delta < 0 ? '' : '±'
   const deltaColor  = delta > 0 ? '#3FA874' : delta < 0 ? 'rgba(248,120,113,0.95)' : 'rgba(248,245,238,0.6)'
-  const summary     = `${deltaSign}${delta} pts in ${totalDays} day${totalDays === 1 ? '' : 's'}  ·  BAND ${p.band.toUpperCase()}`
+  const summary     = revealDelta
+    ? `${deltaSign}${delta} pts in ${totalDays} day${totalDays === 1 ? '' : 's'}  ·  BAND ${p.band.toUpperCase()}`
+    : `${delta > 0 ? 'climbing' : delta < 0 ? 'dipped' : 'flat'} over ${totalDays} day${totalDays === 1 ? '' : 's'}  ·  BAND ${p.band.toUpperCase()}`
 
   return `${BG}${BRAND_TOP}
     <!-- Project name + small subtitle -->

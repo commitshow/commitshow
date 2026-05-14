@@ -1,7 +1,16 @@
 import type { TimelinePoint } from '../lib/projectQueries'
+import { scoreBand, bandLabel, bandTone } from '../lib/laneScore'
 
 interface Props {
   points: TimelinePoint[]
+  /** §1-A ⑥ band gate · when true, render band chips instead of digit
+   *  scores in the round summary cards + the gridline labels + the
+   *  "Round 1 → now: +N" summary. Parent (ProjectDetailPage) computes
+   *  this from viewerCanSeeDigit so creator/admin/paid-Patron see the
+   *  digit timeline; non-owners see a band-only journey instead of
+   *  precise numbers. Curve still renders with the underlying score so
+   *  the trajectory shape is preserved either way. */
+  showAsBand?: boolean
 }
 
 const W = 600
@@ -31,7 +40,7 @@ function roundLabels(points: TimelinePoint[]): string[] {
   return out
 }
 
-export function ScoreTimeline({ points }: Props) {
+export function ScoreTimeline({ points, showAsBand }: Props) {
   if (points.length === 0) {
     return (
       <div className="card-navy p-5 text-center font-mono text-xs" style={{ borderRadius: '2px', color: 'rgba(248,245,238,0.35)' }}>
@@ -46,7 +55,11 @@ export function ScoreTimeline({ points }: Props) {
       <div className="card-navy p-5" style={{ borderRadius: '2px' }}>
         <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// AUDIT TIMELINE · {rounds[0]}</div>
         <div className="font-light text-sm" style={{ color: 'rgba(248,245,238,0.55)' }}>
-          First audit locked in — <strong style={{ color: 'var(--cream)' }}>{p.score_total}/100</strong> on{' '}
+          First audit locked in — {showAsBand ? (
+            <strong className="tracking-widest uppercase" style={{ color: bandTone(scoreBand(p.score_total)) }}>{bandLabel(scoreBand(p.score_total))}</strong>
+          ) : (
+            <strong style={{ color: 'var(--cream)' }}>{p.score_total}/100</strong>
+          )} on{' '}
           {new Date(p.created_at).toLocaleDateString()}. Ship improvements and Re-analyze to see the score climb.
         </div>
       </div>
@@ -80,7 +93,14 @@ export function ScoreTimeline({ points }: Props) {
           <span style={{
             color: totalMove > 0 ? '#00D4AA' : totalMove < 0 ? '#F88771' : 'rgba(248,245,238,0.4)',
           }}>
-            {totalMove > 0 ? `Round 1 → now: +${totalMove}` : totalMove < 0 ? `Round 1 → now: ${totalMove}` : 'flat'}
+            {showAsBand
+              // Band mode · drop the precise delta, just signal direction.
+              ? totalMove > 0 ? 'climbing'
+              : totalMove < 0 ? 'dipped'
+              : 'flat'
+              : totalMove > 0 ? `Round 1 → now: +${totalMove}`
+              : totalMove < 0 ? `Round 1 → now: ${totalMove}`
+              : 'flat'}
           </span>
         </div>
       </div>
@@ -153,9 +173,17 @@ export function ScoreTimeline({ points }: Props) {
               <div style={{ color: isFinal ? '#00D4AA' : 'rgba(248,245,238,0.5)', fontWeight: isFinal ? 600 : 400 }}>
                 {label}
               </div>
-              <div className="mt-0.5" style={{ color: 'var(--cream)' }}>{p.score_total}/100</div>
+              {showAsBand ? (
+                <div className="mt-0.5 tracking-widest uppercase" style={{ color: bandTone(scoreBand(p.score_total)), fontSize: '11px', fontWeight: 600 }}>
+                  {bandLabel(scoreBand(p.score_total))}
+                </div>
+              ) : (
+                <div className="mt-0.5" style={{ color: 'var(--cream)' }}>{p.score_total}/100</div>
+              )}
               <div className="mt-0.5" style={{ color: (p.score_total_delta ?? 0) > 0 ? '#00D4AA' : (p.score_total_delta ?? 0) < 0 ? '#C8102E' : 'rgba(248,245,238,0.3)' }}>
-                {p.score_total_delta == null ? 'baseline' : p.score_total_delta > 0 ? `+${p.score_total_delta}` : p.score_total_delta}
+                {showAsBand
+                  ? (p.score_total_delta == null ? 'baseline' : p.score_total_delta > 0 ? '↑' : p.score_total_delta < 0 ? '↓' : '·')
+                  : (p.score_total_delta == null ? 'baseline' : p.score_total_delta > 0 ? `+${p.score_total_delta}` : p.score_total_delta)}
               </div>
               <div className="mt-0.5 tracking-widest" style={{ color: 'rgba(248,245,238,0.3)', fontSize: '9px' }}>
                 {new Date(p.created_at).toLocaleDateString()}

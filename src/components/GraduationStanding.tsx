@@ -19,6 +19,7 @@ import {
 } from '../lib/encore'
 import { EncoreBadge } from './EncoreBadge'
 import { supabase } from '../lib/supabase'
+import { scoreBand, bandLabel, bandTone } from './../lib/laneScore'
 
 interface FirstSpotterRow {
   supporter_id:   string
@@ -33,9 +34,13 @@ interface Props {
   /** §re-audit privacy · when true, blanks out the score · progress bar ·
    *  pillar breakdown · Encore serial. Owner always sees their own. */
   scoreHidden?: boolean
+  /** §1-A ⑥ band gate · viewer can't see the raw digit. Surfaces only the
+   *  band chip + "approaching Encore" copy. Progress bar stays so visitors
+   *  still see the journey shape — they just don't see the exact number. */
+  showAsBand?: boolean
 }
 
-export function GraduationStanding({ projectId, viewerMode = 'visitor', scoreHidden = false }: Props) {
+export function GraduationStanding({ projectId, viewerMode = 'visitor', scoreHidden = false, showAsBand = false }: Props) {
   const [s, setS] = useState<ProjectStanding | null>(null)
   const [encores, setEncores] = useState<EncoreRow[]>([])
   const [supporterCount, setSupporterCount] = useState<number>(0)
@@ -132,13 +137,28 @@ export function GraduationStanding({ projectId, viewerMode = 'visitor', scoreHid
             // ENCORE STANDING
           </div>
           <div className="font-display font-bold text-lg mt-1 flex items-center gap-2 flex-wrap" style={{ color: 'var(--cream)' }}>
-            <span className="tabular-nums" style={{ color: accent }}>{score}/100</span>
-            {isEncore ? (
-              <EncoreBadge score={score} serial={productionEncore?.serial} size="md" />
+            {showAsBand && !isEncore ? (
+              // Band mode · hide digit + distance (distance reveals digit by
+              // arithmetic). Show band chip + "approaching Encore" copy
+              // instead. Encore-graduated rows skip this branch since their
+              // digit is publicly revealed (§1-A ⑥ trophy mechanic).
+              <>
+                <span className="tracking-widest uppercase" style={{ color: bandTone(scoreBand(score)) }}>{bandLabel(scoreBand(score))}</span>
+                <span className="font-mono text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+                  · approaching Encore
+                </span>
+              </>
             ) : (
-              <span className="font-mono text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
-                · {distance} to Encore
-              </span>
+              <>
+                <span className="tabular-nums" style={{ color: accent }}>{score}/100</span>
+                {isEncore ? (
+                  <EncoreBadge score={score} serial={productionEncore?.serial} size="md" />
+                ) : (
+                  <span className="font-mono text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+                    · {distance} to Encore
+                  </span>
+                )}
+              </>
             )}
           </div>
           {!expanded && (

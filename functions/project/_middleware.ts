@@ -19,6 +19,24 @@ interface ResolvedProject {
   id:           string
   project_name: string
   score_total:  number | null
+  status?:      string | null
+}
+
+// §1-A ⑥ public meta band gate · sibling of the /projects middleware
+// helper. Reveals digit only for Encore-tier projects (score >= 85
+// AND status != 'preview'); else surfaces "band · STRONG" so non-Encore
+// audits don't leak the precise number in social unfurls.
+function bandFor(score: number | null | undefined): string {
+  if (score == null) return 'unrated'
+  if (score >= 85) return 'encore'
+  if (score >= 70) return 'strong'
+  if (score >= 50) return 'building'
+  return 'early'
+}
+function publicScoreText(score: number | null | undefined, status: string | null | undefined): string {
+  return ((score ?? 0) >= 85 && status !== 'preview')
+    ? `${score}/100`
+    : `band · ${bandFor(score).toUpperCase()}`
 }
 
 async function resolveSlug(env: Env, slug: string): Promise<ResolvedProject | null> {
@@ -105,8 +123,9 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   const twitterKind = ogKind === 'audit' ? 'tweet' : ogKind
   const twitterPngUrl =
     `https://tekemubwihsjdzittoqf.supabase.co/functions/v1/og-png?id=${project.id}&kind=${encodeURIComponent(twitterKind)}`
-  const title       = `${project.project_name} · ${project.score_total ?? '—'}/100 · commit.show`
-  const description = `${project.project_name} on commit.show. Audited by the engine, auditioned for Scouts. Score ${project.score_total ?? '—'}/100.`
+  const scoreText   = publicScoreText(project.score_total, project.status)
+  const title       = `${project.project_name} · ${scoreText} · commit.show`
+  const description = `${project.project_name} on commit.show. Audited by the engine, auditioned for Scouts. ${scoreText}.`
 
   const rewriter = new HTMLRewriter()
     .on('meta[property="og:image"]',        new MetaRewriter(ogImageUrl))

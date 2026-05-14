@@ -9,6 +9,7 @@ import { IconLock } from './icons'
 import { DiscoveryPanel } from './DiscoveryPanel'
 import { AuditCiBlock } from './AuditCiBlock'
 import { supabase } from '../lib/supabase'
+import { scoreBand, bandLabel, bandTone } from '../lib/laneScore'
 
 // Color map — Ivy League palette, never generic rainbow.
 const AXIS_PALETTE: Record<AxisColor, string> = {
@@ -207,7 +208,7 @@ function LighthouseCard({ lh, githubOk, liveUrl }: { lh: AnalysisResult['lh']; g
 
 export function AnalysisResultCard({
   result, onReset, projectId, onReanalyzed, viewerMode = 'owner', seasonPhase, viewerTier = null,
-  hideReanalyzeButton = false,
+  hideReanalyzeButton = false, showAsBand = false,
 }: {
   result: AnalysisResult
   onReset?: () => void
@@ -238,6 +239,13 @@ export function AnalysisResultCard({
    * existing button.
    */
   hideReanalyzeButton?: boolean
+  /**
+   * §1-A ⑥ band gate · when true, visitor-visible digits (hero fallback,
+   * score delta block, etc.) render as band chips instead. Parent computes
+   * this via viewerCanSeeDigit; SubmitForm leaves it false because the
+   * creator just submitted (their own work · digit fine).
+   */
+  showAsBand?: boolean
 }) {
   const navigate = useNavigate()
   const isOwner = viewerMode === 'owner'
@@ -292,11 +300,24 @@ export function AnalysisResultCard({
 
   // Fallback render: panel evaluation unavailable → minimal score card only.
   if (!r || (!r.tldr && !r.headline && r.axis_scores.length === 0)) {
+    // §1-A ⑥ band gate · fallback hero also flips to band chip when the
+    // viewer isn't allowed to see the digit. Same band tone palette as
+    // the rest of the system so the visual remains consistent.
+    const fbBand = scoreBand(result.score_total ?? 0)
     return (
       <div className="card-navy p-8" style={{ borderRadius: '2px' }}>
         <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>// EVALUATION (BASIC)</div>
-        <div className="font-display font-black text-5xl mb-2" style={{ color: 'var(--cream)' }}>{result.score_total}</div>
-        <div className="font-mono text-xs tracking-wide" style={{ color: 'rgba(248,245,238,0.4)' }}>/ 100</div>
+        {showAsBand ? (
+          <>
+            <div className="font-display font-black text-3xl mb-2 tracking-widest uppercase" style={{ color: bandTone(fbBand) }}>{bandLabel(fbBand)}</div>
+            <div className="font-mono text-xs tracking-wide" style={{ color: 'rgba(248,245,238,0.4)' }}>band · creator sees digit</div>
+          </>
+        ) : (
+          <>
+            <div className="font-display font-black text-5xl mb-2" style={{ color: 'var(--cream)' }}>{result.score_total}</div>
+            <div className="font-mono text-xs tracking-wide" style={{ color: 'rgba(248,245,238,0.4)' }}>/ 100</div>
+          </>
+        )}
         <div className="font-light text-[11px] mt-2" style={{ color: 'rgba(248,245,238,0.35)', lineHeight: 1.5, fontStyle: 'italic' }}>
           It's a snapshot, not a verdict. Code changes; so does this number.
         </div>
@@ -582,8 +603,12 @@ export function AnalysisResultCard({
         <HonestEvaluationSection prose={r.honest_evaluation} />
       )}
 
-      {/* ── SCORE DELTA (v1.3 Re-analysis loop) ── */}
-      {result.score_total_delta !== null && result.score_total_delta !== undefined && (
+      {/* ── SCORE DELTA (v1.3 Re-analysis loop) ──
+         Band-mode visitors get the direction arrow only; precise delta is
+         meaningless without the absolute, and showing "+7" without showing
+         the from/to digits would just look weird. Owner / Platinum still
+         see the full arithmetic. */}
+      {result.score_total_delta !== null && result.score_total_delta !== undefined && !showAsBand && (
         <div
           className="pl-4 py-3 pr-4"
           style={{

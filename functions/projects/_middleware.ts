@@ -21,6 +21,25 @@ interface ResolvedProject {
   id:           string
   project_name: string
   score_total:  number | null
+  status:       string | null
+}
+
+// §1-A ⑥ public-meta band gate · same rule as the OG image card · only
+// reveal the raw digit in og:title / og:description when score >= 85 AND
+// status != 'preview'. Below that, surface "band · STRONG" copy so the
+// shame trigger (a 67/100 in the social unfurl) goes away. The number
+// stays in the project page itself for the creator.
+function bandFor(score: number | null | undefined): string {
+  if (score == null) return 'unrated'
+  if (score >= 85) return 'encore'
+  if (score >= 70) return 'strong'
+  if (score >= 50) return 'building'
+  return 'early'
+}
+function publicScoreText(score: number | null | undefined, status: string | null | undefined): string {
+  return ((score ?? 0) >= 85 && status !== 'preview')
+    ? `${score}/100`
+    : `band · ${bandFor(score).toUpperCase()}`
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -29,7 +48,7 @@ async function resolveById(env: Env, id: string): Promise<ResolvedProject | null
   const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
   const anonKey = env.SUPABASE_ANON_KEY ?? ''
   if (!anonKey) return null
-  const cols = 'id,project_name,score_total'
+  const cols = 'id,project_name,score_total,status'
   const res  = await fetch(
     `${url}/rest/v1/projects?id=eq.${id}&select=${cols}&limit=1`,
     { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } },
@@ -92,8 +111,9 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   const twitterKind = ogKind === 'audit' ? 'tweet' : ogKind
   const twitterPngUrl =
     `https://tekemubwihsjdzittoqf.supabase.co/functions/v1/og-png?id=${project.id}&kind=${encodeURIComponent(twitterKind)}`
-  const title       = `${project.project_name} · ${project.score_total ?? '—'}/100 · commit.show`
-  const description = `${project.project_name} on commit.show. Audited by the engine, auditioned for Scouts. Score ${project.score_total ?? '—'}/100.`
+  const scoreText   = publicScoreText(project.score_total, project.status)
+  const title       = `${project.project_name} · ${scoreText} · commit.show`
+  const description = `${project.project_name} on commit.show. Audited by the engine, auditioned for Scouts. ${scoreText}.`
 
   const rewriter = new HTMLRewriter()
     .on('meta[property="og:image"]',        new MetaRewriter(ogImageUrl))

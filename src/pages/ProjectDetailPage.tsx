@@ -982,17 +982,20 @@ export function ProjectDetailPage() {
                   snapshots — you can't rewrite history. delta is recomputed
                   against the previous point so the chart's rightmost label
                   agrees with ScanStrip / AnalysisResultCard / Ladder. */}
-              <ScoreTimeline points={(() => {
-                if (timeline.length === 0) return timeline
-                const last = timeline[timeline.length - 1]
-                if (last.score_total === project.score_total) return timeline
-                const prevSnap = timeline.length >= 2 ? timeline[timeline.length - 2] : null
-                const liveDelta = prevSnap ? project.score_total - prevSnap.score_total : last.score_total_delta
-                return [
-                  ...timeline.slice(0, -1),
-                  { ...last, score_total: project.score_total, score_total_delta: liveDelta },
-                ]
-              })()} />
+              <ScoreTimeline
+                showAsBand={showAsBand}
+                points={(() => {
+                  if (timeline.length === 0) return timeline
+                  const last = timeline[timeline.length - 1]
+                  if (last.score_total === project.score_total) return timeline
+                  const prevSnap = timeline.length >= 2 ? timeline[timeline.length - 2] : null
+                  const liveDelta = prevSnap ? project.score_total - prevSnap.score_total : last.score_total_delta
+                  return [
+                    ...timeline.slice(0, -1),
+                    { ...last, score_total: project.score_total, score_total_delta: liveDelta },
+                  ]
+                })()}
+              />
             </div>
 
             {/* AI Coder 7 Frames · signature framework — sits between
@@ -1098,6 +1101,7 @@ export function ProjectDetailPage() {
                 seasonPhase={seasonPhase}
                 viewerTier={member?.tier ?? null}
                 hideReanalyzeButton
+                showAsBand={showAsBand}
               />
             ) : (
               <EmptyBox label="No analysis yet — awaiting first round." />
@@ -1116,6 +1120,7 @@ export function ProjectDetailPage() {
                 projectId={project.id}
                 viewerMode={isOwner ? 'owner' : 'visitor'}
                 scoreHidden={scoreHidden}
+                showAsBand={showAsBand}
               />
             </div>
           </section>
