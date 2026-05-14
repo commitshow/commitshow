@@ -4454,12 +4454,27 @@ Deno.serve(async (req) => {
   // 기존 binary 그대로 유지 (regression 방지 — 작은 단일-페이지 프로젝트에 불리).
   const liveHomepageOk = health.ok && health.elapsed_ms < 3000
   const liveHealthPts  = (() => {
-    if (!liveHomepageOk) return 0
-    if (routesHealth.probed === 0) return 5     // 라우트 추출 실패 → 기존 동작
-    const r = routesHealth.reachable_rate
-    if (r >= 0.8) return 5
-    if (r >= 0.6) return 3
-    return 1                                     // homepage 200 인데 다른 라우트 다 깨진 케이스
+    if (liveHomepageOk) {
+      if (routesHealth.probed === 0) return 5     // 라우트 추출 실패 → 기존 동작
+      const r = routesHealth.reachable_rate
+      if (r >= 0.8) return 5
+      if (r >= 0.6) return 3
+      return 1                                     // homepage 200 인데 다른 라우트 다 깨진 케이스
+    }
+    // ── Bot-wall fallback (§15-E · 2026-05-15 · naver / claude.ai 클래스) ──
+    // 일부 사이트는 TLS fingerprinting · DataDome · Akamai 등으로 우리의
+    // Deno fetch 를 0/403 차단함. 그래도 Google PageSpeed lab 과 Cloudflare
+    // Browser Rendering 은 통과시키는 경우가 많다 (그들의 인프라는 별도 IP /
+    // residential / 정식 Chromium). 둘 중 하나가 페이지를 실제로 받았다면
+    // "live" 는 입증된 것 — TTFB 정확값만 모를 뿐. 보수적 부분점 award.
+    //   · routes 6/6 reachable (multi-route 가 어떻게든 통과)  → 4pt
+    //   · deep_probe.proven_reachable (CF Chromium 이 렌더)     → 3pt
+    //   · lighthouseSucceeded (PageSpeed 가 점수 산출)          → 3pt
+    //   · 무엇도 통과 X → 0pt (사이트 진짜 죽음 / 라우팅 문제)
+    if (routesHealth.probed > 0 && routesHealth.reachable >= routesHealth.probed * 0.8) return 4
+    if (deepProbe.proven_reachable) return 3
+    if (lighthouseSucceeded)        return 3
+    return 0
   })()
   // Tier A + Tier B completeness UNION (§15-E.3 · 2026-05-09 fix).
   // Earlier version only fell back to Tier B when Tier A failed entirely.
