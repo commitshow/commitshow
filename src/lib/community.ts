@@ -128,9 +128,22 @@ export interface CreatePostInput {
 }
 
 export async function createPost(input: CreatePostInput): Promise<{ id: string } | null> {
+  // RLS insert policy on community_posts is `auth.uid() = author_id` ·
+  // without explicit author_id the insert sends NULL, fails the WITH
+  // CHECK, and surfaces to the user as "Publish failed". Stamp the
+  // current member id here so the policy sees a match. Anonymous
+  // sessions can't insert (no auth.uid), which matches design intent —
+  // signed-in members only.
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    console.error('[createPost] no auth session')
+    return null
+  }
+
   const { data, error } = await supabase
     .from('community_posts')
     .insert([{
+      author_id:         user.id,
       type:              input.type,
       subtype:           input.subtype ?? null,
       title:             input.title,
@@ -145,6 +158,11 @@ export async function createPost(input: CreatePostInput): Promise<{ id: string }
 
   if (error || !data) {
     console.error('[createPost]', error)
+    // Bubble the real Supabase error message instead of swallowing to
+    // null · "Publish failed" with no detail was opaque and made every
+    // failure indistinguishable (RLS · CHECK · network all looked the
+    // same to the user). Page-level catch surfaces err.message.
+    if (error) throw new Error(`Publish failed: ${error.message}`)
     return null
   }
 
