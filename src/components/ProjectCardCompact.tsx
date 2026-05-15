@@ -3,7 +3,7 @@ import type { Project } from '../lib/supabase'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { IconForecast, IconApplaud } from './icons'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit, displayScore } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList, displayScore } from '../lib/laneScore'
 
 // pump.fun-style dense card. Thumbnail + name + score + 1-line meta.
 // Used in the /projects grid where the goal is scan many projects fast.
@@ -34,9 +34,12 @@ export function ProjectCardCompact({
 }: Props) {
   const navigate = useNavigate()
   const handleOpen = () => onOpen ? onOpen(p) : navigate(`/projects/${p.id}`)
-  // §1-A ⑥ band gate · creator/admin/paid-Patron see digit. Encore reveals.
+  // §1-A ⑥ list-surface band gate · creator-self on their OWN card list
+  // still sees band (same as visitor view) so they sanity-check framing
+  // without incognito. Detail page is where the creator dashboard digit
+  // lives. Encore + admin + paid Patron still reveal here.
   const viewer        = useViewer()
-  const canSeeDigit   = viewerCanSeeDigit(p, viewer)
+  const canSeeDigit   = viewerCanSeeDigitOnList(p, viewer)
   const ds            = displayScore(p)
   const band          = scoreBand(ds)
 

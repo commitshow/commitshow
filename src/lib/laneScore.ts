@@ -154,10 +154,17 @@ export interface ViewerScope {
 
 /** True when the given viewer should see the raw digit score for the project.
  *
- *  Encore-graduated projects always reveal the digit (trophy mechanic) — the
- *  shame mitigation only applies during audition. Projects with no creator
- *  (anonymous URL/CLI walk-on previews) only reveal to admins + Patrons since
- *  there's no creator to claim the audit.
+ *  USE THIS ON DETAIL PAGES ONLY · the predicate grants creator-self
+ *  digit access, which is correct on /projects/<id> (the creator's
+ *  dashboard for their own product) but wrong on /products list /
+ *  ladder / cards — there the creator scanning their own product list
+ *  should see the same band view a visitor sees so they can sanity-
+ *  check public framing without incognito mode. For those list surfaces
+ *  use `viewerCanSeeDigitOnList` below.
+ *
+ *  Encore-graduated projects always reveal the digit (trophy mechanic).
+ *  Projects with no creator (anonymous URL/CLI walk-on previews) only
+ *  reveal to admins + Patrons since there's no creator to claim the audit.
  *
  *  Status field accepts plain string so LadderRow + ProjectStatus shapes
  *  both fit (we only compare to the literal 'preview'). */
@@ -176,5 +183,33 @@ export function viewerCanSeeDigit(
   // 5. Project creator · digit for own project only.
   if (viewer.member_id && project.creator_id && viewer.member_id === project.creator_id) return true
   // 1-3. Everyone else → band only.
+  return false
+}
+
+/** List/card/ladder variant · CREATOR DOES NOT GET DIGIT HERE.
+ *
+ *  Same gate as viewerCanSeeDigit but without the creator-self branch.
+ *  This is the right predicate for any surface where the viewer is
+ *  scanning a list of products (their own and others'): featured lanes,
+ *  the ladder rows, search results, the LadderTopStrip ribbon, the
+ *  ProjectPreviewModal hero, the CreatorDetailPage tiles. The creator
+ *  scanning their own product list sees the same band view a visitor
+ *  sees — they get a "this is what the public sees" sanity check
+ *  without needing incognito mode. The full digit + transparency
+ *  remains on the project detail page (via viewerCanSeeDigit). */
+export function viewerCanSeeDigitOnList(
+  project: { creator_id?: string | null; status?: string | null; score_total?: number | null } | null | undefined,
+  viewer:  ViewerScope | null | undefined,
+): boolean {
+  if (!project) return false
+  // Encore graduate → digit reveals globally (trophy mechanic).
+  if ((project.score_total ?? 0) >= 85 && project.status !== 'preview') return true
+  if (!viewer) return false
+  // Admin · always (operational visibility).
+  if (viewer.is_admin) return true
+  // Paid Patron Scout · V1.5+ tier · placeholder false today.
+  if (viewer.paid_patron) return true
+  // Creator-self intentionally NOT branched here · use viewerCanSeeDigit
+  // on the detail page if you need the creator-dashboard view.
   return false
 }

@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, PUBLIC_MEMBER_COLUMNS, type Member } from '../lib/supabase'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 interface ProjectHit {
   id:            string
@@ -188,7 +188,7 @@ export function SearchPage() {
                     </div>
                   </div>
                   {p.score_total != null && (() => {
-                    const canSeeDigit = viewerCanSeeDigit(p, viewer)
+                    const canSeeDigit = viewerCanSeeDigitOnList(p, viewer)
                     const band        = scoreBand(p.score_total)
                     const blind       = (p.audit_count ?? 0) <= 1
                     return (

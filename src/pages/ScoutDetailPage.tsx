@@ -16,7 +16,7 @@ import {
 } from '../lib/supabase'
 import { TrustLevelChip } from '../components/TrustLevelChip'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 // Tier palette · mirrors ScoutsPage (kept inline so the detail page
 // doesn't depend on supabase.ts re-exporting display constants).
@@ -429,7 +429,7 @@ export function ScoutDetailPage() {
                     // is gated so non-creator non-admin sees band label
                     // instead. Settled outcomes (correct/missed/mixed)
                     // are just status words, no digit leak.
-                    const canSeeDigitForOutcome = viewerCanSeeDigit(s, viewer)
+                    const canSeeDigitForOutcome = viewerCanSeeDigitOnList(s, viewer)
                     const outcomeLabel: React.ReactNode = s.forecast_outcome === 'correct' ? 'correct'
                                        : s.forecast_outcome === 'missed'  ? 'missed'
                                        : s.forecast_outcome === 'mixed'   ? 'mixed'
@@ -452,7 +452,7 @@ export function ScoutDetailPage() {
                               {s.project_name ?? '—'}
                             </div>
                             {(() => {
-                              const canSeeDigit = viewerCanSeeDigit(s, viewer)
+                              const canSeeDigit = viewerCanSeeDigitOnList(s, viewer)
                               const band        = scoreBand(currentScore ?? 0)
                               return canSeeDigit ? (
                                 <span

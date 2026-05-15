@@ -8,7 +8,7 @@ import { ForecastModal } from './ForecastModal'
 import { IconForecast } from './icons'
 import { resolveCreatorName } from '../lib/creatorName'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 interface Props {
   project: Project
@@ -49,10 +49,10 @@ export function ProjectPreviewModal({ project: p, onClose, creator: creatorProp,
 
   const isOwner = !!user && user.id === p.creator_id
   const canForecast = !!user && !isOwner
-  // §1-A ⑥ band gate · viewer-aware digit reveal. Public viewers see the
-  // band chip ("Strong" / "Building") · creator/admin/paid-Patron see the
-  // raw digit. Encore-graduated projects auto-reveal to everyone.
-  const canSeeDigit = viewerCanSeeDigit(p, viewer)
+  // §1-A ⑥ list-surface band gate · preview modal is a list-style
+  // surface (Scout flipping through grid cards) · creator-self still sees
+  // band so they get the public view. Detail page has the dashboard digit.
+  const canSeeDigit = viewerCanSeeDigitOnList(p, viewer)
   const band        = scoreBand(p.score_total ?? 0)
   const bandColor   = bandTone(band)
   const scoreColor = p.score_total >= 75 ? '#00D4AA' : p.score_total >= 50 ? '#F0C040' : '#C8102E'

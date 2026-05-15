@@ -5,7 +5,7 @@ import { IconForecast, IconApplaud } from './icons'
 import { EncoreBadge } from './EncoreBadge'
 import { resolveCreatorName } from '../lib/creatorName'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 // Editorial-style card. Treat every submission as a crafted piece —
 // generous image, Playfair headline, paragraph-scale description. Replaces
@@ -40,9 +40,12 @@ export function ProjectCardEditorial({
 }: Props) {
   const navigate = useNavigate()
   const handleOpen = () => onOpen ? onOpen(p) : navigate(`/projects/${p.id}`)
-  // §1-A ⑥ band gate · creator/admin/paid-Patron see digit. Encore reveals.
+  // §1-A ⑥ list-surface band gate · creator-self on their OWN card list
+  // still sees band (same as visitor view) so they sanity-check framing
+  // without incognito. Detail page is where the creator dashboard digit
+  // lives. Encore + admin + paid Patron still reveal here.
   const viewer       = useViewer()
-  const canSeeDigit  = viewerCanSeeDigit(p, viewer)
+  const canSeeDigit  = viewerCanSeeDigitOnList(p, viewer)
   const band         = scoreBand(p.score_total ?? 0)
 
   const gc = GRADE_COLORS[p.creator_grade] || '#9CA3AF'

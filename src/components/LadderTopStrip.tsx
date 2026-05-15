@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, LADDER_CATEGORY_LABELS, type LadderCategory } from '../lib/supabase'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 interface TopRow {
   project_id:    string
@@ -109,7 +109,7 @@ export function LadderTopStrip() {
                     </div>
                   </div>
                   {(() => {
-                    const canSeeDigit = viewerCanSeeDigit(r, viewer)
+                    const canSeeDigit = viewerCanSeeDigitOnList(r, viewer)
                     const band        = scoreBand(r.score_total)
                     return canSeeDigit ? (
                       <div className="flex-shrink-0 flex items-baseline gap-1">

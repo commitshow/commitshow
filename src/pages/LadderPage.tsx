@@ -29,7 +29,7 @@ import { ProjectCardEditorial } from '../components/ProjectCardEditorial'
 import { FeaturedLanes } from '../components/FeaturedLanes'
 import { useAuth } from '../lib/auth'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 const WINDOWS: LadderWindow[] = ['today', 'week', 'month', 'all_time']
 type ViewMode = 'list' | 'cards'
@@ -369,7 +369,7 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
   // score_total) for viewerCanSeeDigit to decide. Encore-graduated rows
   // reveal digit to everyone regardless of viewer.
   const viewer      = useViewer()
-  const canSeeDigit = viewerCanSeeDigit(row, viewer)
+  const canSeeDigit = viewerCanSeeDigitOnList(row, viewer)
   const band        = scoreBand(row.score_total)
   const bandColor   = bandTone(band)
 

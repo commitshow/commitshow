@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase, type Project } from '../lib/supabase'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 type ProjectDotRaw = Pick<Project, 'id' | 'project_name' | 'score_auto' | 'score_forecast' | 'score_total' | 'status' | 'creator_id'>
 type ProjectDot = ProjectDotRaw & { cx: number; cy: number }
@@ -284,7 +284,7 @@ export function LeaderboardPage() {
               >
                 <div className="font-display font-bold text-sm mb-0.5">{hover.project_name}</div>
                 {(() => {
-                  const canSeeDigit = viewerCanSeeDigit(hover, viewer)
+                  const canSeeDigit = viewerCanSeeDigitOnList(hover, viewer)
                   const band        = scoreBand(hover.score_total ?? 0)
                   return canSeeDigit ? (
                     <div style={{ color: 'var(--text-secondary)' }}>

@@ -3,7 +3,7 @@ import type { Project } from '../lib/supabase'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { resolveCreatorName } from '../lib/creatorName'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 export interface LaneCardAccent {
   tone: 'rookie' | 'climber' | 'graduating'
@@ -33,9 +33,11 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
   const navigate = useNavigate()
   const tone = TONE_COLOR[accent.tone]
   const gradeColor = GRADE_COLORS[p.creator_grade] || '#9CA3AF'
-  // §1-A ⑥ band gate · creator/admin/paid-Patron see digit. Encore reveals.
+  // §1-A ⑥ list-surface band gate · creator-self on their OWN lane card
+  // still sees band (same as visitor view) so they sanity-check framing
+  // without incognito. Encore + admin + paid Patron still reveal here.
   const viewer       = useViewer()
-  const canSeeDigit  = viewerCanSeeDigit(p, viewer)
+  const canSeeDigit  = viewerCanSeeDigitOnList(p, viewer)
   const band         = scoreBand(p.score_total ?? 0)
   const bandColor    = bandTone(band)
   const creatorLoading = !!p.creator_id && creator === undefined

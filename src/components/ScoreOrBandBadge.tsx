@@ -19,7 +19,7 @@
 //   · 'compact' minimal · for tight rows like ProjectCardCompact
 
 import type { Project } from '../lib/supabase'
-import { displayScore, scoreBand, bandLabel, bandTone, viewerCanSeeDigit, type ViewerScope } from '../lib/laneScore'
+import { displayScore, scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList, type ViewerScope } from '../lib/laneScore'
 
 interface ScoreOrBandBadgeProps {
   project: Pick<Project, 'creator_id' | 'status' | 'score_total' | 'score_auto' | 'github_url' | 'live_url'>
@@ -30,7 +30,10 @@ interface ScoreOrBandBadgeProps {
 }
 
 export function ScoreOrBandBadge({ project, viewer, variant = 'pill', showSuffix = true }: ScoreOrBandBadgeProps) {
-  const canSeeDigit = viewer === undefined ? true : viewerCanSeeDigit(project, viewer ?? null)
+  // List-scoped predicate · creator-self does NOT get digit on cards/lists;
+  // they see the public band view to sanity-check framing. Detail page
+  // uses the broader viewerCanSeeDigit (creator dashboard).
+  const canSeeDigit = viewer === undefined ? true : viewerCanSeeDigitOnList(project, viewer ?? null)
   const score = displayScore(project)
   const band  = scoreBand(score)
   const tone  = bandTone(band)

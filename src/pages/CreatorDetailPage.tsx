@@ -18,7 +18,7 @@ import { isEncoreScore, fetchAllEncoresByProjectIds, type EncoreRow, type Encore
 import { EncoreBadge } from '../components/EncoreBadge'
 import { TrustLevelChip } from '../components/TrustLevelChip'
 import { useViewer } from '../lib/useViewer'
-import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 const GRADE_COLOR: Record<CreatorGrade, string> = {
   Rookie:          '#6B7280',
@@ -203,11 +203,12 @@ function ProductCard({ p, encores, hideRound1Score }: { p: ProductRow; encores: 
   const isRound1   = (p.audit_count ?? 0) <= 1
   const scoreHidden = !!hideRound1Score && isRound1
   const isEncore   = !scoreHidden && (isEncoreScore(p.score_total) || encores.length > 0)
-  // §1-A ⑥ band gate · creator on own creator-detail page sees digit
-  // (this IS their profile). Anyone else sees band unless the product
-  // graduated with Encore (digit reveals as trophy at score >= 85).
+  // §1-A ⑥ list-surface band gate · creator-self on their OWN /creators/
+  // <id> page also sees band on the product tiles (this is a list view of
+  // their products · same band view a visitor sees). Detail page is where
+  // the creator dashboard digit lives. Encore + admin + paid Patron reveal.
   const viewer       = useViewer()
-  const canSeeDigit  = viewerCanSeeDigit(p, viewer)
+  const canSeeDigit  = viewerCanSeeDigitOnList(p, viewer)
   const band         = scoreBand(p.score_total ?? 0)
   return (
     <Link
