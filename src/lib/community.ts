@@ -321,6 +321,84 @@ export async function deletePostComment(id: string): Promise<boolean> {
   return !error
 }
 
+// ── Bulk counts · for list rows ─────────────────────────────
+//
+// fetchPostCommentCounts(postIds) → { [post_id]: count }
+//   single query into community_post_comments · group client-side ·
+//   keeps cost O(1) request even for big post lists.
+//
+// fetchPostApplaudCounts(post_id+type pairs) → { [post_id]: count }
+//   applauds is polymorphic so we have to filter by BOTH target_id and
+//   target_type pairs. PostgREST `or=` supports the compound filter.
+
+export async function fetchPostCommentCounts(postIds: string[]): Promise<Record<string, number>> {
+  const ids = Array.from(new Set(postIds.filter(Boolean)))
+  if (ids.length === 0) return {}
+  const { data } = await supabase
+    .from('community_post_comments')
+    .select('post_id')
+    .in('post_id', ids)
+  const out: Record<string, number> = {}
+  ;(data ?? []).forEach(r => {
+    const pid = (r as { post_id: string }).post_id
+    out[pid] = (out[pid] ?? 0) + 1
+  })
+  return out
+}
+
+const POST_TYPE_TO_APPLAUD_TARGET: Record<CommunityPostType, string> = {
+  build_log:    'build_log',
+  stack:        'stack',
+  ask:          'ask',
+  office_hours: 'office_hours',
+  open_mic:     'open_mic',
+}
+
+export async function fetchPostApplaudCounts(
+  posts: Array<{ id: string; type: CommunityPostType }>,
+): Promise<Record<string, number>> {
+  if (posts.length === 0) return {}
+  // Group target_ids by their matching applaud target_type so each
+  // request stays scoped (RLS + index uses target_type, target_id).
+  const byType = new Map<string, string[]>()
+  for (const p of posts) {
+    const t = POST_TYPE_TO_APPLAUD_TARGET[p.type]
+    if (!t) continue
+    const arr = byType.get(t) ?? []
+    arr.push(p.id)
+    byType.set(t, arr)
+  }
+  const out: Record<string, number> = {}
+  await Promise.all([...byType.entries()].map(async ([targetType, ids]) => {
+    const { data } = await supabase
+      .from('applauds')
+      .select('target_id')
+      .eq('target_type', targetType)
+      .in('target_id', ids)
+    ;(data ?? []).forEach(r => {
+      const pid = (r as { target_id: string }).target_id
+      out[pid] = (out[pid] ?? 0) + 1
+    })
+  }))
+  return out
+}
+
+export async function fetchPostCommentApplaudCounts(commentIds: string[]): Promise<Record<string, number>> {
+  const ids = Array.from(new Set(commentIds.filter(Boolean)))
+  if (ids.length === 0) return {}
+  const { data } = await supabase
+    .from('applauds')
+    .select('target_id')
+    .eq('target_type', 'post_comment')
+    .in('target_id', ids)
+  const out: Record<string, number> = {}
+  ;(data ?? []).forEach(r => {
+    const pid = (r as { target_id: string }).target_id
+    out[pid] = (out[pid] ?? 0) + 1
+  })
+  return out
+}
+
 // ── Office hours ────────────────────────────────────────────
 
 export async function listUpcomingOfficeHours(limit = 10): Promise<OfficeHoursEvent[]> {

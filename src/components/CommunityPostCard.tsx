@@ -6,12 +6,19 @@ import { Link } from 'react-router-dom'
 import type { PostWithAuthor } from '../lib/community'
 import { STACK_SUBTYPES, ASK_SUBTYPES } from '../lib/community'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
+import { IconComment, IconApplaud } from './icons'
 
 interface Props {
   post: PostWithAuthor
+  /** Comment count for this post (from fetchPostCommentCounts in the
+   *  list-page useEffect). Hidden when 0 to avoid noisy rows. */
+  commentCount?: number
+  /** Applaud count for this post (from fetchPostApplaudCounts). Hidden
+   *  when 0 for the same reason. */
+  applaudCount?: number
 }
 
-export function CommunityPostCard({ post }: Props) {
+export function CommunityPostCard({ post, commentCount, applaudCount }: Props) {
   const accent = typeAccent(post.type)
   const subtypeLabel = subtypeOf(post)
   const basePath = basePathFor(post.type)
@@ -36,13 +43,28 @@ export function CommunityPostCard({ post }: Props) {
     >
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
         <div className="flex items-center gap-2">
+          {/* Type pill · always present so every list card carries the
+              same visual taxonomy (CEO: unify open_mic box with other
+              types). Subtype pill follows when present so Stack / Ask
+              sub-variants are still surfaced. */}
+          <span
+            className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5"
+            style={{
+              background:   `${accent}1A`,
+              color:        accent,
+              border:       `1px solid ${accent}55`,
+              borderRadius: '2px',
+            }}
+          >
+            {typeLabel(post.type)}
+          </span>
           {subtypeLabel && (
             <span
               className="font-mono text-[10px] tracking-widest uppercase px-1.5 py-0.5"
               style={{
-                background: `${accent}1A`,
+                background: `${accent}0F`,
                 color:      accent,
-                border:     `1px solid ${accent}55`,
+                border:     `1px solid ${accent}33`,
                 borderRadius: '2px',
               }}
             >
@@ -73,31 +95,64 @@ export function CommunityPostCard({ post }: Props) {
         </p>
       )}
 
-      <div className="flex items-center gap-2 mt-2 font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-        <span
-          className="inline-flex items-center justify-center overflow-hidden"
-          style={{
-            width: 18, height: 18,
-            background: post.author?.avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
-            color: 'var(--navy-900)',
-            borderRadius: '2px',
-            fontSize: 10, fontWeight: 700,
-          }}
-        >
-          {post.author?.avatar_url
-            ? <img src={post.author.avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
-            : resolveCreatorInitial({ display_name: post.author?.display_name })}
-        </span>
-        <span>{resolveCreatorName({ display_name: post.author?.display_name })}</span>
-        {post.author?.creator_grade && (
-          <>
-            <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
-            <span style={{ color: 'var(--gold-500)' }}>{post.author.creator_grade}</span>
-          </>
-        )}
+      <div className="flex items-center justify-between gap-2 mt-2 font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-flex items-center justify-center overflow-hidden flex-shrink-0"
+            style={{
+              width: 18, height: 18,
+              background: post.author?.avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
+              color: 'var(--navy-900)',
+              borderRadius: '2px',
+              fontSize: 10, fontWeight: 700,
+            }}
+          >
+            {post.author?.avatar_url
+              ? <img src={post.author.avatar_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
+              : resolveCreatorInitial({ display_name: post.author?.display_name })}
+          </span>
+          <span className="truncate">{resolveCreatorName({ display_name: post.author?.display_name })}</span>
+          {post.author?.creator_grade && (
+            <>
+              <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
+              <span style={{ color: 'var(--gold-500)' }}>{post.author.creator_grade}</span>
+            </>
+          )}
+        </div>
+        {/* Engagement counts · hidden when zero so quiet rows stay clean.
+            Comment count = community_post_comments rows; applaud count =
+            applauds where target_type matches the post type. Both pull
+            in via parent's bulk fetch (fetchPostCommentCounts /
+            fetchPostApplaudCounts) so the card stays cheap. */}
+        {(applaudCount || commentCount) ? (
+          <div className="flex items-center gap-2.5 flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+            {applaudCount ? (
+              <span className="inline-flex items-center gap-1" title={`${applaudCount} applaud${applaudCount === 1 ? '' : 's'}`}>
+                <IconApplaud size={11} />
+                <span className="tabular-nums">{applaudCount}</span>
+              </span>
+            ) : null}
+            {commentCount ? (
+              <span className="inline-flex items-center gap-1" title={`${commentCount} comment${commentCount === 1 ? '' : 's'}`}>
+                <IconComment size={11} />
+                <span className="tabular-nums">{commentCount}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </Link>
   )
+}
+
+function typeLabel(type: PostWithAuthor['type']): string {
+  switch (type) {
+    case 'build_log':    return 'Build Log'
+    case 'stack':        return 'Stack'
+    case 'ask':          return 'Ask'
+    case 'office_hours': return 'Office Hours'
+    case 'open_mic':     return 'Open Mic'
+  }
 }
 
 function typeAccent(type: PostWithAuthor['type']): string {

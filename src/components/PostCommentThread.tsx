@@ -27,6 +27,7 @@ import {
 } from '../lib/community'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { IconTrash } from './icons'
+import { ApplaudButton } from './ApplaudButton'
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -263,47 +264,59 @@ function CommentRow({
             </span>
           )}
         </div>
-        {isOwn && !editing && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => { setEditing(true); setDraft(comment.body) }}
-              disabled={busy}
-              className="px-2 py-0.5 font-mono text-[10px] tracking-widest"
-              style={{
-                background:   'transparent',
-                color:        'var(--text-muted)',
-                border:       '1px solid rgba(248,245,238,0.15)',
-                borderRadius: '2px',
-                cursor:       busy ? 'wait' : 'pointer',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold-500)'; e.currentTarget.style.color = 'var(--gold-500)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-            >
-              EDIT
-            </button>
-            <button
-              type="button"
-              onClick={confirmDelete}
-              disabled={busy}
-              aria-label="Delete comment"
-              title="Delete this comment"
-              className="inline-flex items-center justify-center"
-              style={{
-                width:        22, height: 22,
-                background:   'transparent',
-                color:        'var(--text-muted)',
-                border:       '1px solid rgba(248,245,238,0.15)',
-                borderRadius: '2px',
-                cursor:       busy ? 'wait' : 'pointer',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--scarlet)'; e.currentTarget.style.color = 'var(--scarlet)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-            >
-              <IconTrash size={12} />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          {/* Applaud on the comment itself · uses the new 'post_comment'
+              polymorphic target. Anyone signed-in can applaud · isOwn
+              gates against self-applaud per CLAUDE.md §7.5. */}
+          <ApplaudButton
+            targetType="post_comment"
+            targetId={comment.id}
+            viewerMemberId={viewerId}
+            isOwnContent={isOwn}
+            size="sm"
+          />
+          {isOwn && !editing && (
+            <>
+              <button
+                type="button"
+                onClick={() => { setEditing(true); setDraft(comment.body) }}
+                disabled={busy}
+                className="px-2 py-0.5 font-mono text-[10px] tracking-widest"
+                style={{
+                  background:   'transparent',
+                  color:        'var(--text-muted)',
+                  border:       '1px solid rgba(248,245,238,0.15)',
+                  borderRadius: '2px',
+                  cursor:       busy ? 'wait' : 'pointer',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold-500)'; e.currentTarget.style.color = 'var(--gold-500)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+              >
+                EDIT
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={busy}
+                aria-label="Delete comment"
+                title="Delete this comment"
+                className="inline-flex items-center justify-center"
+                style={{
+                  width:        22, height: 22,
+                  background:   'transparent',
+                  color:        'var(--text-muted)',
+                  border:       '1px solid rgba(248,245,238,0.15)',
+                  borderRadius: '2px',
+                  cursor:       busy ? 'wait' : 'pointer',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--scarlet)'; e.currentTarget.style.color = 'var(--scarlet)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+              >
+                <IconTrash size={12} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Body · display vs edit */}

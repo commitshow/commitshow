@@ -8,6 +8,7 @@ import { CommunityPostCard } from '../components/CommunityPostCard'
 import { CommunityTagFilter } from '../components/CommunityTagFilter'
 import { NewPostButton } from './BuildLogsPage'
 import { listPosts, STACK_SUBTYPES, type PostWithAuthor } from '../lib/community'
+import { useCommunityListEnriched } from '../lib/useCommunityListEnriched'
 import { useAuth } from '../lib/auth'
 
 type Subtype = keyof typeof STACK_SUBTYPES | 'all'
@@ -17,6 +18,7 @@ export function StacksPage() {
   const [tag, setTag] = useState<string | null>(null)
   const [posts, setPosts] = useState<PostWithAuthor[] | null>(null)
   const { user } = useAuth()
+  const { commentCounts, applaudCounts } = useCommunityListEnriched(posts)
 
   useEffect(() => {
     setPosts(null)
@@ -60,7 +62,14 @@ export function StacksPage() {
           : 'No Stacks yet. Publish your first combo.'} />
       ) : (
         <div className="grid gap-3">
-          {posts.map(p => <CommunityPostCard key={p.id} post={p} />)}
+          {posts.map(p => (
+            <CommunityPostCard
+              key={p.id}
+              post={p}
+              commentCount={commentCounts[p.id]}
+              applaudCount={applaudCounts[p.id]}
+            />
+          ))}
         </div>
       )}
     </CommunityLayout>

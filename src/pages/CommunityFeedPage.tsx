@@ -16,6 +16,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { resolveCreatorName } from '../lib/creatorName'
+import { IconComment } from '../components/icons'
 
 interface PostFeedItem {
   kind:        'post'
@@ -202,9 +203,12 @@ export function CommunityFeedPage() {
           {user && (
             <Link
               to="/community/open-mic/new"
-              className="font-mono text-xs tracking-wide px-3 py-2 flex-shrink-0"
+              className="font-mono text-xs tracking-wide px-3 py-2 flex-shrink-0 inline-flex items-center gap-1.5"
               style={{ background: 'var(--gold-500)', color: 'var(--navy-900)', border: 'none', borderRadius: '2px', textDecoration: 'none' }}
-            >POST →</Link>
+            >
+              <IconComment size={14} />
+              POST
+            </Link>
           )}
         </header>
 
@@ -318,7 +322,16 @@ function FeedRow({ item }: { item: FeedItem }) {
             <div className="flex items-center gap-2 flex-wrap font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
               <strong style={{ color: isSystem ? 'var(--gold-500)' : 'var(--cream)' }}>{author}</strong>
               <span className="px-1.5 py-0.5 text-[9px] tracking-widest uppercase" style={{
-                color: accent, border: `1px solid ${accent}55`, borderRadius: '2px',
+                // Unified pill style across every item kind · CEO ask
+                // "comment 타입 뱃지는 박스를 치는데 open mic 는 왜 박스를
+                //  안쳤지? 통일해서 표기". All chips now carry the same
+                // background fill + border so Open Mic / Build Log / Stack
+                // / Ask / Office Hours / system events read as one
+                // visual family.
+                background:   `${accent}1A`,
+                color:        accent,
+                border:       `1px solid ${accent}55`,
+                borderRadius: '2px',
               }}>
                 {isSystem
                   ? eventKindLabel((item as CommentFeedItem).event_kind)

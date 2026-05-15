@@ -9,6 +9,7 @@ import { CommunityLayout } from '../components/CommunityLayout'
 import { CommunityPostCard } from '../components/CommunityPostCard'
 import { CommunityTagFilter } from '../components/CommunityTagFilter'
 import { listPosts, type PostWithAuthor } from '../lib/community'
+import { useCommunityListEnriched } from '../lib/useCommunityListEnriched'
 import { useAuth } from '../lib/auth'
 import { NewPostButton } from './BuildLogsPage'
 
@@ -16,6 +17,7 @@ export function OpenMicPage() {
   const [tag, setTag] = useState<string | null>(null)
   const [posts, setPosts] = useState<PostWithAuthor[] | null>(null)
   const { user } = useAuth()
+  const { commentCounts, applaudCounts } = useCommunityListEnriched(posts)
 
   useEffect(() => {
     setPosts(null)
@@ -47,7 +49,14 @@ export function OpenMicPage() {
         <EmptyState label={tag ? `Nothing on the mic with #${tag} yet.` : 'Mic is open. Be the first up.'} />
       ) : (
         <div className="grid gap-3">
-          {posts.map(p => <CommunityPostCard key={p.id} post={p} />)}
+          {posts.map(p => (
+            <CommunityPostCard
+              key={p.id}
+              post={p}
+              commentCount={commentCounts[p.id]}
+              applaudCount={applaudCounts[p.id]}
+            />
+          ))}
         </div>
       )}
     </CommunityLayout>

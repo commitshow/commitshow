@@ -112,14 +112,12 @@ export function CommunityPostDetailPage() {
     // matches the pattern after a successful publish.
     navigate(listPathFor(post.type))
   }
-  const applaudType: ApplaudTargetType = post.type === 'build_log'
-    ? 'build_log'
-    : post.type === 'stack'
-      ? 'stack'
-      : post.type === 'ask'   // asks aren't explicitly a polymorphic target per §7.5, but we
-        ? 'build_log'         // don't expose applaud on asks — fall-through type unused below
-        : 'build_log'
-  const applaudable = post.type === 'build_log' || post.type === 'stack'
+  // 2026-05-15 · applauds widened to cover every community post type
+  // (CHECK constraint + ApplaudTargetType union extended in the same
+  // batch). target_type maps 1:1 with post.type now — no fallback
+  // gymnastics, every type is applaudable.
+  const applaudType: ApplaudTargetType = post.type
+  const applaudable = true
 
   return (
     <CommunityLayout>

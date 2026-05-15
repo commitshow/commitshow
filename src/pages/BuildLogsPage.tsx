@@ -6,13 +6,16 @@ import { Link } from 'react-router-dom'
 import { CommunityLayout } from '../components/CommunityLayout'
 import { CommunityPostCard } from '../components/CommunityPostCard'
 import { CommunityTagFilter } from '../components/CommunityTagFilter'
+import { IconComment } from '../components/icons'
 import { listPosts, type PostWithAuthor } from '../lib/community'
+import { useCommunityListEnriched } from '../lib/useCommunityListEnriched'
 import { useAuth } from '../lib/auth'
 
 export function BuildLogsPage() {
   const [tag, setTag] = useState<string | null>(null)
   const [posts, setPosts] = useState<PostWithAuthor[] | null>(null)
   const { user } = useAuth()
+  const { commentCounts, applaudCounts } = useCommunityListEnriched(posts)
 
   useEffect(() => {
     setPosts(null)
@@ -44,7 +47,14 @@ export function BuildLogsPage() {
         <EmptyState label={tag ? `No Build Logs tagged #${tag} yet.` : 'No Build Logs yet. Encore Week seeds the first batch.'} />
       ) : (
         <div className="grid gap-3">
-          {posts.map(p => <CommunityPostCard key={p.id} post={p} />)}
+          {posts.map(p => (
+            <CommunityPostCard
+              key={p.id}
+              post={p}
+              commentCount={commentCounts[p.id]}
+              applaudCount={applaudCounts[p.id]}
+            />
+          ))}
         </div>
       )}
     </CommunityLayout>
@@ -71,7 +81,7 @@ export function NewPostButton({ to, label }: { to: string; label: string }) {
   return (
     <Link
       to={to}
-      className="px-4 py-2 font-mono text-xs tracking-wide transition-all"
+      className="px-4 py-2 font-mono text-xs tracking-wide transition-all inline-flex items-center gap-1.5"
       style={{
         background: 'var(--gold-500)',
         color: 'var(--navy-900)',
@@ -82,7 +92,8 @@ export function NewPostButton({ to, label }: { to: string; label: string }) {
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--gold-400)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
     >
-      + {label}
+      <IconComment size={14} />
+      {label}
     </Link>
   )
 }

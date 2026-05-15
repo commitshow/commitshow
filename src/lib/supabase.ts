@@ -397,11 +397,17 @@ export type Vote = {
 }
 
 // v2 polymorphic applaud target · §1-A ③ · §7.5
+// 2026-05-15: added ask · office_hours · open_mic (full community-post
+// coverage) + post_comment (applauds on community_post_comments rows).
 export type ApplaudTargetType =
   | 'product'
-  | 'comment'
-  | 'build_log'
-  | 'stack'
+  | 'comment'         // project comments (existing project.comments table)
+  | 'build_log'       // community_posts.type='build_log'
+  | 'stack'           // community_posts.type='stack'
+  | 'ask'             // community_posts.type='ask'
+  | 'office_hours'    // community_posts.type='office_hours'
+  | 'open_mic'        // community_posts.type='open_mic'
+  | 'post_comment'    // community_post_comments rows
   | 'brief'
   | 'recommit'
 

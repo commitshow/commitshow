@@ -7,6 +7,7 @@ import { CommunityLayout } from '../components/CommunityLayout'
 import { CommunityPostCard } from '../components/CommunityPostCard'
 import { NewPostButton } from './BuildLogsPage'
 import { listPosts, ASK_SUBTYPES, type PostWithAuthor } from '../lib/community'
+import { useCommunityListEnriched } from '../lib/useCommunityListEnriched'
 import { useAuth } from '../lib/auth'
 
 type Subtype = keyof typeof ASK_SUBTYPES | 'all'
@@ -15,6 +16,7 @@ export function AsksPage() {
   const [subtype, setSubtype] = useState<Subtype>('all')
   const [posts, setPosts]     = useState<PostWithAuthor[] | null>(null)
   const { user } = useAuth()
+  const { commentCounts, applaudCounts } = useCommunityListEnriched(posts)
 
   useEffect(() => {
     setPosts(null)
@@ -55,7 +57,14 @@ export function AsksPage() {
           : `No ${subtype === 'looking_for' ? 'looking-for' : subtype} asks open right now.`} />
       ) : (
         <div className="grid gap-3">
-          {posts.map(p => <CommunityPostCard key={p.id} post={p} />)}
+          {posts.map(p => (
+            <CommunityPostCard
+              key={p.id}
+              post={p}
+              commentCount={commentCounts[p.id]}
+              applaudCount={applaudCounts[p.id]}
+            />
+          ))}
         </div>
       )}
     </CommunityLayout>
