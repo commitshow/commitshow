@@ -52,7 +52,14 @@ export function FeaturedLanes() {
             project={p}
             creator={p.creator_id ? creators[p.creator_id] : undefined}
             accent={{ tone: 'rookie', leftBadge: daysAgo(p.created_at) }}
-            hideScore
+            /* hideScore dropped 2026-05-15 · NEW AUDITS now flows through
+               the band gate like every other list surface. "— PTS"
+               placeholder didn't match the band visual language and
+               implied a privacy state these freshly-audited rows never
+               had (round-1 privacy is on the project detail page only,
+               not on list cards). Band gate gives public viewers a
+               proper Building / Strong chip; Encore-tier reveal still
+               applies. */
           />
         ))}
       </Lane>
