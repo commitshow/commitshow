@@ -22,8 +22,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/auth'
 import { detectQuickWins, loadDoneIds, saveDoneIds, type CoachItem, type CoachCategory } from '../lib/auditCoach'
 import { scoreBand, bandLabel, bandTone, displayScore } from '../lib/laneScore'
+
+interface TicketBalance {
+  free_remaining: number
+  paid_credit:    number
+  total_tickets:  number
+}
 
 interface AuditCoachPanelProps {
   project:        Project
@@ -65,6 +73,74 @@ export function AuditCoachPanel({
   onReanalyze, reanalyzing = false, previousBand = null,
 }: AuditCoachPanelProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
+
+  // 2026-05-15 · in-panel one-click audition (CEO ask: friction 3 → 1).
+  // Previous flow: band climbs → user clicks "BRING IT ON STAGE →"
+  // here → lands on /me → finds BackstageSection → clicks audition
+  // → ticket spent → redirected to /projects/<id>. That's 3 clicks
+  // + 1 navigation. Now: same RPC fires directly from this panel.
+  //
+  // Mirrors AuditionPromoteCard's handleAudition · we duplicate the
+  // RPC plumbing inline rather than extract (only 2 callers · keeping
+  // the helper local lets us evolve copy + UX per surface without
+  // generalising prematurely).
+  const [ticketBalance, setTicketBalance] = useState<TicketBalance | null>(null)
+  const [auditionBusy,  setAuditionBusy]  = useState(false)
+  const [auditionDone,  setAuditionDone]  = useState(false)
+  const [auditionError, setAuditionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user?.id) return
+    let alive = true
+    supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
+      if (!alive || error) return
+      setTicketBalance(data as TicketBalance)
+    })
+    // Listen for the tickets-updated event AuditionPromoteCard fires
+    // so the balance refreshes when a ticket gets spent elsewhere.
+    const refetch = () => {
+      if (!user?.id) return
+      supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
+        if (!alive || error) return
+        setTicketBalance(data as TicketBalance)
+      })
+    }
+    window.addEventListener('commitshow:tickets-updated', refetch)
+    return () => {
+      alive = false
+      window.removeEventListener('commitshow:tickets-updated', refetch)
+    }
+  }, [user?.id])
+
+  const auditionNow = async () => {
+    setAuditionBusy(true)
+    setAuditionError(null)
+    try {
+      const { data, error } = await supabase.rpc('audition_project', { p_project_id: project.id })
+      if (error) throw new Error(error.message)
+      const result = data as { ok: boolean; reason?: string; used?: 'free' | 'credit' }
+      if (result.ok) {
+        // Notify other surfaces (TicketWalletCard etc.) to refetch.
+        window.dispatchEvent(new CustomEvent('commitshow:tickets-updated'))
+        setAuditionDone(true)
+        setTimeout(() => navigate(`/projects/${project.id}`), 900)
+        return
+      }
+      if (result.reason === 'no_ticket') {
+        // Out of tickets · funnel to /me where TicketWalletCard +
+        // BackstageSection have the full Stripe purchase flow.
+        // Direct Stripe init lives in AuditionPromoteCard but importing
+        // it here would create a cyclic dep — /me detour is cheap.
+        navigate('/me')
+        return
+      }
+      throw new Error(result.reason ?? 'Audition failed')
+    } catch (err) {
+      setAuditionBusy(false)
+      setAuditionError((err as Error).message)
+    }
+  }
 
   // Run catalog · only re-derives when snapshot data changes (audit
   // re-fires → parent re-renders with new rich_analysis).
@@ -176,38 +252,81 @@ export function AuditCoachPanel({
         )}
       </div>
 
-      {/* Auto-audition prompt · only when band actually climbed up */}
+      {/* Auto-audition prompt · only when band actually climbed up.
+          2026-05-15 · in-panel one-click audition. CTA fires
+          audition_project directly · success → /projects/<id>,
+          no-ticket → /me (Stripe purchase lives there). */}
       {auditionPrompt && (
         <div
-          className="mx-5 my-4 px-4 py-3 flex items-baseline justify-between gap-3 flex-wrap"
+          className="mx-5 my-4 px-4 py-3"
           style={{
-            background: `${bandTone(currentBand)}15`,
-            border: `1px dashed ${bandTone(currentBand)}66`,
+            background:   auditionDone ? 'rgba(0,212,170,0.08)' : `${bandTone(currentBand)}15`,
+            border:       `1px dashed ${auditionDone ? 'rgba(0,212,170,0.55)' : `${bandTone(currentBand)}66`}`,
             borderRadius: '2px',
           }}
         >
-          <div>
-            <div className="font-mono text-xs tracking-widest" style={{ color: bandTone(currentBand) }}>
-              ⤴ CLIMBED TO {bandLabel(currentBand).toUpperCase()}
+          {auditionDone ? (
+            <div>
+              <div className="font-mono text-xs tracking-widest" style={{ color: '#00D4AA' }}>
+                ⤴ ON STAGE · AUDITIONING NOW
+              </div>
+              <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-secondary)' }}>
+                Redirecting to your product page…
+              </div>
             </div>
-            <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-              Solid jump · the project's holding its shape after the fixes. Want feedback from the MVPs already on stage?
+          ) : (
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <div className="font-mono text-xs tracking-widest" style={{ color: bandTone(currentBand) }}>
+                  ⤴ CLIMBED TO {bandLabel(currentBand).toUpperCase()}
+                </div>
+                <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                  Solid jump · the project's holding its shape after the fixes. Want feedback from the MVPs already on stage?
+                </div>
+                {/* Inline ticket line · tells the user exactly what
+                    spending the audition costs. Loading state stays
+                    quiet · users see it the moment the RPC resolves. */}
+                {ticketBalance && (
+                  <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)' }}>
+                    {ticketBalance.free_remaining > 0
+                      ? <>uses 1 of <strong style={{ color: 'var(--cream)' }}>{ticketBalance.free_remaining} free ticket{ticketBalance.free_remaining === 1 ? '' : 's'}</strong></>
+                      : ticketBalance.paid_credit > 0
+                        ? <>uses 1 of <strong style={{ color: 'var(--cream)' }}>{ticketBalance.paid_credit} paid ticket{ticketBalance.paid_credit === 1 ? '' : 's'}</strong></>
+                        : <>no free tickets · checkout opens on click</>}
+                  </div>
+                )}
+                {auditionError && (
+                  <div className="font-mono text-[11px] mt-2" style={{ color: 'var(--scarlet)' }}>
+                    {auditionError}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={auditionNow}
+                disabled={auditionBusy}
+                className="px-4 py-2 font-mono text-xs font-medium tracking-wide whitespace-nowrap"
+                style={{
+                  background:   bandTone(currentBand),
+                  color:        'var(--navy-900)',
+                  border:       'none',
+                  borderRadius: '2px',
+                  cursor:       auditionBusy ? 'wait' : 'pointer',
+                  opacity:      auditionBusy ? 0.6 : 1,
+                }}
+              >
+                {auditionBusy
+                  ? 'AUDITIONING…'
+                  : ticketBalance && ticketBalance.free_remaining > 0
+                    ? 'AUDITION · FREE TICKET →'
+                    : ticketBalance && ticketBalance.paid_credit > 0
+                      ? 'AUDITION · PAID TICKET →'
+                      : ticketBalance
+                        ? 'AUDITION · CHECKOUT →'
+                        : 'BRING IT ON STAGE →'}
+              </button>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/me')}
-            className="px-4 py-2 font-mono text-xs font-medium tracking-wide whitespace-nowrap"
-            style={{
-              background:   bandTone(currentBand),
-              color:        'var(--navy-900)',
-              border:       'none',
-              borderRadius: '2px',
-              cursor:       'pointer',
-            }}
-          >
-            BRING IT ON STAGE →
-          </button>
+          )}
         </div>
       )}
 
