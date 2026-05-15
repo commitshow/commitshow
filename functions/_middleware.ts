@@ -238,6 +238,42 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   // logging must never affect the user response.
   const response = await ctx.next()
 
+  // 2026-05-15 · /assets/* miss-as-HTML guard.
+  //
+  // wrangler.jsonc sets not_found_handling: 'single-page-application'
+  // which makes EVERY 404 return index.html with HTTP 200 so React
+  // Router deep links work on direct load. The side effect: when an
+  // old hashed chunk gets garbage-collected after a deploy, a stale-
+  // tab user's lazy import() fetches `/assets/<old-hash>.js` and
+  // receives `text/html` + 200. The browser rejects the script as a
+  // module (strict MIME check), surfaces "Failed to fetch dynamically
+  // imported module · MIME text/html", and worse — caches the 200 HTML
+  // for the chunk URL (since /assets/* has immutable cache headers),
+  // so the user's tab is permanently broken until they wipe cache.
+  //
+  // Fix: detect this exact case (path starts with /assets/, response
+  // body is HTML) and rewrite it to a clean 404 with no-store. The
+  // lazyWithReload helper then catches the chunk-load failure and
+  // does its single-shot full reload to pull the new bundle. No more
+  // sticky bad responses.
+  try {
+    const url = new URL(ctx.request.url)
+    if (url.pathname.startsWith('/assets/')) {
+      const ct = response.headers.get('content-type') ?? ''
+      if (ct.toLowerCase().includes('text/html')) {
+        return new Response('Asset not found', {
+          status:  404,
+          headers: {
+            'content-type':  'text/plain; charset=utf-8',
+            'cache-control': 'no-store',
+          },
+        })
+      }
+    }
+  } catch {
+    // Never break the response on a guard failure · fall through.
+  }
+
   try {
     const ua   = ctx.request.headers.get('user-agent') ?? ''
     const kind = classifyUA(ua)
