@@ -134,15 +134,33 @@ export async function createPost(input: CreatePostInput): Promise<{ id: string }
   // current member id here so the policy sees a match. Anonymous
   // sessions can't insert (no auth.uid), which matches design intent —
   // signed-in members only.
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    console.error('[createPost] no auth session')
+  // Read the current session FIRST so we get the JWT that Supabase will
+  // actually send on the insert. After a signOut + signIn flip (account
+  // swap test), the local cache can lag if the page didn't re-mount —
+  // forcing getSession lets supabase-js refresh the token if needed
+  // before getUser() validates against the server. Without this belt,
+  // a user who just switched accounts can hit a window where author_id
+  // = new uid but the JWT header is still the old session → RLS reject.
+  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { user } }    = await supabase.auth.getUser()
+  if (!user || !session) {
+    console.error('[createPost] no auth session', { hasUser: !!user, hasSession: !!session })
     // Throw rather than return null so the page surfaces a specific
     // reason ("Sign in expired · refresh and try again") instead of
     // the catch-all "Publish failed" — that was the same blank wall
     // the original RLS bug produced and made the new failure mode
     // indistinguishable from the old one.
     throw new Error('Sign in expired · refresh the page and try again')
+  }
+  // Sanity assertion · the JWT's sub claim must match the user.id we're
+  // about to stamp as author_id. If they don't, we're in the stale-token
+  // race window — short-circuit with a clear message instead of letting
+  // RLS reject with the generic policy-violation string.
+  if (session.user.id !== user.id) {
+    console.error('[createPost] session/user mismatch · refusing insert', {
+      session_uid: session.user.id, user_uid: user.id,
+    })
+    throw new Error('Session is mid-switch · refresh the page and try again')
   }
 
   const { data, error } = await supabase
