@@ -119,27 +119,33 @@ export function CommunityPostCard({ post, commentCount, applaudCount }: Props) {
             </>
           )}
         </div>
-        {/* Engagement counts · hidden when zero so quiet rows stay clean.
-            Comment count = community_post_comments rows; applaud count =
-            applauds where target_type matches the post type. Both pull
-            in via parent's bulk fetch (fetchPostCommentCounts /
-            fetchPostApplaudCounts) so the card stays cheap. */}
-        {(applaudCount || commentCount) ? (
-          <div className="flex items-center gap-2.5 flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
-            {applaudCount ? (
-              <span className="inline-flex items-center gap-1" title={`${applaudCount} applaud${applaudCount === 1 ? '' : 's'}`}>
-                <IconApplaud size={11} />
-                <span className="tabular-nums">{applaudCount}</span>
-              </span>
-            ) : null}
-            {commentCount ? (
-              <span className="inline-flex items-center gap-1" title={`${commentCount} comment${commentCount === 1 ? '' : 's'}`}>
-                <IconComment size={11} />
-                <span className="tabular-nums">{commentCount}</span>
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+      </div>
+
+      {/* Engagement strip · dedicated row, always visible so an empty
+          card still telegraphs "this is comment-able / applaud-able".
+          Reddit/Indie-Hackers pattern · stats live on a bottom row, not
+          tucked next to the avatar. Counts default to 0 when undefined
+          so we never render a blank row. */}
+      <div
+        className="mt-3 pt-2 flex items-center gap-4 font-mono text-[11px]"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}
+      >
+        <span
+          className="inline-flex items-center gap-1.5"
+          title={`${commentCount ?? 0} comment${(commentCount ?? 0) === 1 ? '' : 's'}`}
+          style={{ color: (commentCount ?? 0) > 0 ? 'var(--cream)' : 'var(--text-muted)' }}
+        >
+          <IconComment size={13} />
+          <span className="tabular-nums">{commentCount ?? 0}</span>
+        </span>
+        <span
+          className="inline-flex items-center gap-1.5"
+          title={`${applaudCount ?? 0} applaud${(applaudCount ?? 0) === 1 ? '' : 's'}`}
+          style={{ color: (applaudCount ?? 0) > 0 ? 'var(--gold-500)' : 'var(--text-muted)' }}
+        >
+          <IconApplaud size={13} />
+          <span className="tabular-nums">{applaudCount ?? 0}</span>
+        </span>
       </div>
     </Link>
   )
