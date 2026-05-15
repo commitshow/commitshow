@@ -137,7 +137,12 @@ export async function createPost(input: CreatePostInput): Promise<{ id: string }
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     console.error('[createPost] no auth session')
-    return null
+    // Throw rather than return null so the page surfaces a specific
+    // reason ("Sign in expired · refresh and try again") instead of
+    // the catch-all "Publish failed" — that was the same blank wall
+    // the original RLS bug produced and made the new failure mode
+    // indistinguishable from the old one.
+    throw new Error('Sign in expired · refresh the page and try again')
   }
 
   const { data, error } = await supabase
