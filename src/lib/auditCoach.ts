@@ -251,6 +251,40 @@ const CATALOG: Array<CoachItem & { detect: (input: CoachInput) => boolean }> = [
     howTo:    'Lighthouse → SEO. The flagged audits are step-by-step (each tells you the exact element to fix). Most are 30-second changes.',
     detect:   (i) => i.isAppForm && (readNum(i.lighthouse, ['seo']) >= 0) && readNum(i.lighthouse, ['seo']) < 70,
   },
+
+  // ── REPO · production readiness frames 15-17 (2026-05-15) ──
+  // CEO-flagged MVP → production gaps from our own dogfood:
+  //   session swap stale token · long-lived SPA stale bundle · no
+  //   cache rules. We hit each one ourselves and added the audit
+  //   detection in the same batch; the Coach gives the user the same
+  //   fix we shipped.
+  {
+    id:       'repo-session-listener',
+    title:    'Wire onAuthStateChange listener',
+    why:      'Without a session listener your SPA holds the old JWT across sign-out → sign-in flips. RLS rejects the next privileged call and the user sees an opaque "Failed". 30-line fix in your AuthProvider.',
+    impact:   2,
+    category: 'repo',
+    howTo:    'In your AuthProvider (typically a <Context> at the root):\n\nuseEffect(() => {\n  supabase.auth.getSession().then(({ data }) => setSession(data.session))\n  const { data: sub } = supabase.auth.onAuthStateChange((_evt, newSession) => {\n    setSession(newSession)\n  })\n  return () => sub.subscription.unsubscribe()\n}, [])\n\n· DROP any manual localStorage / sessionStorage token writes — Supabase persists the session for you.\n· Verify by signing out + back in with a different account · the previous session\'s data should NOT appear.',
+    detect:   (i) => i.hasGithubUrl && readBool(i.githubSignals, ['vibe_concerns', 'session_management', 'gap']) === true,
+  },
+  {
+    id:       'repo-cache-headers',
+    title:    'Add HTTP Cache-Control rules',
+    why:      'Without explicit cache rules, hashed assets get re-fetched every load (wasted bandwidth) and index.html gets cached by CDNs (stale bundle on long-lived tabs).',
+    impact:   2,
+    category: 'repo',
+    howTo:    'Cloudflare Pages / Netlify → public/_headers:\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/index.html\n  Cache-Control: public, max-age=0, must-revalidate\n\nVercel → vercel.json:\n\n{\n  "headers": [\n    { "source": "/assets/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },\n    { "source": "/", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }\n  ]\n}\n\nFor auth-walled API routes add Cache-Control: no-store to prevent CDN from leaking private data.',
+    detect:   (i) => i.hasGithubUrl && readBool(i.githubSignals, ['vibe_concerns', 'caching_strategy', 'gap']) === true,
+  },
+  {
+    id:       'repo-version-detection',
+    title:    'Emit /version.json + client update detection',
+    why:      'Long-lived SPA tabs stay on yesterday\'s bundle. When you ship + rename chunks, the user\'s next route click 404s on a missing chunk and the page breaks. A 30-line version poll + reload toast catches this.',
+    impact:   2,
+    category: 'repo',
+    howTo:    '1. At build time, emit /public/version.json:\n   { "build_id": "<git-short-sha>", "built_at": "<iso>" }\n\n2. Inject the same build_id into the bundle (Vite `define`, Next.js publicRuntimeConfig, etc.).\n\n3. On the client, every 15 min + on visibility-change, fetch /version.json and compare to the bundled constant. When they differ, surface a small "New version · Reload" toast with an actual location.replace().\n\n4. Belt-and-suspenders: wrap React.lazy() with a try/catch that auto-reloads on chunk-load failure.\n\nSee commit.show\'s own implementation: src/lib/buildVersion.ts + lib/lazyWithReload.ts + vite.config.ts emitVersionJson plugin.',
+    detect:   (i) => i.hasGithubUrl && readBool(i.githubSignals, ['vibe_concerns', 'version_management', 'gap']) === true,
+  },
 ]
 
 // ── Catalog evaluator ────────────────────────────────────────

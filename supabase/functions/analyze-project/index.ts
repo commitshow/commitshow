@@ -297,6 +297,29 @@ interface GitHubInfo {
       // a network retry or double-clicked Pay button can create two
       // Checkout sessions / two Charges / two Customers.
       stripe_api_idempotency: { call_sites: number; idempotent_call_sites: number; gap: boolean; samples: Array<{ file: string; pattern: string }> }
+      // Frames 15-17 · 2026-05-15 · CEO-flagged production-readiness gaps
+      // (north-star: MVP → production-complete). All three are signals we
+      // (commit.show team) just hit in our own code while shipping, so
+      // they ARE real vibe-coder footguns — we want the audit to catch
+      // them in user products too.
+      //
+      // 15 · Session management — auth lib in use but no signOut state
+      //      clearing / no onAuthStateChange handler / multi-tab desync.
+      //      Real symptom: stale JWT after account swap → RLS rejects
+      //      with opaque "policy violation" string.
+      session_management: { auth_lib: string | null; has_auth_state_listener: boolean; has_signout_handler: boolean; uses_session_storage: boolean; gap: boolean; samples: string[] }
+      // 16 · Caching strategy — no Cache-Control rules anywhere (no
+      //      _headers / vercel.json / middleware setting cache),
+      //      immutable on hashed assets missing, sensitive routes
+      //      lacking no-store. Symptom: stale bundle on long-lived
+      //      tabs, leaked private data in CDN cache.
+      caching_strategy: { headers_file_present: boolean; immutable_assets_rule: boolean; client_cache_lib: string | null; api_routes_with_no_store: number; gap: boolean; samples: string[] }
+      // 17 · Version management — long-lived SPA shipping without build
+      //      version tracking · no /version.json or equivalent · no
+      //      client-side update detection · loose semver ranges across
+      //      deps so npm install can drift. Symptom: users on stale
+      //      bundles indefinitely.
+      version_management: { build_id_artifact: boolean; client_version_check: boolean; lockfile_present: boolean; semver_strictness: 'pinned' | 'tilde' | 'caret' | 'unknown'; deps_caret_pct: number; gap: boolean; samples: string[] }
     }
   }
   readme_excerpt: string | null          // first ~2KB for Claude context
@@ -578,6 +601,9 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
         mobile_input_zoom:   { samples: [], total: 0, needs_attention: false },
         column_grant_mismatch: { samples: [], total: 0, needs_attention: false },
         stripe_api_idempotency: { call_sites: 0, idempotent_call_sites: 0, gap: false, samples: [] },
+        session_management:   { auth_lib: null, has_auth_state_listener: false, has_signout_handler: false, uses_session_storage: false, gap: false, samples: [] },
+        caching_strategy:     { headers_file_present: false, immutable_assets_rule: false, client_cache_lib: null, api_routes_with_no_store: 0, gap: false, samples: [] },
+        version_management:   { build_id_artifact: false, client_version_check: false, lockfile_present: false, semver_strictness: 'unknown', deps_caret_pct: 0, gap: false, samples: [] },
       },
     },
     readme_excerpt: null,
@@ -1689,6 +1715,163 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
   }
   const stripe_api_gap = stripe_api_call_sites > 0 && stripe_api_idempotent < stripe_api_call_sites
 
+  // ── Frames 15-17 (CEO-flagged · 2026-05-15 · north-star: MVP → prod) ──
+  //
+  // 15 · session_management
+  //   PASS: auth lib detected AND onAuthStateChange handler present
+  //         (multi-tab sync + signOut state clear)
+  //   FAIL: auth lib detected AND no onAuthStateChange handler · OR
+  //         manual session-token writes to localStorage/sessionStorage
+  //         outside lib (DIY token mgmt usually leaks)
+  //   N/A : no auth lib in deps
+  // Real symptom from our own code (2026-05-15): account swap left stale
+  // JWT in header → RLS rejected with opaque policy violation. Adding
+  // session.user.id===user.id sanity check fixed it. We want the audit
+  // to flag this pattern in user products.
+  const AUTH_LIB_PATTERNS = [
+    '@supabase/supabase-js', '@supabase/auth-helpers', '@supabase/ssr',
+    'next-auth', '@auth/', '@clerk/', 'clerk-sdk-node',
+    'firebase', 'firebase-admin',
+    '@auth0/', 'auth0-react', 'auth0-js',
+    'lucia', 'iron-session', 'jose', 'passport',
+  ]
+  let session_auth_lib: string | null = null
+  let session_has_listener = false
+  let session_has_signout  = false
+  let session_uses_storage = false
+  const session_samples: string[] = []
+  {
+    // Detect auth lib from deps
+    const allDeps = pkgParsed
+      ? { ...((pkgParsed as { dependencies?: Record<string, string> }).dependencies ?? {}),
+          ...((pkgParsed as { devDependencies?: Record<string, string> }).devDependencies ?? {}) }
+      : {} as Record<string, string>
+    for (const lib of AUTH_LIB_PATTERNS) {
+      const hit = Object.keys(allDeps).find(k => k === lib || k.startsWith(lib))
+      if (hit) { session_auth_lib = hit; break }
+    }
+    if (session_auth_lib) {
+      // Scan src files for the wiring patterns
+      const sessionFiles = (paths ?? []).filter(p =>
+        /\.(ts|tsx|js|jsx|mjs|svelte|vue)$/.test(p) &&
+        /(auth|session|provider|context|layout|hook)/i.test(p),
+      ).slice(0, 30)
+      for (const f of sessionFiles) {
+        const text = await readFile(f)
+        if (!text) continue
+        if (!session_has_listener && /onAuthStateChange|onSessionChange|onIdTokenChanged|useSession\s*\(|getSession\s*\(/.test(text)) {
+          session_has_listener = true
+          if (session_samples.length < 4) session_samples.push(`${f} · session listener`)
+        }
+        if (!session_has_signout && /(signOut|signout|logout|sign_out)\s*[(=]/.test(text)) {
+          session_has_signout = true
+        }
+        if (!session_uses_storage && /(localStorage|sessionStorage)\.(set|get)Item\s*\(\s*['"]([^'"]*token|[^'"]*session|[^'"]*jwt|[^'"]*auth)/i.test(text)) {
+          session_uses_storage = true
+          if (session_samples.length < 4) session_samples.push(`${f} · manual token storage`)
+        }
+      }
+    }
+  }
+  const session_gap = !!session_auth_lib && (!session_has_listener || session_uses_storage)
+
+  // 16 · caching_strategy
+  //   PASS: a CDN headers file (_headers · vercel.json · netlify.toml ·
+  //         next.config) sets Cache-Control rules · OR client cache lib
+  //         (swr · react-query · tanstack-query) in deps
+  //   WARN: API routes exist but no no-store / max-age rules detected
+  //   N/A : static site with no API routes and no CDN headers (small
+  //         marketing pages are fine without explicit caching)
+  let cache_headers_present = false
+  let cache_immutable_assets = false
+  let cache_no_store_routes = 0
+  let cache_client_lib: string | null = null
+  const cache_samples: string[] = []
+  {
+    const allDeps = pkgParsed
+      ? { ...((pkgParsed as { dependencies?: Record<string, string> }).dependencies ?? {}),
+          ...((pkgParsed as { devDependencies?: Record<string, string> }).devDependencies ?? {}) }
+      : {} as Record<string, string>
+    const CLIENT_CACHE_LIBS = ['swr', '@tanstack/react-query', 'react-query', '@tanstack/query-core', '@tanstack/vue-query']
+    for (const lib of CLIENT_CACHE_LIBS) {
+      if (lib in allDeps) { cache_client_lib = lib; break }
+    }
+    // Headers files
+    const headerFiles = (paths ?? []).filter(p =>
+      /(^|\/)(\_headers|public\/\_headers|vercel\.json|netlify\.toml)$/i.test(p) ||
+      /(^|\/)next\.config\.(js|ts|mjs|cjs)$/i.test(p) ||
+      /(^|\/)middleware\.(ts|js|mjs)$/i.test(p),
+    ).slice(0, 8)
+    for (const f of headerFiles) {
+      const text = await readFile(f)
+      if (!text) continue
+      if (/Cache-Control|cacheControl|s-maxage|stale-while-revalidate|max-age/i.test(text)) {
+        cache_headers_present = true
+        if (cache_samples.length < 4) cache_samples.push(`${f} · Cache-Control rules`)
+      }
+      if (/immutable/i.test(text)) cache_immutable_assets = true
+      if (/no-store/i.test(text)) cache_no_store_routes += 1
+    }
+  }
+  // gap: project HAS api routes but NO header rules AND NO client cache lib
+  const cache_gap = (has_api_routes && !cache_headers_present && !cache_client_lib)
+
+  // 17 · version_management
+  //   PASS: lockfile committed AND (build_id artifact OR semver mostly pinned)
+  //   WARN: lockfile present but most deps use ^ (caret > 70%)
+  //   FAIL: no lockfile (auto-resolve breaks reproducibility entirely)
+  let vm_build_artifact = false
+  let vm_client_check = false
+  const vm_lockfile = has_lockfile  // already detected upstream for the maturity slot
+  let vm_deps_caret_pct = 0
+  let vm_semver_strictness: 'pinned' | 'tilde' | 'caret' | 'unknown' = 'unknown'
+  const vm_samples: string[] = []
+  {
+    // Build-id artifact: file in repo or generated path
+    const artifactPaths = (paths ?? []).filter(p =>
+      /(^|\/)(version\.json|build_info\.json|build-info\.json|app-version\.txt|commit-hash\.txt)$/i.test(p) ||
+      /(^|\/)public\/version\.json$/i.test(p),
+    )
+    if (artifactPaths.length > 0) {
+      vm_build_artifact = true
+      if (vm_samples.length < 4) vm_samples.push(`${artifactPaths[0]} · build artifact`)
+    }
+    // Client-side update detection (poll for new build_id / SW update)
+    const clientScanFiles = (paths ?? []).filter(p =>
+      /\.(ts|tsx|js|jsx|mjs|svelte|vue)$/.test(p),
+    ).slice(0, 200)
+    for (const f of clientScanFiles) {
+      if (vm_client_check) break
+      const text = await readFile(f)
+      if (!text) continue
+      if (/__BUILD_ID__|__APP_VERSION__|__COMMIT_HASH__|registration\.update\(\)|skipWaiting\(\)|workbox|version\.json/.test(text)) {
+        vm_client_check = true
+        if (vm_samples.length < 4) vm_samples.push(`${f} · client version check`)
+      }
+    }
+    // Semver strictness: count caret vs tilde vs pinned in deps
+    if (pkgParsed) {
+      const allDeps = {
+        ...((pkgParsed as { dependencies?: Record<string, string> }).dependencies ?? {}),
+        ...((pkgParsed as { devDependencies?: Record<string, string> }).devDependencies ?? {}),
+      } as Record<string, string>
+      const versions = Object.values(allDeps).filter(v => typeof v === 'string')
+      if (versions.length > 0) {
+        const caret  = versions.filter(v => v.startsWith('^')).length
+        const tilde  = versions.filter(v => v.startsWith('~')).length
+        const pinned = versions.filter(v => /^\d/.test(v)).length
+        vm_deps_caret_pct = Math.round((caret / versions.length) * 100)
+        vm_semver_strictness = pinned > versions.length * 0.7 ? 'pinned'
+                            : tilde  > versions.length * 0.5 ? 'tilde'
+                            : caret  > versions.length * 0.5 ? 'caret'
+                            : 'unknown'
+      }
+    }
+  }
+  // gap: no lockfile (worst case) OR (long-lived SPA · no build artifact · no client check)
+  const looks_like_spa = form_factor === 'app' && has_api_routes  // proxy for "would benefit from version detection"
+  const vm_gap = !vm_lockfile || (looks_like_spa && !vm_build_artifact && !vm_client_check)
+
   // Aggregate vibe_concerns object — surfaced both to Claude evidence pack
   // and persisted in github_signals for UI rendering. Each category now
   // ships an `evidence_files` array so the UI can show specific paths.
@@ -1770,6 +1953,32 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
       idempotent_call_sites: stripe_api_idempotent,
       gap:                  stripe_api_gap,
       samples:              stripe_api_samples,
+    },
+    // Frames 15-17 · CEO-flagged 2026-05-15
+    session_management: {
+      auth_lib:                 session_auth_lib,
+      has_auth_state_listener:  session_has_listener,
+      has_signout_handler:      session_has_signout,
+      uses_session_storage:     session_uses_storage,
+      gap:                      session_gap,
+      samples:                  session_samples,
+    },
+    caching_strategy: {
+      headers_file_present:     cache_headers_present,
+      immutable_assets_rule:    cache_immutable_assets,
+      client_cache_lib:         cache_client_lib,
+      api_routes_with_no_store: cache_no_store_routes,
+      gap:                      cache_gap,
+      samples:                  cache_samples,
+    },
+    version_management: {
+      build_id_artifact:        vm_build_artifact,
+      client_version_check:     vm_client_check,
+      lockfile_present:         vm_lockfile,
+      semver_strictness:        vm_semver_strictness,
+      deps_caret_pct:           vm_deps_caret_pct,
+      gap:                      vm_gap,
+      samples:                  vm_samples,
     },
   }
 

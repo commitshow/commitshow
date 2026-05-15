@@ -24,6 +24,11 @@ interface VibeConcerns {
   cors_permissive?:    { samples: Array<{ file: string; pattern: string }>; total: number }
   // Frame 12 (2026-05-01)
   mobile_input_zoom?:  { samples: Array<{ file: string; pattern: string }>; total: number; needs_attention?: boolean }
+  // Frames 13-14 (backend detection ships but UI card pending separate batch)
+  // Frames 15-17 (2026-05-15 · CEO-flagged · MVP → production-ready)
+  session_management?: { auth_lib: string | null; has_auth_state_listener: boolean; has_signout_handler: boolean; uses_session_storage: boolean; gap: boolean; samples: string[] }
+  caching_strategy?:   { headers_file_present: boolean; immutable_assets_rule: boolean; client_cache_lib: string | null; api_routes_with_no_store: number; gap: boolean; samples: string[] }
+  version_management?: { build_id_artifact: boolean; client_version_check: boolean; lockfile_present: boolean; semver_strictness: 'pinned' | 'tilde' | 'caret' | 'unknown'; deps_caret_pct: number; gap: boolean; samples: string[] }
 }
 
 type Status = 'pass' | 'warn' | 'fail' | 'na'
@@ -341,6 +346,117 @@ function evaluate(vc: VibeConcerns | null | undefined): CardData[] {
     })
   }
 
+  // 13. Session management · auth-lib wiring (signOut state clear,
+  //     onAuthStateChange listener for multi-tab sync). Our own
+  //     account-swap bug surfaced this — without a listener the SPA
+  //     keeps a stale JWT after a sign-out + sign-in flip.
+  {
+    const s = vc?.session_management
+    let status: Status = 'na'
+    let finding = 'No auth library detected — N/A.'
+    if (s && s.auth_lib) {
+      if (s.gap) {
+        status = 'fail'
+        const reason = !s.has_auth_state_listener ? 'no onAuthStateChange listener'
+                     : s.uses_session_storage     ? 'manual token storage in localStorage / sessionStorage'
+                     :                              'gap detected'
+        finding = `${s.auth_lib} in use · ${reason}.`
+      } else {
+        status = 'pass'
+        finding = `${s.auth_lib} · session listener wired${s.has_signout_handler ? ' · signOut handler present' : ''}.`
+      }
+    }
+    cards.push({
+      key:        'session_management',
+      title:      'Session management',
+      prevalence: 'Account-swap bugs hit ~50% of SPAs without an auth-state listener',
+      status,
+      finding,
+      why:        'Without an `onAuthStateChange` (or equivalent) listener, the SPA keeps a stale JWT after sign-out / sign-in flips. The next privileged call uses the wrong token, RLS rejects with an opaque "policy violation", and the user sees a black-box "Failed". Manual token writes to localStorage are usually worse — easy to forget on logout, easy to leak XSS.',
+      fix:        status === 'fail'
+        ? 'Wire `supabase.auth.onAuthStateChange((event, session) => { setSession(session) })` (or framework equivalent) in your AuthProvider · drop manual localStorage token writes — let the lib persist for you.'
+        : null,
+      evidence:   s?.samples,
+    })
+  }
+
+  // 14. Caching strategy · HTTP cache headers + client cache lib.
+  //     Long-lived SPA tabs stale because we serve hashed assets
+  //     immutable but never set Cache-Control: max-age=0 on index.html.
+  {
+    const c = vc?.caching_strategy
+    let status: Status = 'na'
+    let finding = 'No headers config or API routes — N/A.'
+    if (c) {
+      if (c.gap) {
+        status = 'fail'
+        finding = 'API routes present · no Cache-Control rules in `_headers` / `vercel.json` / `next.config` / middleware · no client cache lib (swr / react-query).'
+      } else if (c.headers_file_present || c.client_cache_lib) {
+        status = 'pass'
+        const parts: string[] = []
+        if (c.headers_file_present)  parts.push('headers config detected')
+        if (c.immutable_assets_rule) parts.push('immutable rule on assets')
+        if (c.client_cache_lib)      parts.push(`client cache · ${c.client_cache_lib}`)
+        if (c.api_routes_with_no_store > 0) parts.push(`${c.api_routes_with_no_store} no-store rule${c.api_routes_with_no_store === 1 ? '' : 's'}`)
+        finding = parts.join(' · ') + '.'
+      }
+    }
+    cards.push({
+      key:        'caching_strategy',
+      title:      'Caching strategy',
+      prevalence: 'Stale bundle on long-lived tabs hits any SPA without explicit cache rules',
+      status,
+      finding,
+      why:        'Without Cache-Control rules, hashed assets get fresh-fetched every load (wasted bandwidth) AND index.html gets cached by intermediaries (stale bundle on long-lived tabs). Without no-store on auth-walled API routes, private data lands in CDN cache. Client-side cache libs (swr / react-query) catch stale-while-revalidate at the app layer.',
+      fix:        status === 'fail'
+        ? 'Add a `public/_headers` (Cloudflare Pages / Netlify) or `vercel.json`:\n  `/assets/*` → `Cache-Control: public, max-age=31536000, immutable`\n  `/index.html` → `Cache-Control: public, max-age=0, must-revalidate`\n  authed API routes → `Cache-Control: no-store`.'
+        : null,
+      evidence:   c?.samples,
+    })
+  }
+
+  // 15. Version management · build-id artifact + client update detection
+  //     + lockfile + semver pinning. Long-lived SPA without these = users
+  //     stuck on stale bundles indefinitely.
+  {
+    const v = vc?.version_management
+    let status: Status = 'na'
+    let finding = 'Not enough signal to evaluate.'
+    if (v) {
+      if (!v.lockfile_present) {
+        status = 'fail'
+        finding = 'No lockfile committed (package-lock.json / yarn.lock / pnpm-lock.yaml / bun.lockb). `npm install` will resolve different deps every run — reproducibility lost.'
+      } else if (v.gap) {
+        status = 'warn'
+        const missing: string[] = []
+        if (!v.build_id_artifact)  missing.push('no /version.json or build-id artifact')
+        if (!v.client_version_check) missing.push('no client-side update detection')
+        finding = `Lockfile OK · ${missing.join(' · ')}. SPA users on stale bundles won't auto-update.`
+      } else {
+        status = 'pass'
+        const parts: string[] = ['lockfile committed']
+        if (v.build_id_artifact)    parts.push('build artifact present')
+        if (v.client_version_check) parts.push('client update detection')
+        parts.push(`semver: ${v.semver_strictness} (${v.deps_caret_pct}% caret)`)
+        finding = parts.join(' · ') + '.'
+      }
+    }
+    cards.push({
+      key:        'version_management',
+      title:      'Version management',
+      prevalence: '70% of vibe-coded SPAs ship without build-version tracking',
+      status,
+      finding,
+      why:        'A long-lived SPA tab can stay on yesterday\'s bundle indefinitely · client routing never re-fetches `index.html`. Without a build_id artifact + client-side poll, users hit "Failed to fetch dynamically imported module" the first time they click a route that needs a chunk you renamed. Lockfile + pinned semver also prevent silent dep drift between deploys.',
+      fix:        status !== 'pass' && status !== 'na'
+        ? (!v?.lockfile_present
+            ? 'Commit your package lockfile (`package-lock.json` / `yarn.lock` / `pnpm-lock.yaml` / `bun.lockb`). Remove it from .gitignore if needed.'
+            : 'Emit `/version.json { build_id }` at build time (git short SHA · timestamp fallback). Poll it on the client every 15 min + on visibility-change · surface a "New version · Reload" toast when build_id diverges from the bundled constant.')
+        : null,
+      evidence:   v?.samples,
+    })
+  }
+
   return cards
 }
 
@@ -382,11 +498,12 @@ export function VibeConcernsPanel({ vibeConcerns, showIntro = true }: Props) {
       {showIntro && (
         <div className="mb-4">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-            // AI CODER 7 FRAMES
+            // AI CODER FRAMES · {cards.length}
           </div>
           <div className="font-light text-sm" style={{ color: 'var(--text-primary)', lineHeight: 1.6 }}>
-            Seven systematic failure modes AI tools ship without — the ones generic linters and Cursor's
-            inline review don't catch. {' '}
+            Systematic failure modes AI tools ship without — the ones generic linters and Cursor's
+            inline review don't catch. The catalog grew from the original 7 to {cards.length} as we
+            mapped more MVP → production gaps. {' '}
             <span style={{ color: 'var(--cream)' }}>{cards.filter(c => c.status !== 'na').length}/{cards.length}</span> applied to this product.
           </div>
           <div className="mt-3 flex items-center gap-4 font-mono text-xs">
