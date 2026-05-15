@@ -10,7 +10,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CommunityLayout } from '../components/CommunityLayout'
 import { ApplaudButton } from '../components/ApplaudButton'
 import { PostBody } from '../components/PostBody'
-import { getPost, STACK_SUBTYPES, ASK_SUBTYPES, type PostWithAuthor } from '../lib/community'
+import { getPost, deletePost, STACK_SUBTYPES, ASK_SUBTYPES, type PostWithAuthor } from '../lib/community'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -33,6 +33,12 @@ export function CommunityPostDetailPage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [linkedProject, setLinkedProject] = useState<Pick<Project, 'id' | 'project_name' | 'thumbnail_url'> | null>(null)
+  // 2026-05-15 · own-post delete affordance · two-step confirm (CEO ask).
+  // Author can remove their post from the detail page · cascades via the
+  // existing community_posts delete RLS policy + applaud cascade trigger.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting,         setDeleting]         = useState(false)
+  const [deleteError,      setDeleteError]      = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -89,6 +95,21 @@ export function CommunityPostDetailPage() {
 
   const subtypeLabel = subtypeOf(post)
   const isOwnPost    = !!user && user.id === post.author_id
+
+  async function handleDelete() {
+    if (!post) return
+    setDeleting(true)
+    setDeleteError(null)
+    const ok = await deletePost(post.id)
+    if (!ok) {
+      setDeleting(false)
+      setDeleteError('Delete failed · try again in a moment.')
+      return
+    }
+    // Navigate back to the list view (Open Mic / Build Logs / etc.) ·
+    // matches the pattern after a successful publish.
+    navigate(listPathFor(post.type))
+  }
   const applaudType: ApplaudTargetType = post.type === 'build_log'
     ? 'build_log'
     : post.type === 'stack'
@@ -171,16 +192,90 @@ export function CommunityPostDetailPage() {
               </>
             )}
           </div>
-          {applaudable && (
-            <ApplaudButton
-              targetType={applaudType}
-              targetId={post.id}
-              viewerMemberId={user?.id ?? null}
-              isOwnContent={isOwnPost}
-              size="sm"
-            />
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {applaudable && (
+              <ApplaudButton
+                targetType={applaudType}
+                targetId={post.id}
+                viewerMemberId={user?.id ?? null}
+                isOwnContent={isOwnPost}
+                size="sm"
+              />
+            )}
+            {/* Own-post delete · two-step confirm so the author doesn't
+                fat-finger the kill on a Build Log they spent 20 min on.
+                First click flips to "Confirm delete · cancel" inline; only
+                the second click hits the RPC. Cascade trigger handles
+                applauds; tag join rows go FK-on-delete. */}
+            {isOwnPost && !confirmingDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="px-2.5 py-1 font-mono text-[10px] tracking-widest"
+                style={{
+                  background:   'transparent',
+                  color:        'var(--text-muted)',
+                  border:       '1px solid rgba(248,245,238,0.15)',
+                  borderRadius: '2px',
+                  cursor:       'pointer',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--scarlet)'; e.currentTarget.style.color = 'var(--scarlet)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                title="Delete this post"
+              >
+                DELETE
+              </button>
+            )}
+            {isOwnPost && confirmingDelete && (
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-2.5 py-1 font-mono text-[10px] tracking-widest"
+                  style={{
+                    background:   deleting ? 'transparent' : 'var(--scarlet)',
+                    color:        deleting ? 'var(--text-muted)' : 'var(--cream)',
+                    border:       '1px solid var(--scarlet)',
+                    borderRadius: '2px',
+                    cursor:       deleting ? 'wait' : 'pointer',
+                    opacity:      deleting ? 0.6 : 1,
+                  }}
+                >
+                  {deleting ? 'DELETING…' : 'CONFIRM DELETE'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmingDelete(false); setDeleteError(null) }}
+                  disabled={deleting}
+                  className="px-2.5 py-1 font-mono text-[10px] tracking-widest"
+                  style={{
+                    background:   'transparent',
+                    color:        'var(--text-muted)',
+                    border:       '1px solid rgba(248,245,238,0.15)',
+                    borderRadius: '2px',
+                    cursor:       deleting ? 'wait' : 'pointer',
+                  }}
+                >
+                  CANCEL
+                </button>
+              </span>
+            )}
+          </div>
         </div>
+        {deleteError && (
+          <div
+            className="mb-4 px-3 py-2 font-mono text-xs"
+            style={{
+              background:   'rgba(200,16,46,0.08)',
+              border:       '1px solid rgba(200,16,46,0.4)',
+              borderRadius: '2px',
+              color:        'var(--scarlet)',
+            }}
+          >
+            {deleteError}
+          </div>
+        )}
 
         {/* Tags */}
         {post.tags.length > 0 && (
