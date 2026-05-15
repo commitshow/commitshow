@@ -22,6 +22,7 @@ import {
 import { resolvePreviewClaim } from '../lib/projectQueries'
 import { PaymentResultModal } from './PaymentResultModal'
 import { AuditionPromoteCard } from './AuditionPromoteCard'
+import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
 
 // Steps:
 //   1 · basic info (name / URL / screenshots)
@@ -732,15 +733,33 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
 
       {step === 5 && result && lastProjectId && user?.id && (
         <>
+          {/* Order rationale (2026-05-15 · UX audit pass):
+              ① AuditionPromoteCard — reveals the score badge + explains
+                 "you reached backstage / here's the audition stage"
+                 metaphor. Context comes first so the Coach below isn't
+                 telling the user to climb a score they haven't seen yet.
+              ② PreAuditionCoachSlot — "or climb before auditioning"
+                 quick-win cards. Slot fetches its own project + snapshot
+                 raws, no-ops once status leaves backstage.
+              ③ AnalysisResultCard — full audit report below the fold ·
+                 hideReanalyzeButton because Coach owns the re-audit CTA
+                 here (single source of truth · prevents the user from
+                 hitting two different re-audit buttons that do the same
+                 thing and leave Coach state stale). */}
           <AuditionPromoteCard
             projectId={lastProjectId}
             memberId={user.id}
             scoreTotal={result.score_total ?? null}
           />
+          <PreAuditionCoachSlot
+            projectId={lastProjectId}
+            navigateOnAuditioned
+          />
           <AnalysisResultCard
             result={result}
             projectId={lastProjectId}
             onReanalyzed={(next) => { setResult(next); onComplete?.(lastProjectId) }}
+            hideReanalyzeButton
             onReset={() => {
               setStep(1)
               setResult(null)

@@ -539,15 +539,29 @@ export function ProjectDetailPage() {
               prompt when the band climbs. Hidden once the project is on
               stage (status='active') — by then the audit + AnalysisResultCard
               already cover the same ground. */}
-        {project.status === 'backstage' && isOwner && (
+        {project.status === 'backstage' && isOwner && latestSnapRaw !== null && (
+          // latestSnapRaw !== null guard · without it, the Coach
+          // renders its empty state ("no quick wins left") on first
+          // paint because detectQuickWins sees null evidence and
+          // returns []. Once the snapshot select lands (~200ms after
+          // project load) the gate flips true and the real Coach panel
+          // mounts cleanly without the empty-state flash.
           <AuditCoachPanel
             project={project}
-            snapshotRich={latestSnapRaw?.rich ?? null}
-            lighthouse={latestSnapRaw?.lighthouse ?? null}
-            githubSignals={latestSnapRaw?.githubSignals ?? null}
+            snapshotRich={latestSnapRaw.rich}
+            lighthouse={latestSnapRaw.lighthouse}
+            githubSignals={latestSnapRaw.githubSignals}
             onReanalyze={handleHeroReanalyze}
             reanalyzing={heroRerunBusy}
             previousBand={preReauditBand}
+            onAuditioned={async () => {
+              // audition_project flipped status backstage→active on the
+              // server · refetch so the local state catches up and the
+              // Coach gate (status='backstage') closes. Same URL, just
+              // pulling fresh row.
+              const refreshed = await fetchProjectById(project.id)
+              if (refreshed) setProject(refreshed)
+            }}
           />
         )}
 

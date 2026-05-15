@@ -33,6 +33,16 @@ interface TicketBalance {
   total_tickets:  number
 }
 
+// ticket_balance can also return `{ error: 'caller_target_mismatch' }`
+// when caller != target (defense in depth · §RPC contract). Coach only
+// ever queries the user's own balance so this branch can't fire here,
+// but we still type-guard to stop a future refactor from silently
+// reading undefined .free_remaining.
+function isTicketBalance(v: unknown): v is TicketBalance {
+  return !!v && typeof v === 'object'
+      && typeof (v as { free_remaining?: unknown }).free_remaining === 'number'
+}
+
 interface AuditCoachPanelProps {
   project:        Project
   snapshotRich:   Record<string, unknown> | null
@@ -49,6 +59,12 @@ interface AuditCoachPanelProps {
    *  current band > previous, surface the soft audition prompt. Parent
    *  remembers this in state across re-audit firings. */
   previousBand?:  ReturnType<typeof scoreBand> | null
+  /** Fires after audition_project flips status backstage→active. Parent
+   *  must refetch the project so the page re-renders without the Coach
+   *  (status='active' gates it out) — the user is already on
+   *  /projects/<id> so a navigate() to the same URL would be a no-op
+   *  and the Coach would stay visible with "Redirecting…" forever. */
+  onAuditioned?:  () => void | Promise<void>
 }
 
 const CATEGORY_TONE: Record<CoachCategory, string> = {
@@ -71,6 +87,7 @@ const BAND_RANK: Record<string, number> = {
 export function AuditCoachPanel({
   project, snapshotRich, lighthouse, githubSignals,
   onReanalyze, reanalyzing = false, previousBand = null,
+  onAuditioned,
 }: AuditCoachPanelProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -95,7 +112,7 @@ export function AuditCoachPanel({
     let alive = true
     supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
       if (!alive || error) return
-      setTicketBalance(data as TicketBalance)
+      if (isTicketBalance(data)) setTicketBalance(data)
     })
     // Listen for the tickets-updated event AuditionPromoteCard fires
     // so the balance refreshes when a ticket gets spent elsewhere.
@@ -103,7 +120,7 @@ export function AuditCoachPanel({
       if (!user?.id) return
       supabase.rpc('ticket_balance', { p_member_id: user.id }).then(({ data, error }) => {
         if (!alive || error) return
-        setTicketBalance(data as TicketBalance)
+        if (isTicketBalance(data)) setTicketBalance(data)
       })
     }
     window.addEventListener('commitshow:tickets-updated', refetch)
@@ -124,7 +141,19 @@ export function AuditCoachPanel({
         // Notify other surfaces (TicketWalletCard etc.) to refetch.
         window.dispatchEvent(new CustomEvent('commitshow:tickets-updated'))
         setAuditionDone(true)
-        setTimeout(() => navigate(`/projects/${project.id}`), 900)
+        // We're already on /projects/<id> · navigate to the same URL
+        // is a no-op (router skips · no remount · no refetch), which
+        // would leave the Coach stuck on "Redirecting…" with stale
+        // status='backstage'. Instead poke the parent to refetch the
+        // project so the page re-renders with status='active' and the
+        // Coach gate evaluates to false.
+        if (onAuditioned) {
+          void onAuditioned()
+        } else {
+          // Fallback for surfaces that didn't wire the callback ·
+          // hard-reload guarantees the new state is visible.
+          setTimeout(() => window.location.assign(`/projects/${project.id}`), 900)
+        }
         return
       }
       if (result.reason === 'no_ticket') {
@@ -247,7 +276,7 @@ export function AuditCoachPanel({
         </p>
         {checkedCount > 0 && (
           <div className="mt-3 font-mono text-xs" style={{ color: '#00D4AA' }}>
-            ✓ {checkedCount} marked done · expected +{totalImpact}pt on re-audit
+            ✓ {checkedCount} marked done · ≈ +{totalImpact}pt on re-audit
           </div>
         )}
       </div>
@@ -435,7 +464,7 @@ function CoachRow({ item, checked, onToggle }: { item: CoachItem; checked: boole
                 {cat}
               </span>
               <span className="font-mono text-xs tabular-nums" style={{ color: '#00D4AA', fontWeight: 600 }}>
-                +{item.impact}pt
+                ≈ +{item.impact}pt
               </span>
               <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
                 {expanded ? '−' : '+'}

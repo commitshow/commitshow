@@ -15,6 +15,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, PUBLIC_PROJECT_COLUMNS, type Project } from '../lib/supabase'
+import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
 
 interface TicketBalance {
   free_remaining: number
@@ -25,10 +26,15 @@ interface TicketBalance {
 }
 
 export function BackstageSection({ memberId }: { memberId: string }) {
-  const [backstage, setBackstage] = useState<Project[] | null>(null)
-  const [balance,   setBalance]   = useState<TicketBalance | null>(null)
-  const [busyId,    setBusyId]    = useState<string | null>(null)
-  const [error,     setError]     = useState<string | null>(null)
+  const [backstage,     setBackstage]     = useState<Project[] | null>(null)
+  const [balance,       setBalance]       = useState<TicketBalance | null>(null)
+  const [busyId,        setBusyId]        = useState<string | null>(null)
+  const [error,         setError]         = useState<string | null>(null)
+  // §16.2 (2026-05-15) · which backstage row currently has its
+  // pre-audition Coach panel expanded inline. One at a time · clicking
+  // a different row's Coach toggle collapses any other open one. null
+  // when nothing is expanded.
+  const [coachOpenId,   setCoachOpenId]   = useState<string | null>(null)
 
   const loadAll = useCallback(async () => {
     const [projRes, balRes] = await Promise.all([
@@ -107,59 +113,94 @@ export function BackstageSection({ memberId }: { memberId: string }) {
       )}
 
       <div className="space-y-2">
-        {backstage.map(p => (
-          <div key={p.id} className="card-navy p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
-            borderLeft: '3px solid var(--gold-500)',
-            borderRadius: '2px',
-          }}>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-3 flex-wrap">
-                <span className="font-display font-bold" style={{ color: 'var(--cream)' }}>{p.project_name}</span>
-                {p.score_total != null && (
-                  <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--gold-500)' }}>
-                    {p.score_total}/100
-                  </span>
-                )}
+        {backstage.map(p => {
+          const coachOpen = coachOpenId === p.id
+          return (
+            <div key={p.id}>
+              <div className="card-navy p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
+                borderLeft: '3px solid var(--gold-500)',
+                borderRadius: '2px',
+              }}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <span className="font-display font-bold" style={{ color: 'var(--cream)' }}>{p.project_name}</span>
+                    {p.score_total != null && (
+                      <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                        {p.score_total}/100
+                      </span>
+                    )}
+                  </div>
+                  {p.live_url && (
+                    <div className="font-mono text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+                      {p.live_url}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {/* §16.2 (2026-05-15) · inline Coach toggle. Lets the
+                      creator climb without leaving /me · friction cut
+                      vs the View-report → /projects/<id> detour. One
+                      panel open at a time keeps the page scannable
+                      when multiple backstage rows exist. */}
+                  <button
+                    type="button"
+                    onClick={() => setCoachOpenId(coachOpen ? null : p.id)}
+                    className="px-3 py-1.5 font-mono text-[11px] tracking-wide whitespace-nowrap"
+                    style={{
+                      background:   coachOpen ? 'rgba(240,192,64,0.14)' : 'transparent',
+                      color:        coachOpen ? 'var(--gold-500)' : 'var(--cream)',
+                      border:       `1px solid ${coachOpen ? 'rgba(240,192,64,0.45)' : 'rgba(248,245,238,0.2)'}`,
+                      borderRadius: '2px',
+                      cursor:       'pointer',
+                    }}
+                  >
+                    {coachOpen ? 'Hide coach ↑' : 'Coach & climb ↓'}
+                  </button>
+                  <Link
+                    to={`/projects/${p.id}`}
+                    className="px-3 py-1.5 font-mono text-[11px] tracking-wide whitespace-nowrap"
+                    style={{
+                      background:     'transparent',
+                      color:          'var(--cream)',
+                      border:         '1px solid rgba(248,245,238,0.2)',
+                      borderRadius:   '2px',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    View report →
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleAudition(p.id)}
+                    disabled={busyId === p.id}
+                    className="px-3 py-1.5 font-mono text-[11px] font-medium tracking-wide whitespace-nowrap"
+                    style={{
+                      background:   'var(--gold-500)',
+                      color:        'var(--navy-900)',
+                      border:       'none',
+                      borderRadius: '2px',
+                      cursor:       busyId === p.id ? 'wait' : 'pointer',
+                      opacity:      busyId === p.id ? 0.6 : 1,
+                    }}
+                  >
+                    {busyId === p.id ? 'PROCESSING…' : 'PUT ON AUDITION STAGE →'}
+                  </button>
+                </div>
               </div>
-              {p.live_url && (
-                <div className="font-mono text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
-                  {p.live_url}
+              {coachOpen && (
+                <div className="mt-2">
+                  {/* navigateOnAuditioned=true · the Coach's done-state
+                      copy says "Redirecting to your product page…",
+                      and the user just spent a ticket — landing them on
+                      /projects/<id> honors the promise + lets them see
+                      the live result. They can always come back to /me
+                      to audition the next backstage project. */}
+                  <PreAuditionCoachSlot projectId={p.id} navigateOnAuditioned />
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
-              <Link
-                to={`/projects/${p.id}`}
-                className="px-3 py-1.5 font-mono text-[11px] tracking-wide whitespace-nowrap"
-                style={{
-                  background:     'transparent',
-                  color:          'var(--cream)',
-                  border:         '1px solid rgba(248,245,238,0.2)',
-                  borderRadius:   '2px',
-                  textDecoration: 'none',
-                }}
-              >
-                View report →
-              </Link>
-              <button
-                type="button"
-                onClick={() => handleAudition(p.id)}
-                disabled={busyId === p.id}
-                className="px-3 py-1.5 font-mono text-[11px] font-medium tracking-wide whitespace-nowrap"
-                style={{
-                  background:   'var(--gold-500)',
-                  color:        'var(--navy-900)',
-                  border:       'none',
-                  borderRadius: '2px',
-                  cursor:       busyId === p.id ? 'wait' : 'pointer',
-                  opacity:      busyId === p.id ? 0.6 : 1,
-                }}
-              >
-                {busyId === p.id ? 'PROCESSING…' : 'PUT ON AUDITION STAGE →'}
-              </button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <p className="font-mono text-[10px] mt-3" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
