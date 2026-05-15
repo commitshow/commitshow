@@ -13,10 +13,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, type CommunityPostType } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { resolveCreatorName } from '../lib/creatorName'
-import { IconComment } from '../components/icons'
+import { IconComment, IconApplaud } from '../components/icons'
+import { fetchPostCommentCounts, fetchPostApplaudCounts } from '../lib/community'
 
 interface PostFeedItem {
   kind:        'post'
@@ -29,6 +30,13 @@ interface PostFeedItem {
   author_id:   string | null
   author_name: string | null
   link:        string
+  // Engagement stats · pulled in a second-pass batch fetch after the
+  // initial post list resolves (fetchPostCommentCounts +
+  // fetchPostApplaudCounts in lib/community.ts). 0 by default · row
+  // re-renders when the maps land. Stats hidden on comment rows since
+  // they belong to community posts, not the project comments stream.
+  comment_count?: number
+  applaud_count?: number
 }
 
 interface CommentFeedItem {
@@ -104,13 +112,21 @@ export function CommunityFeedPage() {
       ]))
       const projectIds = Array.from(new Set(comments.map(c => c.project_id).filter(Boolean) as string[]))
 
-      const [membersRes, pjRes] = await Promise.all([
+      // Parallel · author lookups + project names + bulk engagement
+      // counts (comment + applaud per community post). Counts only
+      // apply to post rows · comment-stream rows belong to the project
+      // comments table which has its own surfacing.
+      const postIds = posts.map(p => p.id)
+      const postPairs = posts.map(p => ({ id: p.id, type: p.type as CommunityPostType }))
+      const [membersRes, pjRes, commentCounts, applaudCounts] = await Promise.all([
         authorIds.length > 0
           ? supabase.from('members').select('id, display_name, avatar_url').in('id', authorIds)
           : Promise.resolve({ data: [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }> }),
         projectIds.length > 0
           ? supabase.from('projects').select('id, project_name').in('id', projectIds)
           : Promise.resolve({ data: [] as Array<{ id: string; project_name: string }> }),
+        fetchPostCommentCounts(postIds),
+        fetchPostApplaudCounts(postPairs),
       ])
       if (!alive) return
 
@@ -149,6 +165,8 @@ export function CommunityFeedPage() {
           author_name:   m?.display_name ?? null,
           author_avatar: m?.avatar_url   ?? null,
           link:          `/community/${typeSegment(p.type)}/${p.id}`,
+          comment_count: commentCounts[p.id] ?? 0,
+          applaud_count: applaudCounts[p.id] ?? 0,
         }
       })
       const commentItems: CommentFeedItem[] = comments.map(c => {
@@ -264,7 +282,13 @@ function FeedRow({ item }: { item: FeedItem }) {
   // automated feed entries.
   const author = isSystem ? 'CS' : resolveCreatorName({ display_name: item.author_name })
   const ago = relAgo(item.created_at)
-  const accent  = isSystem ? 'var(--gold-500)' : (item.kind === 'comment' ? '#00D4AA' : 'var(--gold-500)')
+  // accent MUST be a hex literal · the chip styles below use
+  // template-literal alpha suffixes (`${accent}1A`, `${accent}55`)
+  // which produce valid CSS for `#F0C040` (→ `#F0C0401A`) but break
+  // for `var(--gold-500)` (→ `var(--gold-500)1A` is invalid CSS · the
+  // browser drops the property silently · why Open Mic + system
+  // chips lost their border but comment chips kept theirs).
+  const accent  = isSystem ? '#F0C040' : (item.kind === 'comment' ? '#00D4AA' : '#F0C040')
   const avatar  = !isSystem ? item.author_avatar : null
   const initial = avatar ? '' : author.slice(0, 1).toUpperCase()
   // Comment rows · render as a rounded card so they read as discrete
@@ -350,6 +374,27 @@ function FeedRow({ item }: { item: FeedItem }) {
               <div className="mt-1">
                 <div className="font-display font-bold text-base" style={{ color: 'var(--cream)' }}>{item.title}</div>
                 {item.tldr && <p className="font-light text-sm mt-1" style={{ color: 'var(--text-secondary)', lineHeight: 1.55, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.tldr}</p>}
+                {/* Engagement strip · always-on counts for posts so a
+                    quiet row still telegraphs "this is comment-able /
+                    applaud-able". > 0 lights up, 0 stays muted. */}
+                <div className="mt-2 flex items-center gap-4 font-mono text-[11px]">
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    title={`${item.comment_count ?? 0} comment${(item.comment_count ?? 0) === 1 ? '' : 's'}`}
+                    style={{ color: (item.comment_count ?? 0) > 0 ? 'var(--cream)' : 'var(--text-muted)' }}
+                  >
+                    <IconComment size={13} />
+                    <span className="tabular-nums">{item.comment_count ?? 0}</span>
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    title={`${item.applaud_count ?? 0} applaud${(item.applaud_count ?? 0) === 1 ? '' : 's'}`}
+                    style={{ color: (item.applaud_count ?? 0) > 0 ? 'var(--gold-500)' : 'var(--text-muted)' }}
+                  >
+                    <IconApplaud size={13} />
+                    <span className="tabular-nums">{item.applaud_count ?? 0}</span>
+                  </span>
+                </div>
               </div>
             ) : (
               <p className="font-light text-sm mt-1" style={{ color: 'var(--cream)', lineHeight: 1.55, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.text}</p>
