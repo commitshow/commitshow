@@ -57,4 +57,31 @@ export default defineConfig({
   define: {
     __COMMITSHOW_BUILD_ID__: JSON.stringify(BUILD_ID),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 2026-05-15 · prefix every chunk + entry with the BUILD_ID so
+        // hashes change on every build even when source content didn't.
+        // Why: rolldown/Vite default content-hashing means an unchanged
+        // chunk keeps the same hash across deploys (e.g. `xyz.js` →
+        // `xyz.js` next build). If at ANY point Cloudflare's edge or a
+        // user's browser cached an HTML SPA-fallback response for
+        // `/assets/xyz.js` (Pages deploy race, asset not yet uploaded),
+        // the immutable cache headers freeze that bad response for a
+        // year on every device that hit the bad window. Forcing a new
+        // file name every build sidesteps the cache entirely · the
+        // user's tab pulls the new index.html and gets fresh URLs that
+        // have never been cached as HTML.
+        //
+        // Cost: every deploy invalidates the CDN/browser cache for
+        // every chunk. We trade 2-3 MB extra cold-fetch per deploy for
+        // a sticky-cache class of bug that's otherwise unfixable. With
+        // 30-day version retention on Pages, returning users still get
+        // hash-matched cache hits within the same build's lifetime.
+        entryFileNames: `assets/[name]-${BUILD_ID}-[hash].js`,
+        chunkFileNames: `assets/[name]-${BUILD_ID}-[hash].js`,
+        assetFileNames: `assets/[name]-${BUILD_ID}-[hash][extname]`,
+      },
+    },
+  },
 })
