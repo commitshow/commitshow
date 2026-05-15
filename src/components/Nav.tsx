@@ -159,7 +159,7 @@ export function Nav() {
           <NavLink
             to="/search"
             aria-label="Search"
-            title="Search · projects · creators · library"
+            title="Search · products · creators · library"
             className="flex items-center justify-center transition-colors"
             style={{ width: 36, height: 36, color: 'var(--text-secondary)', textDecoration: 'none' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--cream)')}
@@ -508,7 +508,7 @@ export function Nav() {
                     </span>
                   </div>
                   <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-                    {remaining === 0 ? `Depleted · refills in ${daysUntilNextReset()}d` : 'Cast on any audited project'}
+                    {remaining === 0 ? `Depleted · refills in ${daysUntilNextReset()}d` : 'Cast on any audited product'}
                   </div>
                 </div>
 
@@ -683,13 +683,13 @@ function AuditionTicketsCallout({ onSelect }: { onSelect: () => void }) {
       </div>
       <div className="font-mono text-[10px]" style={{ color: 'var(--text-secondary)' }}>
         {bal === null ? '…' : total === 0 ? (
-          'Buy one in /me to put a backstage project on stage'
+          'Buy one in /me to put a backstage product on stage'
         ) : (
           <>
             {bal.free_remaining > 0 && <><span style={{ color: 'var(--cream)' }}>{bal.free_remaining} free</span></>}
             {bal.free_remaining > 0 && bal.paid_credit > 0 && <span style={{ color: 'var(--text-faint)' }}> · </span>}
             {bal.paid_credit > 0 && <><span style={{ color: 'var(--cream)' }}>{bal.paid_credit} paid</span></>}
-            <span style={{ color: 'var(--text-muted)' }}> · spend on backstage projects</span>
+            <span style={{ color: 'var(--text-muted)' }}> · spend on backstage products</span>
           </>
         )}
       </div>

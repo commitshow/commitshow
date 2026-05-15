@@ -17,6 +17,8 @@ import { supabase, PUBLIC_MEMBER_COLUMNS, type Member, type CreatorGrade } from 
 import { isEncoreScore, fetchAllEncoresByProjectIds, type EncoreRow, type EncoreKind } from '../lib/encore'
 import { EncoreBadge } from '../components/EncoreBadge'
 import { TrustLevelChip } from '../components/TrustLevelChip'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 const GRADE_COLOR: Record<CreatorGrade, string> = {
   Rookie:          '#6B7280',
@@ -37,6 +39,11 @@ interface ProductRow {
   score_auto:    number | null
   audit_count:   number
   created_at:    string
+  // §1-A ⑥ band gate · need creator_id so the viewer-aware predicate
+  // can compare with the logged-in viewer's id and reveal digit on the
+  // creator's own row (a creator looking at their own /creators/<id>
+  // page shouldn't see band on their own products).
+  creator_id:    string | null
 }
 
 interface CreatorMember extends Member {
@@ -78,7 +85,7 @@ export function CreatorDetailPage() {
       // by design but a stale row could leak through).
       const { data: pjs } = await supabase
         .from('projects')
-        .select('id, project_name, description, thumbnail_url, status, score_total, score_auto, audit_count, created_at')
+        .select('id, project_name, description, thumbnail_url, status, score_total, score_auto, audit_count, created_at, creator_id')
         .eq('creator_id', id)
         .in('status', ['active', 'graduated', 'valedictorian'])
         .order('score_total', { ascending: false, nullsFirst: false })
@@ -196,6 +203,12 @@ function ProductCard({ p, encores, hideRound1Score }: { p: ProductRow; encores: 
   const isRound1   = (p.audit_count ?? 0) <= 1
   const scoreHidden = !!hideRound1Score && isRound1
   const isEncore   = !scoreHidden && (isEncoreScore(p.score_total) || encores.length > 0)
+  // §1-A ⑥ band gate · creator on own creator-detail page sees digit
+  // (this IS their profile). Anyone else sees band unless the product
+  // graduated with Encore (digit reveals as trophy at score >= 85).
+  const viewer       = useViewer()
+  const canSeeDigit  = viewerCanSeeDigit(p, viewer)
+  const band         = scoreBand(p.score_total ?? 0)
   return (
     <Link
       to={`/projects/${p.id}`}
@@ -237,9 +250,17 @@ function ProductCard({ p, encores, hideRound1Score }: { p: ProductRow; encores: 
                 >
                   ROUND 1
                 </span>
-              ) : (
+              ) : canSeeDigit ? (
                 <span className="font-mono text-sm tabular-nums ml-1" style={{ color: isEncore ? 'var(--gold-500)' : 'var(--cream)' }}>
                   {p.score_total ?? '—'}
+                </span>
+              ) : (
+                <span
+                  className="font-mono text-[11px] tracking-widest uppercase ml-1"
+                  style={{ color: bandTone(band), fontWeight: 600 }}
+                  title="Public viewers see band · creator + admin + paid Patron see the digit"
+                >
+                  {bandLabel(band)}
                 </span>
               )}
             </div>

@@ -226,12 +226,12 @@ export function LibraryDetailPage() {
             <div className="flex items-center gap-3 font-mono text-xs">
               <span style={{ color: item.is_free ? '#00D4AA' : 'var(--gold-500)' }}>{priceLabel}</span>
               {graduated > 0 && (
-                <span className="inline-flex items-center gap-1" style={{ color: '#00D4AA' }} title="Encore projects that applied this artifact">
+                <span className="inline-flex items-center gap-1" style={{ color: '#00D4AA' }} title="Encore products that applied this artifact">
                   <IconGraduation size={12} /> {graduated} Encore
                 </span>
               )}
               {applied > 0 && (
-                <span className="inline-flex items-center gap-1" style={{ color: 'var(--gold-500)' }} title="Projects that opened a PR to apply this artifact">
+                <span className="inline-flex items-center gap-1" style={{ color: 'var(--gold-500)' }} title="Products that opened a PR to apply this artifact">
                   <IconWand size={12} /> {applied} applied
                 </span>
               )}

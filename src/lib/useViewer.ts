@@ -6,70 +6,32 @@
 // Scout SKU lands). Components that gate digit-vs-band display call this
 // once and feed the result to `viewerCanSeeDigit(project, viewer)`.
 //
-// Subscribes to supabase.auth.onAuthStateChange so sign-in / sign-out
-// updates propagate without forcing a page reload. Returns `loading: true`
-// during the initial session+row fetch so consumers can defer rendering
-// digit-vs-band until the answer is stable (otherwise creator-on-own-page
-// would briefly see band, then flip to digit — jarring).
+// 2026-05-15b · flicker fix · the prior version made its own async
+// getUser() call which caused a creator viewing their own project list
+// to render band first, then flip to digit on resolve. We now read from
+// the AuthProvider context which already has the session loaded
+// synchronously from Supabase's local-storage cache — so on FIRST paint
+// we already know whether the viewer is the creator. The member row's
+// is_admin flag still loads async (rare admin case), but the common
+// "creator on their own list" case is now zero-flicker.
 
-import { useEffect, useState } from 'react'
-import { supabase } from './supabase'
+import { useAuth } from './auth'
 import type { ViewerScope } from './laneScore'
 
 export interface ViewerState extends ViewerScope {
-  loading: boolean
+  loading:   boolean    // true only during the initial session restore (sub-100ms typically)
   signed_in: boolean
 }
 
-const INITIAL: ViewerState = {
-  loading:     true,
-  signed_in:   false,
-  member_id:   null,
-  is_admin:    false,
-  paid_patron: false,
-}
-
 export function useViewer(): ViewerState {
-  const [state, setState] = useState<ViewerState>(INITIAL)
-
-  useEffect(() => {
-    let alive = true
-    async function resolve() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!alive) return
-      if (!user) {
-        setState({ loading: false, signed_in: false, member_id: null, is_admin: false, paid_patron: false })
-        return
-      }
-      // Pull just the gate-relevant columns · cheap one-row read.
-      const { data: row } = await supabase
-        .from('members')
-        .select('id, is_admin')
-        .eq('id', user.id)
-        .maybeSingle()
-      if (!alive) return
-      setState({
-        loading:     false,
-        signed_in:   true,
-        member_id:   row?.id ?? user.id,
-        is_admin:    row?.is_admin === true,
-        // Paid Patron tier hasn't shipped yet · placeholder false.
-        // When the SKU lands, swap to `row?.scout_paid_tier === 'patron'`.
-        paid_patron: false,
-      })
-    }
-    resolve()
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      if (!alive) return
-      if (!session?.user) {
-        setState({ loading: false, signed_in: false, member_id: null, is_admin: false, paid_patron: false })
-        return
-      }
-      // Re-fetch on auth change · permissions may have changed.
-      resolve()
-    })
-    return () => { alive = false; sub.subscription.unsubscribe() }
-  }, [])
-
-  return state
+  const { user, member, loading } = useAuth()
+  return {
+    loading,
+    signed_in:   !!user,
+    member_id:   user?.id ?? null,
+    is_admin:    member?.is_admin === true,
+    // Paid Patron tier hasn't shipped yet · placeholder false.
+    // When the SKU lands, swap to `member?.scout_paid_tier === 'patron'`.
+    paid_patron: false,
+  }
 }

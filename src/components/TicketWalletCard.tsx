@@ -115,7 +115,7 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
             // AUDITION TICKETS
           </div>
           <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Spend one to put a backstage project on stage
+            Spend one to put a backstage product on stage
           </div>
         </div>
 
@@ -215,8 +215,8 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
       </div>
 
       <p className="font-mono text-[10px] mt-3" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
-        Tickets don't expire · use any time on a backstage project. Payment goes through Stripe ·
-        Encore credit recoupable when the project crosses score 85+.
+        Tickets don't expire · use any time on a backstage product. Payment goes through Stripe ·
+        Encore credit recoupable when the product crosses score 85+.
       </p>
 
       {dialogOpen && createPortal(
@@ -313,7 +313,7 @@ function BuyTicketsDialog({
         </div>
 
         <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.65)', lineHeight: 1.6 }}>
-          Each ticket auditions one backstage project onto the live ladder. Tickets don't expire.
+          Each ticket auditions one backstage product onto the live ladder. Tickets don't expire.
           {founderActive && (
             <> <span style={{ color: 'var(--gold-500)' }}>Founder pricing — locked in for as long as the window stays open.</span></>
           )}

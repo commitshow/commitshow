@@ -387,7 +387,7 @@ export function VibeConcernsPanel({ vibeConcerns, showIntro = true }: Props) {
           <div className="font-light text-sm" style={{ color: 'var(--text-primary)', lineHeight: 1.6 }}>
             Seven systematic failure modes AI tools ship without — the ones generic linters and Cursor's
             inline review don't catch. {' '}
-            <span style={{ color: 'var(--cream)' }}>{cards.filter(c => c.status !== 'na').length}/{cards.length}</span> applied to this project.
+            <span style={{ color: 'var(--cream)' }}>{cards.filter(c => c.status !== 'na').length}/{cards.length}</span> applied to this product.
           </div>
           <div className="mt-3 flex items-center gap-4 font-mono text-xs">
             {failCount > 0 && <span style={{ color: '#C8102E' }}>● {failCount} fail</span>}

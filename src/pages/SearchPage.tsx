@@ -13,11 +13,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, PUBLIC_MEMBER_COLUMNS, type Member } from '../lib/supabase'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 interface ProjectHit {
   id:            string
   project_name:  string
   description:   string | null
+  creator_id:    string | null
   creator_name:  string | null
   thumbnail_url: string | null
   status:        string
@@ -46,6 +49,10 @@ export function SearchPage() {
   const [projects, setProjects]   = useState<ProjectHit[]>([])
   const [members,  setMembers]    = useState<Member[]>([])
   const [packs,    setPacks]      = useState<LibraryHit[]>([])
+  // §1-A ⑥ search results respect the band gate · creator on own product
+  // sees digit, public sees band chip. useViewer reads sync from auth ctx
+  // so the first paint already knows.
+  const viewer = useViewer()
 
   // Debounce + URL sync
   useEffect(() => {
@@ -71,7 +78,7 @@ export function SearchPage() {
     Promise.all([
       supabase
         .from('projects')
-        .select('id, project_name, description, creator_name, thumbnail_url, status, score_total, audit_count')
+        .select('id, project_name, description, creator_id, creator_name, thumbnail_url, status, score_total, audit_count')
         .or(`project_name.ilike.${pat},description.ilike.${pat},creator_name.ilike.${pat}`)
         .in('status', ['active', 'graduated', 'valedictorian'])
         .limit(15),
@@ -156,7 +163,7 @@ export function SearchPage() {
         {/* Projects section */}
         {showAny && projects.length > 0 && (
           <div className="mb-5">
-            <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--gold-500)' }}>Projects</div>
+            <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--gold-500)' }}>Products</div>
             <div className="grid gap-2">
               {projects.map(p => (
                 <Link
@@ -180,12 +187,23 @@ export function SearchPage() {
                       {p.description ?? 'no description'}
                     </div>
                   </div>
-                  {p.score_total != null && (
-                    <div className="font-display font-bold tabular-nums text-lg flex-shrink-0" style={{ color: 'var(--gold-500)' }}
-                         title={(p.audit_count ?? 0) <= 1 ? 'Score hidden until creator re-audits.' : undefined}>
-                      {(p.audit_count ?? 0) <= 1 ? '—' : p.score_total}
-                    </div>
-                  )}
+                  {p.score_total != null && (() => {
+                    const canSeeDigit = viewerCanSeeDigit(p, viewer)
+                    const band        = scoreBand(p.score_total)
+                    const blind       = (p.audit_count ?? 0) <= 1
+                    return (
+                      <div
+                        className="font-display font-bold text-lg flex-shrink-0"
+                        style={{
+                          color: blind ? 'var(--text-muted)' : canSeeDigit ? 'var(--gold-500)' : bandTone(band),
+                          ...(canSeeDigit && !blind ? { fontVariantNumeric: 'tabular-nums' } : { textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.85rem' }),
+                        }}
+                        title={blind ? 'Score hidden until creator re-audits.' : !canSeeDigit ? 'Band shown publicly · creator sees the digit' : undefined}
+                      >
+                        {blind ? '—' : canSeeDigit ? p.score_total : bandLabel(band)}
+                      </div>
+                    )
+                  })()}
                 </Link>
               ))}
             </div>

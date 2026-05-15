@@ -90,7 +90,7 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
           Auditioning now
         </div>
         <p className="font-light text-sm" style={{ color: 'rgba(248,245,238,0.55)' }}>
-          Redirecting to your project page…
+          Redirecting to your product page…
         </p>
       </div>
     )
@@ -181,7 +181,7 @@ export function AuditionPromoteCard({ projectId, memberId, scoreTotal }: Auditio
       <p className="font-light text-sm mb-5" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.6 }}>
         Backstage is private — only you can see this audit right now. Audition to share it with
         the <em style={{ color: 'var(--cream)', fontStyle: 'normal' }}>MVPs already on stage</em>:
-        the project lands on its category ladder, picks up real feedback, and earns the permanent
+        the product lands on its category ladder, picks up real feedback, and earns the permanent
         Encore badge at score 85+.
         {scoreTotal != null && scoreTotal >= 85 && (
           <> <span style={{ color: 'var(--gold-500)' }}>You're already there — Encore lands the moment you bring it on stage.</span></>

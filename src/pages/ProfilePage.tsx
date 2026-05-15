@@ -447,7 +447,7 @@ export function ProfilePage() {
             <div className="card-navy p-10 text-center" style={{ borderRadius: '2px' }}>
               <div className="font-display text-xl font-bold mb-2" style={{ color: 'var(--text-muted)' }}>No library items yet</div>
               <p className="font-mono text-xs" style={{ color: 'var(--text-faint)' }}>
-                After your first analysis, library-worthy files from your repo appear on the project page — publish them from there.
+                After your first analysis, library-worthy files from your repo appear on the product page — publish them from there.
               </p>
             </div>
           ) : (
@@ -835,7 +835,7 @@ export function ApplicationRow({ project: p, onDeleted }: { project: Project; on
             </span>
             <button
               onClick={() => { setError(''); setConfirmOpen(true) }}
-              title="Delete this project"
+              title="Delete this product"
               className="font-mono text-[11px] tracking-widest px-2 py-1.5"
               style={{
                 background: 'transparent',

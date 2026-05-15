@@ -25,7 +25,7 @@ interface Props {
 
 export function NotFoundPage({
   title    = 'Page not found',
-  message  = "We couldn't find what you were looking for. The link may be old, or the project may have been removed.",
+  message  = "We couldn't find what you were looking for. The link may be old, or the product may have been removed.",
   homeHref = '/',
 }: Props) {
   // Inject noindex while this page is mounted · cleaned up on unmount

@@ -14,6 +14,8 @@ import {
   type VoteWindowState,
 } from '../lib/forecast'
 import { EmotionTagRow } from './EmotionTagRow'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 interface ForecastModalProps {
   project: Project
@@ -36,6 +38,16 @@ const NEXT_TIER: Record<ScoutTier, { name: ScoutTier | null; apTarget: number | 
 
 export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) {
   const { user } = useAuth()
+  // §1-A ⑥ + design rationale · Scout is forecasting the project's
+  // ladder trajectory. If we show the digit here the Scout anchors to
+  // it ("82 already, I'll vote 82-ish") and the Forecast becomes a
+  // consensus echo instead of a prediction. Showing the band keeps the
+  // tier signal (Strong / Building) without anchoring the precise
+  // number. Creator on own project gets digit but a creator can't
+  // forecast their own anyway.
+  const viewer       = useViewer()
+  const canSeeDigit  = viewerCanSeeDigit(project, viewer)
+  const projBand     = scoreBand(project.score_total ?? 0)
   const [score, setScore] = useState(75)
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
@@ -138,7 +150,9 @@ export function ForecastModal({ project, onClose, onCast }: ForecastModalProps) 
           {project.project_name}
         </h3>
         <p className="text-xs font-mono mb-5" style={{ color: 'rgba(248,245,238,0.4)' }}>
-          Current score: {project.score_total} / 100
+          {canSeeDigit
+            ? <>Current score: {project.score_total} / 100</>
+            : <>Current band: <span className="tracking-widest uppercase" style={{ color: bandTone(projBand) }}>{bandLabel(projBand)}</span> · forecast unanchored</>}
         </p>
 
         {/* Scout status · two labelled rows so the lifetime AP count never

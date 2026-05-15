@@ -425,7 +425,7 @@ export function ProjectDetailPage() {
     // doesn't classify missing-project URLs as Soft 404 in the index.
     return (
       <NotFoundPage
-        title="Project not found"
+        title="Product not found"
         message="It may have been removed or the URL is wrong. Try the ladder for active products."
         homeHref="/products"
       />
@@ -723,7 +723,7 @@ export function ProjectDetailPage() {
                       border: '1px solid rgba(96,165,250,0.30)',
                       borderRadius: '2px',
                     }}
-                    title="Names the workspace dirs the scan actually traversed. Useful when a project is a monorepo — concerns may apply to a sub-app, not the whole org."
+                    title="Names the workspace dirs the scan actually traversed. Useful when a product is a monorepo — concerns may apply to a sub-app, not the whole org."
                   >
                     <span style={{ opacity: 0.7 }}>SCANNED · </span>
                     <span>{scannedScope}</span>
@@ -1199,7 +1199,7 @@ export function ProjectDetailPage() {
           <CollapsibleSection
             id="activity"
             label="ACTIVITY"
-            hint="Forecasts and applauds on this project."
+            hint="Forecasts and applauds on this product."
             summary={`${forecasts.length} forecast${forecasts.length === 1 ? '' : 's'} · ${applauds.length} applaud${applauds.length === 1 ? '' : 's'}`}
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -233,7 +233,7 @@ export function CommunityPostDetailPage() {
               <span className="font-display font-bold text-base" style={{ color: 'var(--cream)' }}>
                 {linkedProject.project_name}
               </span>
-              <span className="ml-auto font-mono text-xs" style={{ color: 'var(--gold-500)' }}>View project ↗</span>
+              <span className="ml-auto font-mono text-xs" style={{ color: 'var(--gold-500)' }}>View product ↗</span>
             </Link>
           </div>
         )}

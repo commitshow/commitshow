@@ -191,7 +191,7 @@ export function TicketGiftCelebration() {
         )}
 
         <p className="font-mono text-[11px] mb-6" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          Spend any time on a backstage project · puts it on the live ladder.
+          Spend any time on a backstage product · puts it on the live ladder.
         </p>
 
         <div className="flex gap-2 justify-center flex-wrap">

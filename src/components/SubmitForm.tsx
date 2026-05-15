@@ -208,7 +208,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       setError('Please enter a valid GitHub URL.'); return false
     }
     if (images.length === 0) {
-      setError('At least one project image is required before you can continue.'); return false
+      setError('At least one product image is required before you can continue.'); return false
     }
     // Hard GitHub gate — no submission if the repo is private or unreachable
     setGateBusy(true)
@@ -404,7 +404,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// AUTH REQUIRED</div>
           <h3 className="font-display font-bold text-2xl mb-3" style={{ color: 'var(--cream)' }}>Sign in to apply</h3>
           <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.5)' }}>
-            Every project is linked to a member account — that's how we track Build Briefs, scores, and Scout activity.
+            Every product is linked to a member account — that's how we track Build Briefs, scores, and Scout activity.
           </p>
           <button
             onClick={() => setAuthOpen(true)}
@@ -458,7 +458,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
         </h3>
         <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
           Stripe is sending the receipt to our server (usually 20-40 seconds).
-          Once it lands, your ticket is ready · audition any backstage project.
+          Once it lands, your ticket is ready · audition any backstage product.
         </p>
         <div className="inline-block w-6 h-6 mb-6" style={{
           border: '2px solid rgba(240,192,64,0.3)',
@@ -493,7 +493,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   }
 
   // ── STEP LABELS ──
-  const steps = ['Project', 'Build Brief', 'Analyze', 'Result']
+  const steps = ['Product', 'Build Brief', 'Analyze', 'Result']
 
   return (
     <div className="max-w-2xl mx-auto px-4">
@@ -971,9 +971,9 @@ function PostPaymentAuditionPromote({
        :                             'Payment received · finalizing'}
       </h3>
       <p className="font-light mb-6" style={{ color: 'rgba(248,245,238,0.55)' }}>
-        {autoState === 'done'   ? 'You will land on the project page in a moment.'
-       : autoState === 'failed' ? errorMsg ?? 'Try auditioning the project from your /me page.'
-       :                         'Stripe webhook usually lands in 20-40 seconds. Once your ticket arrives we put the project on the audition stage automatically.'}
+        {autoState === 'done'   ? 'You will land on the product page in a moment.'
+       : autoState === 'failed' ? errorMsg ?? 'Try auditioning the product from your /me page.'
+       :                         'Stripe webhook usually lands in 20-40 seconds. Once your ticket arrives we put the product on the audition stage automatically.'}
       </p>
       {autoState !== 'done' && autoState !== 'failed' && (
         <div className="inline-block w-6 h-6 mb-6" style={{

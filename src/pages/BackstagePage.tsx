@@ -72,7 +72,7 @@ export function BackstagePage() {
             and writes the brief back as a single Markdown file you commit.
           </P>
           <ul className="pl-0 space-y-2 mb-4">
-            <Bullet>Roughly 5 minutes once your project is in flight.</Bullet>
+            <Bullet>Roughly 5 minutes once your product is in flight.</Bullet>
             <Bullet>The agent uses <B>your</B> session — nothing leaves your machine until you commit the file.</Bullet>
             <Bullet>You can edit the brief before committing. Honest beats polished.</Bullet>
             <Bullet>Once committed, commit.show reads it from your public repo on the next audit.</Bullet>

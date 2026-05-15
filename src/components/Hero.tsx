@@ -140,7 +140,7 @@ export function Hero(_props: HeroProps) {
               onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
               onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
             >
-              Browse projects →
+              Browse products →
             </button>
           </div>
         </div>

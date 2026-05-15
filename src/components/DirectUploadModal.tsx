@@ -339,13 +339,13 @@ export function DirectUploadModal({ creatorId, authorGrade, onClose, onPublished
             </Field>
 
             {myProjects.length > 0 && (
-              <Field label="Tied to one of your projects? (optional)">
+              <Field label="Tied to one of your products? (optional)">
                 <select
                   value={linkedProjectId ?? ''}
                   onChange={e => setLinkedProjectId(e.target.value || null)}
                   className="w-full px-3 py-2 font-mono text-xs"
                 >
-                  <option value="">Not tied to a project</option>
+                  <option value="">Not tied to a product</option>
                   {myProjects.map(p => (
                     <option key={p.id} value={p.id}>{p.project_name}</option>
                   ))}
