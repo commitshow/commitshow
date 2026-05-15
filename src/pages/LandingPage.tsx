@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Hero } from '../components/Hero'
 import { HeroUrlHook } from '../components/HeroUrlHook'
 import { AuditShowcase } from '../components/AuditShowcase'
@@ -351,6 +352,78 @@ export function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── FINAL CALL · closing CTA · 2026-05-15 ──
+          Last conversion surface on the landing page. The user has just
+          scrolled past Hero → URL hook → AuditShowcase → 7 frames →
+          ladder → how-it-works → encore → 4 surfaces → grades. They
+          either bounce or take action here — so the section is a
+          deliberate scroll-stop with the same primary/secondary pair
+          the Hero opens with, sized to feel like a deliberate ending
+          rather than another content block. */}
+      <section className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.4)' }}>
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>
+            // READY?
+          </div>
+          <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight">
+            Ship audited.<br />Climb to Encore.
+          </h2>
+          <p className="font-light max-w-xl mx-auto mb-10" style={{ color: 'rgba(248,245,238,0.55)', fontSize: '0.95rem', lineHeight: 1.65 }}>
+            First 3 audits are free · ~60 seconds per run · paste a URL with no signup, or audition the repo for a full report.
+          </p>
+          <div className="flex gap-4 justify-center flex-wrap">
+            <Link
+              to="/submit"
+              className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
+              style={{
+                background: 'var(--gold-500)',
+                color: 'var(--navy-900)',
+                border: 'none',
+                borderRadius: '2px',
+                textDecoration: 'none',
+                fontFamily: 'DM Mono, monospace',
+                boxShadow: '0 0 40px rgba(240,192,64,0.2)',
+                width: '280px',
+                display: 'inline-block',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'var(--gold-400)'
+                e.currentTarget.style.boxShadow = '0 0 60px rgba(240,192,64,0.35)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'var(--gold-500)'
+                e.currentTarget.style.boxShadow = '0 0 40px rgba(240,192,64,0.2)'
+              }}
+            >
+              Analyze your MVP →
+            </Link>
+            <a
+              href="https://www.npmjs.com/package/commitshow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
+              style={{
+                background: 'transparent',
+                color: 'var(--cream)',
+                border: '1px solid rgba(248,245,238,0.2)',
+                borderRadius: '2px',
+                textDecoration: 'none',
+                fontFamily: 'DM Mono, monospace',
+                width: '280px',
+                display: 'inline-block',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)' }}
+            >
+              npx commitshow audit ↗
+            </a>
+          </div>
+          <p className="mt-8 font-mono text-[11px]" style={{ color: 'rgba(248,245,238,0.35)' }}>
+            No card · no signup for URL audits · audit re-runs are free for owners
+          </p>
         </div>
       </section>
     </div>
