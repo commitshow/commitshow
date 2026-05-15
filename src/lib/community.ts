@@ -214,6 +214,113 @@ export async function deletePost(id: string): Promise<boolean> {
   return !error
 }
 
+// ── Post comments ───────────────────────────────────────────
+//
+// Open Mic / Build Logs / Stacks / Asks all support a comment thread on
+// the detail page. Separate table from project `comments` so existing
+// project-comment queries stay untouched (see migration
+// 20260515_community_post_comments.sql for rationale).
+
+export interface PostComment {
+  id:        string
+  post_id:   string
+  author_id: string | null
+  parent_id: string | null
+  body:      string
+  created_at: string
+  updated_at: string
+}
+
+export interface PostCommentWithAuthor extends PostComment {
+  author: {
+    id:             string
+    display_name:   string | null
+    avatar_url:     string | null
+    creator_grade?: string | null
+  } | null
+}
+
+export async function listPostComments(postId: string): Promise<PostCommentWithAuthor[]> {
+  const { data, error } = await supabase
+    .from('community_post_comments')
+    .select(`
+      id, post_id, author_id, parent_id, body, created_at, updated_at,
+      author:members!community_post_comments_author_id_fkey(id, display_name, avatar_url, creator_grade)
+    `)
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true })
+  if (error) {
+    console.error('[listPostComments]', error)
+    return []
+  }
+  return ((data ?? []) as unknown[]).map(row => {
+    const r = row as PostComment & { author?: unknown }
+    const author = Array.isArray(r.author) ? (r.author[0] ?? null) : (r.author ?? null)
+    return { ...r, author } as PostCommentWithAuthor
+  })
+}
+
+export async function createPostComment(input: {
+  post_id:   string
+  body:      string
+  parent_id?: string | null
+}): Promise<{ id: string } | null> {
+  // Same author_id-stamping defense as createPost · RLS WITH CHECK
+  // requires `auth.uid() = author_id`; without the explicit stamp the
+  // insert sends NULL and fails opaquely.
+  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { user } }    = await supabase.auth.getUser()
+  if (!user || !session) {
+    throw new Error('Sign in expired · refresh the page and try again')
+  }
+  if (session.user.id !== user.id) {
+    throw new Error('Session is mid-switch · refresh the page and try again')
+  }
+
+  const trimmed = input.body.trim()
+  if (trimmed.length === 0) {
+    throw new Error('Comment is empty')
+  }
+
+  const { data, error } = await supabase
+    .from('community_post_comments')
+    .insert([{
+      post_id:   input.post_id,
+      author_id: user.id,
+      parent_id: input.parent_id ?? null,
+      body:      trimmed,
+    }])
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    console.error('[createPostComment]', error)
+    if (error) throw new Error(`Comment failed: ${error.message}`)
+    return null
+  }
+  return { id: data.id }
+}
+
+export async function updatePostComment(id: string, body: string): Promise<boolean> {
+  const trimmed = body.trim()
+  if (trimmed.length === 0) return false
+  const { error } = await supabase
+    .from('community_post_comments')
+    .update({ body: trimmed })
+    .eq('id', id)
+  if (error) console.error('[updatePostComment]', error)
+  return !error
+}
+
+export async function deletePostComment(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('community_post_comments')
+    .delete()
+    .eq('id', id)
+  if (error) console.error('[deletePostComment]', error)
+  return !error
+}
+
 // ── Office hours ────────────────────────────────────────────
 
 export async function listUpcomingOfficeHours(limit = 10): Promise<OfficeHoursEvent[]> {

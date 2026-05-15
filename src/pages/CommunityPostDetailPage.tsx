@@ -11,6 +11,7 @@ import { CommunityLayout } from '../components/CommunityLayout'
 import { ApplaudButton } from '../components/ApplaudButton'
 import { IconTrash } from '../components/icons'
 import { PostBody } from '../components/PostBody'
+import { PostCommentThread } from '../components/PostCommentThread'
 import { getPost, deletePost, STACK_SUBTYPES, ASK_SUBTYPES, type PostWithAuthor } from '../lib/community'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { useAuth } from '../lib/auth'
@@ -315,6 +316,11 @@ export function CommunityPostDetailPage() {
             </Link>
           </div>
         )}
+
+        {/* Comment thread · full CRUD per CEO's basic-CRUD pattern.
+            R/U/D author-only, C signed-in. Sits at the bottom of the
+            article so the post body reads top-down before threading. */}
+        <PostCommentThread postId={post.id} />
       </article>
     </CommunityLayout>
   )
