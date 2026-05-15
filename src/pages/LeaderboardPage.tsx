@@ -12,8 +12,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase, type Project } from '../lib/supabase'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
-type ProjectDotRaw = Pick<Project, 'id' | 'project_name' | 'score_auto' | 'score_forecast' | 'score_total' | 'status'>
+type ProjectDotRaw = Pick<Project, 'id' | 'project_name' | 'score_auto' | 'score_forecast' | 'score_total' | 'status' | 'creator_id'>
 type ProjectDot = ProjectDotRaw & { cx: number; cy: number }
 
 const PAD_TOP = 32
@@ -36,12 +38,14 @@ export function LeaderboardPage() {
   const [rows, setRows] = useState<ProjectDotRaw[]>([])
   const [loading, setLoading] = useState(true)
   const [hover, setHover] = useState<ProjectDot | null>(null)
+  // §1-A ⑥ band gate · hover tooltip respects the gate.
+  const viewer = useViewer()
 
   useEffect(() => {
     ;(async () => {
       const { data } = await supabase
         .from('projects')
-        .select('id, project_name, score_auto, score_forecast, score_total, status')
+        .select('id, project_name, score_auto, score_forecast, score_total, status, creator_id')
         .in('status', ['active', 'graduated', 'valedictorian', 'retry'])
         // §re-audit privacy · round-1 only projects don't plot on the
         // scatter (would reveal score via position even if number is
@@ -279,13 +283,23 @@ export function LeaderboardPage() {
                 }}
               >
                 <div className="font-display font-bold text-sm mb-0.5">{hover.project_name}</div>
-                <div style={{ color: 'var(--text-secondary)' }}>
-                  audit <span style={{ color: 'var(--cream)' }}>{hover.score_auto ?? 0}</span>
-                  {' · '}
-                  scout <span style={{ color: 'var(--cream)' }}>{hover.score_forecast ?? 0}</span>
-                  {' · '}
-                  total <span style={{ color: 'var(--gold-500)' }}>{hover.score_total ?? 0}</span>
-                </div>
+                {(() => {
+                  const canSeeDigit = viewerCanSeeDigit(hover, viewer)
+                  const band        = scoreBand(hover.score_total ?? 0)
+                  return canSeeDigit ? (
+                    <div style={{ color: 'var(--text-secondary)' }}>
+                      audit <span style={{ color: 'var(--cream)' }}>{hover.score_auto ?? 0}</span>
+                      {' · '}
+                      scout <span style={{ color: 'var(--cream)' }}>{hover.score_forecast ?? 0}</span>
+                      {' · '}
+                      total <span style={{ color: 'var(--gold-500)' }}>{hover.score_total ?? 0}</span>
+                    </div>
+                  ) : (
+                    <div style={{ color: 'var(--text-secondary)' }}>
+                      band <span className="tracking-widest uppercase" style={{ color: bandTone(band), fontWeight: 600 }}>{bandLabel(band)}</span>
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>

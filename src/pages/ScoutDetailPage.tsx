@@ -15,6 +15,8 @@ import {
   type ScoutTier,
 } from '../lib/supabase'
 import { TrustLevelChip } from '../components/TrustLevelChip'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 // Tier palette · mirrors ScoutsPage (kept inline so the detail page
 // doesn't depend on supabase.ts re-exporting display constants).
@@ -69,6 +71,12 @@ interface SupportRow {
   score_at_first_vote: number | null   // pulled from analysis_snapshots closest to first_voted_at
   forecast_outcome:   ForecastOutcome
   predicted_avg:      number | null
+  // §1-A ⑥ band gate · need creator_id + status to know whether the
+  // viewer is allowed to see the raw digit on this row. status='preview'
+  // surfaces (URL fast lane) keep digit visible since they aren't on
+  // the league anyway; Encore tier (>=85 + active) reveals to all.
+  creator_id:         string | null
+  status:             string | null
 }
 
 interface MemberStatsExt extends Member {
@@ -88,6 +96,10 @@ export function ScoutDetailPage() {
   const [supports, setSupports] = useState<SupportRow[]>([])
   const [loaded, setLoaded]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  // §1-A ⑥ band gate · Supporting list shows Scout's track record. Each
+  // row's score depends on viewer · creator of THAT product sees digit,
+  // others see band. Encore-tier rows reveal digit (trophy).
+  const viewer                  = useViewer()
 
   useEffect(() => {
     if (!id) return
@@ -247,11 +259,11 @@ export function ScoutDetailPage() {
       }>)
       const supProjIds = Array.from(new Set(supRows.map(s => s.project_id)))
       const { data: supProjRows } = supProjIds.length > 0
-        ? await supabase.from('projects').select('id, project_name, score_total').in('id', supProjIds)
-        : { data: [] as Array<{ id: string; project_name: string; score_total: number | null }> }
-      const supProjMap = new Map<string, { project_name: string; score_total: number | null }>(
-        ((supProjRows as Array<{ id: string; project_name: string; score_total: number | null }>) ?? [])
-          .map(p => [p.id, { project_name: p.project_name, score_total: p.score_total }]),
+        ? await supabase.from('projects').select('id, project_name, score_total, creator_id, status').in('id', supProjIds)
+        : { data: [] as Array<{ id: string; project_name: string; score_total: number | null; creator_id: string | null; status: string | null }> }
+      const supProjMap = new Map<string, { project_name: string; score_total: number | null; creator_id: string | null; status: string | null }>(
+        ((supProjRows as Array<{ id: string; project_name: string; score_total: number | null; creator_id: string | null; status: string | null }>) ?? [])
+          .map(p => [p.id, { project_name: p.project_name, score_total: p.score_total, creator_id: p.creator_id, status: p.status }]),
       )
       // Score-at-first-vote · pull the snapshot whose created_at is the
       // greatest ≤ first_voted_at for each project. Cheaper to do it as
@@ -290,6 +302,8 @@ export function ScoutDetailPage() {
           project_name:        supProjMap.get(s.project_id)?.project_name ?? null,
           score_total:         supProjMap.get(s.project_id)?.score_total ?? null,
           score_at_first_vote: scoreAtFirst[s.project_id] ?? null,
+          creator_id:          supProjMap.get(s.project_id)?.creator_id ?? null,
+          status:              supProjMap.get(s.project_id)?.status ?? null,
           forecast_outcome:    outcome,
           predicted_avg,
         }
@@ -410,11 +424,19 @@ export function ScoutDetailPage() {
                     // — same color cue as a 'correct' outcome, telegraphing
                     // 'this is the number they put on the line'.
                     const PRED_COLOR = '#00D4AA'
+                    // §1-A ⑥ outcome label · pending state shows the
+                    // Scout's prediction → current score; current score
+                    // is gated so non-creator non-admin sees band label
+                    // instead. Settled outcomes (correct/missed/mixed)
+                    // are just status words, no digit leak.
+                    const canSeeDigitForOutcome = viewerCanSeeDigit(s, viewer)
                     const outcomeLabel: React.ReactNode = s.forecast_outcome === 'correct' ? 'correct'
                                        : s.forecast_outcome === 'missed'  ? 'missed'
                                        : s.forecast_outcome === 'mixed'   ? 'mixed'
                                        : s.predicted_avg != null && currentScore != null
-                                         ? <>called <span style={{ color: PRED_COLOR }}>{s.predicted_avg}</span> → {currentScore} (pending)</>
+                                         ? canSeeDigitForOutcome
+                                           ? <>called <span style={{ color: PRED_COLOR }}>{s.predicted_avg}</span> → {currentScore} (pending)</>
+                                           : <>called <span style={{ color: PRED_COLOR }}>{s.predicted_avg}</span> → {bandLabel(scoreBand(currentScore))} (pending)</>
                                          : s.predicted_avg != null
                                            ? <>called <span style={{ color: PRED_COLOR }}>{s.predicted_avg}</span> (pending)</>
                                            : 'pending'
@@ -429,17 +451,36 @@ export function ScoutDetailPage() {
                             <div className="font-display font-bold truncate min-w-0" style={{ color: 'var(--cream)' }}>
                               {s.project_name ?? '—'}
                             </div>
-                            <span
-                              className="font-mono text-[11px] tabular-nums whitespace-nowrap"
-                              title={initialScore != null && currentScore != null
-                                ? `Score at first vote ${initialScore} · current ${currentScore}`
-                                : 'Score history not available'}
-                            >
-                              <span style={{ color: 'var(--text-muted)' }}>{initialScore ?? '—'}</span>
-                              <span style={{ color: 'var(--text-faint)' }}> → </span>
-                              <span style={{ color: 'var(--cream)', fontWeight: 700 }}>{currentScore ?? '—'}</span>
-                              <span style={{ color: deltaTone, marginLeft: 6 }}>({deltaLabel})</span>
-                            </span>
+                            {(() => {
+                              const canSeeDigit = viewerCanSeeDigit(s, viewer)
+                              const band        = scoreBand(currentScore ?? 0)
+                              return canSeeDigit ? (
+                                <span
+                                  className="font-mono text-[11px] tabular-nums whitespace-nowrap"
+                                  title={initialScore != null && currentScore != null
+                                    ? `Score at first vote ${initialScore} · current ${currentScore}`
+                                    : 'Score history not available'}
+                                >
+                                  <span style={{ color: 'var(--text-muted)' }}>{initialScore ?? '—'}</span>
+                                  <span style={{ color: 'var(--text-faint)' }}> → </span>
+                                  <span style={{ color: 'var(--cream)', fontWeight: 700 }}>{currentScore ?? '—'}</span>
+                                  <span style={{ color: deltaTone, marginLeft: 6 }}>({deltaLabel})</span>
+                                </span>
+                              ) : (
+                                <span
+                                  className="font-mono text-[10px] tracking-widest uppercase whitespace-nowrap"
+                                  style={{ color: bandTone(band), fontWeight: 600 }}
+                                  title="Public viewers see band · creator + admin + paid Patron see the digit · Encore reveals to all"
+                                >
+                                  {bandLabel(band)}
+                                  {delta != null && (
+                                    <span style={{ color: deltaTone, marginLeft: 6 }}>
+                                      ({delta > 0 ? '↑' : delta < 0 ? '↓' : '·'})
+                                    </span>
+                                  )}
+                                </span>
+                              )
+                            })()}
                           </div>
                           <div className="font-mono text-[10px] mt-0.5 flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-muted)' }}>
                             <span>since {new Date(s.first_voted_at).toLocaleDateString()}</span>

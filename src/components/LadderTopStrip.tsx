@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, LADDER_CATEGORY_LABELS, type LadderCategory } from '../lib/supabase'
+import { useViewer } from '../lib/useViewer'
+import { scoreBand, bandLabel, bandTone, viewerCanSeeDigit } from '../lib/laneScore'
 
 interface TopRow {
   project_id:    string
@@ -13,11 +15,17 @@ interface TopRow {
   score_total:   number
   project_name:  string
   creator_name:  string | null
+  creator_id:    string | null
+  status:        string | null
 }
 
 export function LadderTopStrip() {
   const [rows, setRows] = useState<TopRow[]>([])
   const [loaded, setLoaded] = useState(false)
+  // §1-A ⑥ band gate · landing-page ribbon respects the gate. Encore-tier
+  // rows reveal the digit to everyone (trophy mechanic) but a Top 3 set
+  // can include Strong/Building tier rows when no one's at Encore yet.
+  const viewer = useViewer()
 
   useEffect(() => {
     let alive = true
@@ -38,12 +46,12 @@ export function LadderTopStrip() {
       const ids = (mvRows as Array<{ project_id: string }>).map(r => r.project_id)
       const { data: projRows } = await supabase
         .from('projects')
-        .select('id, project_name, creator_name')
+        .select('id, project_name, creator_name, creator_id, status')
         .in('id', ids)
       if (!alive) return
-      const projMap = new Map<string, { project_name: string; creator_name: string | null }>()
-      ;(projRows ?? []).forEach((p: { id: string; project_name: string; creator_name: string | null }) =>
-        projMap.set(p.id, { project_name: p.project_name, creator_name: p.creator_name }))
+      const projMap = new Map<string, { project_name: string; creator_name: string | null; creator_id: string | null; status: string | null }>()
+      ;(projRows ?? []).forEach((p: { id: string; project_name: string; creator_name: string | null; creator_id: string | null; status: string | null }) =>
+        projMap.set(p.id, { project_name: p.project_name, creator_name: p.creator_name, creator_id: p.creator_id, status: p.status }))
       type MvRow = { project_id: string; category: LadderCategory; rank_all_time: number; score_total: number }
       const top3: TopRow[] = (mvRows as unknown as MvRow[]).map((r, i) => ({
         project_id:   r.project_id,
@@ -52,6 +60,8 @@ export function LadderTopStrip() {
         score_total:  r.score_total,
         project_name: projMap.get(r.project_id)?.project_name ?? '—',
         creator_name: projMap.get(r.project_id)?.creator_name ?? null,
+        creator_id:   projMap.get(r.project_id)?.creator_id ?? null,
+        status:       projMap.get(r.project_id)?.status ?? null,
       }))
       setRows(top3)
     })()
@@ -98,12 +108,26 @@ export function LadderTopStrip() {
                       <span>{LADDER_CATEGORY_LABELS[r.category]}</span>
                     </div>
                   </div>
-                  <div className="flex-shrink-0 flex items-baseline gap-1">
-                    <span className="font-display font-bold text-xl tabular-nums" style={{ color: 'var(--gold-500)' }}>
-                      {r.score_total}
-                    </span>
-                    <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/100</span>
-                  </div>
+                  {(() => {
+                    const canSeeDigit = viewerCanSeeDigit(r, viewer)
+                    const band        = scoreBand(r.score_total)
+                    return canSeeDigit ? (
+                      <div className="flex-shrink-0 flex items-baseline gap-1">
+                        <span className="font-display font-bold text-xl tabular-nums" style={{ color: 'var(--gold-500)' }}>
+                          {r.score_total}
+                        </span>
+                        <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>/100</span>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex-shrink-0 font-display font-bold text-base tracking-widest uppercase"
+                        style={{ color: bandTone(band) }}
+                        title="Public viewers see band · creator + admin + paid Patron see the digit · Encore reveals to all"
+                      >
+                        {bandLabel(band)}
+                      </div>
+                    )
+                  })()}
                 </Link>
               </li>
             ))}
