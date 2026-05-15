@@ -44,3 +44,11 @@
 
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
+
+# Build-version manifest · the SPA polls this every 15 min and on tab
+# visibility-change to detect new deploys (lib/buildVersion.ts +
+# components/UpdateAvailableToast.tsx). Must not be cached or the poll
+# would return the stale build_id forever and the toast never fires.
+/version.json
+  Cache-Control: no-store
+  Content-Type: application/json; charset=utf-8

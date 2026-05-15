@@ -1,10 +1,18 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Nav } from './components/Nav'
 import { ScrollToTop } from './components/ScrollToTop'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { TicketGiftCelebration } from './components/TicketGiftCelebration'
+import { UpdateAvailableToast } from './components/UpdateAvailableToast'
 import { LandingPage } from './pages/LandingPage'  // eager — first paint target
+// lazyWithReload · drop-in lazy() that auto-reloads once on chunk 404.
+// Catches the long-lived-SPA-tab problem · a user keeps commit.show open
+// across a deploy, clicks a new route, the bundle tries to fetch a hashed
+// chunk that no longer exists on the server. Without this wrapper the
+// page goes white; with it, the page reloads once and lands on the new
+// bundle. See lib/lazyWithReload.ts for the rationale.
+import { lazyWithReload as lazy } from './lib/lazyWithReload'
 import './index.css'
 
 // Route-level code splitting. LandingPage stays eager because it's the
@@ -65,6 +73,13 @@ export default function App() {
     <div className="relative min-h-screen md:pl-[200px]">
       <ScrollToTop />
       <Nav />
+      {/* Long-lived-tab update toast · hidden when no new build detected.
+          Polls /version.json every 15 min + on visibility-change · when a
+          newer build_id lands, surfaces a non-intrusive bottom-right card
+          with a real RELOAD button (cache-busting full reload). Toast
+          itself is rendered globally because the build divergence is a
+          page-agnostic state · any route can show it. */}
+      <UpdateAvailableToast />
       {/* Center-screen celebration · fires when the recipient logs in
           (or is already online) and has an unread 'ticket_gift'
           notification. No-op for everyone else. */}
