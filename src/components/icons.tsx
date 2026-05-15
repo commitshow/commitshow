@@ -277,3 +277,17 @@ export function IconCeo(p: IconProps) {
     </BaseIcon>
   )
 }
+
+export function IconTrash(p: IconProps) {
+  // Trash · destructive action · CRUD delete affordance.
+  // Lid + can + 2 vertical strokes (item count cue).
+  return (
+    <BaseIcon {...p}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1.5 13a2 2 0 0 1-2 1.8h-7a2 2 0 0 1-2-1.8L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </BaseIcon>
+  )
+}

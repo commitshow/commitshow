@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CommunityLayout } from '../components/CommunityLayout'
 import { ApplaudButton } from '../components/ApplaudButton'
+import { IconTrash } from '../components/icons'
 import { PostBody } from '../components/PostBody'
 import { getPost, deletePost, STACK_SUBTYPES, ASK_SUBTYPES, type PostWithAuthor } from '../lib/community'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
@@ -33,12 +34,12 @@ export function CommunityPostDetailPage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [linkedProject, setLinkedProject] = useState<Pick<Project, 'id' | 'project_name' | 'thumbnail_url'> | null>(null)
-  // 2026-05-15 · own-post delete affordance · two-step confirm (CEO ask).
-  // Author can remove their post from the detail page · cascades via the
-  // existing community_posts delete RLS policy + applaud cascade trigger.
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [deleting,         setDeleting]         = useState(false)
-  const [deleteError,      setDeleteError]      = useState<string | null>(null)
+  // 2026-05-15 · own-post delete affordance · icon-only with native
+  // confirm() guard (CEO ask · simplify to single trash icon). Cascades
+  // via the existing community_posts delete RLS policy + applaud cascade
+  // trigger; tag join rows go FK-on-delete.
+  const [deleting,    setDeleting]    = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -202,64 +203,46 @@ export function CommunityPostDetailPage() {
                 size="sm"
               />
             )}
-            {/* Own-post delete · two-step confirm so the author doesn't
-                fat-finger the kill on a Build Log they spent 20 min on.
-                First click flips to "Confirm delete · cancel" inline; only
-                the second click hits the RPC. Cascade trigger handles
-                applauds; tag join rows go FK-on-delete. */}
-            {isOwnPost && !confirmingDelete && (
+            {/* Own-post delete · icon-only · native confirm() guard so the
+                author doesn't fat-finger the kill on a Build Log they
+                spent 20 min on. Cascade trigger handles applauds; tag
+                join rows go FK-on-delete. */}
+            {isOwnPost && (
               <button
                 type="button"
-                onClick={() => setConfirmingDelete(true)}
-                className="px-2.5 py-1 font-mono text-[10px] tracking-widest"
+                onClick={() => {
+                  if (deleting) return
+                  if (window.confirm('Delete this post? This can\'t be undone.')) {
+                    handleDelete()
+                  }
+                }}
+                disabled={deleting}
+                aria-label={deleting ? 'Deleting post' : 'Delete this post'}
+                title={deleting ? 'Deleting…' : 'Delete this post'}
+                className="inline-flex items-center justify-center"
                 style={{
+                  width:  28,
+                  height: 28,
                   background:   'transparent',
-                  color:        'var(--text-muted)',
+                  color:        deleting ? 'var(--text-faint)' : 'var(--text-muted)',
                   border:       '1px solid rgba(248,245,238,0.15)',
                   borderRadius: '2px',
-                  cursor:       'pointer',
+                  cursor:       deleting ? 'wait' : 'pointer',
+                  opacity:      deleting ? 0.6 : 1,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--scarlet)'; e.currentTarget.style.color = 'var(--scarlet)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-                title="Delete this post"
+                onMouseEnter={e => {
+                  if (!deleting) {
+                    e.currentTarget.style.borderColor = 'var(--scarlet)'
+                    e.currentTarget.style.color = 'var(--scarlet)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'rgba(248,245,238,0.15)'
+                  e.currentTarget.style.color = 'var(--text-muted)'
+                }}
               >
-                DELETE
+                <IconTrash size={14} />
               </button>
-            )}
-            {isOwnPost && confirmingDelete && (
-              <span className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="px-2.5 py-1 font-mono text-[10px] tracking-widest"
-                  style={{
-                    background:   deleting ? 'transparent' : 'var(--scarlet)',
-                    color:        deleting ? 'var(--text-muted)' : 'var(--cream)',
-                    border:       '1px solid var(--scarlet)',
-                    borderRadius: '2px',
-                    cursor:       deleting ? 'wait' : 'pointer',
-                    opacity:      deleting ? 0.6 : 1,
-                  }}
-                >
-                  {deleting ? 'DELETING…' : 'CONFIRM DELETE'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setConfirmingDelete(false); setDeleteError(null) }}
-                  disabled={deleting}
-                  className="px-2.5 py-1 font-mono text-[10px] tracking-widest"
-                  style={{
-                    background:   'transparent',
-                    color:        'var(--text-muted)',
-                    border:       '1px solid rgba(248,245,238,0.15)',
-                    borderRadius: '2px',
-                    cursor:       deleting ? 'wait' : 'pointer',
-                  }}
-                >
-                  CANCEL
-                </button>
-              </span>
             )}
           </div>
         </div>
