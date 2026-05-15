@@ -21,7 +21,22 @@
 import { lazy } from 'react'
 import type { ComponentType } from 'react'
 
-const RELOAD_FLAG_KEY = 'cs:chunk-reload-attempted'
+// 2026-05-15 · backoff-tracked retries instead of one-shot.
+// First version used a single sessionStorage flag · once flipped, every
+// subsequent chunk failure propagated. Real symptom: a user with a stale
+// tab where the chunk graph references a deleted main bundle hits
+// failure → reload → still on same in-memory bundle (lazy lib loaded
+// once at app boot) → fails again → propagates. The lib needs to retry
+// a couple of times so the browser actually picks up the fresh
+// index.html on one of the attempts.
+//
+// New strategy: track reload TIMESTAMPS in sessionStorage. Allow up to 3
+// reloads in a session, with at least 8 seconds between attempts (avoids
+// a tight loop if Cloudflare is genuinely down). After 3 attempts the
+// error propagates so the ErrorBoundary takes over.
+const RELOAD_LOG_KEY = 'cs:chunk-reload-log'
+const MAX_RELOADS    = 3
+const MIN_GAP_MS     = 8_000
 
 function isChunkLoadError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false
@@ -41,14 +56,34 @@ function isChunkLoadError(err: unknown): boolean {
   )
 }
 
-function alreadyReloadedThisSession(): boolean {
+function loadReloadLog(): number[] {
   try {
-    return window.sessionStorage.getItem(RELOAD_FLAG_KEY) === '1'
-  } catch { return false }
+    const raw = window.sessionStorage.getItem(RELOAD_LOG_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw) as unknown
+    return Array.isArray(arr) ? arr.filter(n => typeof n === 'number') : []
+  } catch { return [] }
 }
 
-function markReloaded(): void {
-  try { window.sessionStorage.setItem(RELOAD_FLAG_KEY, '1') } catch { /* private mode */ }
+function saveReloadLog(log: number[]): void {
+  try { window.sessionStorage.setItem(RELOAD_LOG_KEY, JSON.stringify(log)) } catch { /* private mode */ }
+}
+
+/** Decide whether the chunk-load failure can trigger another reload.
+ *  Three limits stack: max attempts in session · min gap between
+ *  attempts · session boundary (closing the tab resets). */
+function canReloadNow(): boolean {
+  const log = loadReloadLog()
+  if (log.length >= MAX_RELOADS) return false
+  const last = log[log.length - 1] ?? 0
+  if (Date.now() - last < MIN_GAP_MS) return false
+  return true
+}
+
+function recordReload(): void {
+  const log = loadReloadLog()
+  log.push(Date.now())
+  saveReloadLog(log)
 }
 
 /** Drop-in React.lazy replacement that auto-reloads on chunk-load failure.
@@ -69,8 +104,8 @@ export function lazyWithReload<T extends ComponentType<any>>(
   return lazy(() =>
     factory().catch((err: unknown) => {
       if (!isChunkLoadError(err)) throw err
-      if (alreadyReloadedThisSession()) throw err
-      markReloaded()
+      if (!canReloadNow()) throw err
+      recordReload()
       // bfcache + service worker + CDN can all serve the stale shell ·
       // adding a cache-buster query forces a real network hit. The
       // `_v=<timestamp>` is parsed only by us (Cloudflare ignores it).
