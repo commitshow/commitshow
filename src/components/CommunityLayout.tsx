@@ -24,6 +24,10 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  // 'All' = unified feed at /community (CommunityFeedPage) · the
+  // mixed post + project-comment stream. Pinned first so visitors
+  // see the live activity surface before drilling into a category.
+  { to: '/community',              label: 'All',                                hint: 'Everything · posts + comments mixed' },
   { to: '/community/open-mic',     label: 'Open Mic',     type: 'open_mic',     hint: 'Drop a one-liner · what you shipped, what tripped you up' },
   { to: '/community/build-logs',   label: 'Build Logs',   type: 'build_log',    hint: 'Shipping journeys',                                       disabled: true },
   { to: '/community/stacks',       label: 'Stacks',       type: 'stack',        hint: 'Reusable recipes · prompts · tool reviews',                disabled: true },
@@ -94,10 +98,16 @@ export function CommunityLayout({ children }: Props) {
                   </span>
                 )
               }
+              // 'All' tab points at /community (the root) · NavLink's
+              // default isActive uses startsWith, which would highlight
+              // 'All' on every /community/* child route. `end` forces
+              // exact-match · highlights only on the unified feed page.
+              const exactMatch = t.to === '/community'
               return (
                 <NavLink
                   key={t.to}
                   to={t.to}
+                  end={exactMatch}
                   className="font-mono text-[11px] tracking-widest uppercase px-3 py-1.5 transition-colors whitespace-nowrap flex items-center gap-2"
                   style={({ isActive }) => ({
                     background: isActive ? 'rgba(240,192,64,0.14)' : 'transparent',
