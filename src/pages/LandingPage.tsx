@@ -375,6 +375,12 @@ export function LandingPage() {
             First 3 audits are free · ~60 seconds per run · paste a URL with no signup, or audition the repo for a full report.
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
+            {/* CTA pair mirrors the Hero · same labels, same routes, same
+                visual weight. Hero opens the page with this pair · the
+                closing section repeats it so the user doesn't have to
+                scroll back up after reading the full pitch. The CLI npm
+                hook lives in the FOUR SURFACES section above where the
+                tech context is already set. */}
             <Link
               to="/submit"
               className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
@@ -400,10 +406,8 @@ export function LandingPage() {
             >
               Analyze your MVP →
             </Link>
-            <a
-              href="https://www.npmjs.com/package/commitshow"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              to="/projects"
               className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
               style={{
                 background: 'transparent',
@@ -418,12 +422,9 @@ export function LandingPage() {
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)' }}
             >
-              npx commitshow audit ↗
-            </a>
+              Browse products →
+            </Link>
           </div>
-          <p className="mt-8 font-mono text-[11px]" style={{ color: 'rgba(248,245,238,0.35)' }}>
-            No card · no signup for URL audits · audit re-runs are free for owners
-          </p>
         </div>
       </section>
     </div>
