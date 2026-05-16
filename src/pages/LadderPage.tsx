@@ -159,18 +159,22 @@ export function LadderPage() {
               Seven categories. Four time windows. Score 84+ earns Encore. Live ranking updates the moment any audit finishes.
             </p>
           </div>
-          {!user && (
-            <NavLink
-              to="/submit"
-              className="font-mono text-xs font-medium tracking-wide px-4 py-2 whitespace-nowrap self-start md:self-auto"
-              style={{
-                background: 'var(--gold-500)', color: 'var(--navy-900)',
-                border: 'none', borderRadius: '2px', textDecoration: 'none',
-              }}
-            >
-              AUDITION YOUR PROJECT →
-            </NavLink>
-          )}
+          {/* CTA · always on. The original gate hid this from signed-in
+              users, which was backwards — members are the ones who
+              actually have a new vibecoded MVP to audition. /submit
+              handles both anon (auth wall → flow) and member (jump
+              straight in) paths. Copy varies slightly for members so
+              the page recognises they've already signed up. */}
+          <NavLink
+            to="/submit"
+            className="font-mono text-xs font-medium tracking-wide px-4 py-2 whitespace-nowrap self-start md:self-auto"
+            style={{
+              background: 'var(--gold-500)', color: 'var(--navy-900)',
+              border: 'none', borderRadius: '2px', textDecoration: 'none',
+            }}
+          >
+            {user ? 'AUDITION A NEW PROJECT →' : 'AUDITION YOUR PROJECT →'}
+          </NavLink>
         </header>
 
         {/* ── Spotlight (lanes from old /projects) ── */}
