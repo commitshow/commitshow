@@ -5,9 +5,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { AuthModal } from './AuthModal'
 import { AnalysisResultCard } from './AnalysisResultCard'
-import { MarketPositionForm, buildPrefill } from './MarketPositionForm'
+// MarketPositionForm + AuditionPromoteCard removed from the submit
+// result flow (2026-05-16 · CEO directive). The result page is now
+// purely about the fix-and-re-audit loop · audition lives on /me
+// where the creator deliberately puts a polished project on stage,
+// not in the immediate post-analyze adrenaline window.
 import { BriefExtraction } from './BriefExtraction'
-import { ProjectImagesPicker } from './ProjectImagesPicker'
 import type { ProjectImage } from '../lib/supabase'
 import { probeGithubPublic } from '../lib/githubProbe'
 import { AnalysisProgressModal, EDGE_TOTAL_MS } from './AnalysisProgressModal'
@@ -21,7 +24,6 @@ import {
 } from '../lib/pricing'
 import { resolvePreviewClaim } from '../lib/projectQueries'
 import { PaymentResultModal } from './PaymentResultModal'
-import { AuditionPromoteCard } from './AuditionPromoteCard'
 import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
 
 // Steps:
@@ -30,7 +32,7 @@ import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
 //   3 · audit running (loader)
 //   4 · Market position review · pre-filled from audit, user confirms
 //   5 · result view (AnalysisResultCard)
-type Step = 1 | 2 | 3 | 4 | 5
+type Step = 1 | 2 | 3 | 4
 
 // 'form_factor' values mirror the engine's taxonomy in
 // supabase/functions/analyze-project/index.ts. Empty string = let the
@@ -877,47 +879,19 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
         completed={edgeProgress >= 100}
       />
 
-      {/* ── STEP 4: RESULT (rich multi-axis analysis) ── */}
-      {step === 4 && result && lastProjectId && (
-        <MarketPositionForm
-          projectId={lastProjectId}
-          prefill={buildPrefill(
-            result,
-            brief?.core_intent.problem ?? null,
-            // score_total >= 60 + tech_layers count as a proxy for 'live
-            // URL probably reachable' since AnalysisResult doesn't carry
-            // the boolean directly · only used for the stage heuristic.
-            (result.score_total ?? 0) >= 60,
-          )}
-          onConfirmed={() => setStep(5)}
-          onSkip={() => setStep(5)}
-        />
-      )}
-
-      {step === 5 && result && lastProjectId && user?.id && (
+      {/* ── STEP 4: RESULT (fix-and-re-audit loop) ──
+          2026-05-16 · CEO directive. Audit-then-audition split made
+          clearer · the result page is now the fix-and-re-audit
+          loop only · audition lives on /me. Order:
+            ① PreAuditionCoachSlot — quick-win cards + re-audit CTA ·
+               the primary action here. User sees concrete fixes,
+               does them, re-audits, climbs.
+            ② AnalysisResultCard — full audit report below the
+               fold · hideReanalyzeButton because Coach owns the
+               sole re-audit CTA on this page. */}
+      {step === 4 && result && lastProjectId && user?.id && (
         <>
-          {/* Order rationale (2026-05-15 · UX audit pass):
-              ① AuditionPromoteCard — reveals the score badge + explains
-                 "you reached backstage / here's the audition stage"
-                 metaphor. Context comes first so the Coach below isn't
-                 telling the user to climb a score they haven't seen yet.
-              ② PreAuditionCoachSlot — "or climb before auditioning"
-                 quick-win cards. Slot fetches its own project + snapshot
-                 raws, no-ops once status leaves backstage.
-              ③ AnalysisResultCard — full audit report below the fold ·
-                 hideReanalyzeButton because Coach owns the re-audit CTA
-                 here (single source of truth · prevents the user from
-                 hitting two different re-audit buttons that do the same
-                 thing and leave Coach state stale). */}
-          <AuditionPromoteCard
-            projectId={lastProjectId}
-            memberId={user.id}
-            scoreTotal={result.score_total ?? null}
-          />
-          <PreAuditionCoachSlot
-            projectId={lastProjectId}
-            navigateOnAuditioned
-          />
+          <PreAuditionCoachSlot projectId={lastProjectId} navigateOnAuditioned />
           <AnalysisResultCard
             result={result}
             projectId={lastProjectId}
