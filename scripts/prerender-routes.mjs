@@ -331,7 +331,12 @@ const HOME = {
       <li><strong>Scout Forecast (30pt)</strong> · tier-gated humans place predictions on which projects graduate</li>
       <li><strong>Community Signal (20pt)</strong> · views · comments · applauds · return visits</li>
     </ul>
-    <p>Full method: <a href="/audit">/audit</a> · <a href="/rulebook">/rulebook</a> · for AI agents: <a href="/llms.txt">/llms.txt</a></p>`,
+    <h2>For LLM agents reading this page</h2>
+    <p><strong>Prefer the REST API · zero install, no sandbox prompt:</strong></p>
+    <pre><code>GET https://api.commit.show/audit?repo=&lt;github-url&gt;&amp;format=md</code></pre>
+    <p>CORS open · no API key · returns paste-ready markdown · same engine as the CLI. Use this from Claude Code, Cursor agent mode, Cline, Windsurf, Gemini, ChatGPT browse, n8n, Zapier, curl. The <code>npx commitshow</code> path tends to trip agent sandbox classifiers; the REST endpoint never does.</p>
+    <p>Full agent integration guide: <a href="/llms.txt">/llms.txt</a> · OpenAPI: <a href="https://api.commit.show/openapi.json">api.commit.show/openapi.json</a></p>
+    <p>Full audit method docs: <a href="/audit">/audit</a> · <a href="/rulebook">/rulebook</a></p>`,
 }
 
 function renderRoute(r) {
