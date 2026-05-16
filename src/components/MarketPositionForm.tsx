@@ -1,15 +1,20 @@
-// MarketPositionForm · post-audit creator review step.
+// MarketPositionForm · post-audit polish step (renamed 2026-05-16).
 //
-// Surfaces 3 light VC-perspective fields (one-liner · business model ·
-// stage) the creator confirms before final registration. Pre-fills from
-// the audit's rich_analysis + Phase 1 brief — no extra Claude call,
-// no fabrication. When signals are missing (beginner project · no live
-// URL · no README), fields stay blank and the user fills them in or
-// skips entirely.
+// Submit flow split: Step 1 collects only what the engine needs to
+// ANALYZE (name · email · github · optional live_url + form_factor +
+// category). This step is where the creator adds the public-card
+// polish (description · images) AND the positioning context (one-
+// liner · business model · stage) before going on stage. All five
+// fields are optional · the creator can skip and edit later from
+// /me or the project detail page.
+//
+// Pre-fills from the audit's rich_analysis + Phase 1 brief where
+// signals exist — no extra Claude call, no fabrication.
 
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, type ProjectImage } from '../lib/supabase'
 import type { AnalysisResult } from '../lib/analysis'
+import { ProjectImagesPicker } from './ProjectImagesPicker'
 
 const BUSINESS_MODELS = [
   { id: 'free',          label: 'Free' },
@@ -75,6 +80,13 @@ export function MarketPositionForm({ projectId, prefill, onConfirmed, onSkip }: 
   const [oneLiner, setOneLiner]     = useState<string>(prefill.one_liner ?? '')
   const [bmodel, setBmodel]         = useState<string>(prefill.business_model ?? '')
   const [stage, setStage]           = useState<string>(prefill.stage ?? '')
+  // Polish fields moved here from Step 1 (2026-05-16). Description
+  // shows on the public card · images render in the project hero +
+  // /products feed. Prefilled by the dedicated useEffect below from
+  // projects.description / projects.images (existing rows that were
+  // submitted before this refactor still carry these).
+  const [description, setDescription] = useState<string>('')
+  const [images, setImages]           = useState<ProjectImage[]>([])
   const [busy, setBusy]             = useState(false)
   const [error, setError]           = useState<string | null>(null)
 
@@ -96,63 +108,126 @@ export function MarketPositionForm({ projectId, prefill, onConfirmed, onSkip }: 
   // Standalone edit mode (Market tab on owner brief section): the
   // submit-flow prefill is empty, so load whatever's already in
   // build_briefs and seed the form. One-shot · doesn't refetch on
-  // every keystroke.
+  // every keystroke. Also pulls projects.description / projects.images
+  // for the polish fields moved into this step (2026-05-16).
   useEffect(() => {
     const noPrefill = !prefill.one_liner && !prefill.business_model && !prefill.stage
-    if (!noPrefill) return
     let alive = true
     ;(async () => {
-      const { data } = await supabase
-        .from('build_briefs')
-        .select('one_liner, business_model, stage')
-        .eq('project_id', projectId)
-        .maybeSingle()
-      if (!alive || !data) return
-      const r = data as { one_liner: string | null; business_model: string | null; stage: string | null }
-      if (r.one_liner)      setOneLiner(r.one_liner)
-      if (r.business_model) setBmodel(r.business_model)
-      if (r.stage)          setStage(r.stage)
+      const [briefRes, projRes] = await Promise.all([
+        noPrefill
+          ? supabase.from('build_briefs')
+              .select('one_liner, business_model, stage')
+              .eq('project_id', projectId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase.from('projects')
+          .select('description, images')
+          .eq('id', projectId)
+          .maybeSingle(),
+      ])
+      if (!alive) return
+      if (briefRes.data) {
+        const r = briefRes.data as { one_liner: string | null; business_model: string | null; stage: string | null }
+        if (r.one_liner)      setOneLiner(r.one_liner)
+        if (r.business_model) setBmodel(r.business_model)
+        if (r.stage)          setStage(r.stage)
+      }
+      if (projRes.data) {
+        const r = projRes.data as { description: string | null; images: ProjectImage[] | null }
+        if (r.description && !description) setDescription(r.description)
+        if (Array.isArray(r.images) && r.images.length > 0 && images.length === 0) {
+          setImages(r.images)
+        }
+      }
     })()
     return () => { alive = false }
   }, [projectId])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     setBusy(true); setError(null)
-    const payload = {
+    // Two-table write · build_briefs for market position context +
+    // projects for the public-card polish (description · images).
+    // Run in parallel · either succeeding leaves the row better than
+    // before, so we don't roll back the other on partial failure ·
+    // just surface the error.
+    const briefPayload = {
       one_liner:      oneLiner.trim() || null,
       business_model: bmodel || null,
       stage:          stage || null,
     }
-    const { error } = await supabase
-      .from('build_briefs')
-      .update(payload)
-      .eq('project_id', projectId)
+    const projectPayload = {
+      description: description.trim() || null,
+      images,
+    }
+    const [briefRes, projRes] = await Promise.all([
+      supabase.from('build_briefs').update(briefPayload).eq('project_id', projectId),
+      supabase.from('projects').update(projectPayload).eq('id', projectId),
+    ])
     setBusy(false)
-    if (error) { setError(error.message); return }
+    if (briefRes.error || projRes.error) {
+      setError((briefRes.error ?? projRes.error)!.message)
+      return
+    }
     onConfirmed()
   }
 
-  const allEmpty = !oneLiner.trim() && !bmodel && !stage
-  const blanksCount = (oneLiner.trim() ? 0 : 1) + (bmodel ? 0 : 1) + (stage ? 0 : 1)
+  const allEmpty = !oneLiner.trim() && !bmodel && !stage && !description.trim() && images.length === 0
+  const blanksCount = (description.trim() ? 0 : 1) + (images.length > 0 ? 0 : 1)
+                    + (oneLiner.trim() ? 0 : 1) + (bmodel ? 0 : 1) + (stage ? 0 : 1)
 
   return (
     <div className="card-navy p-5 md:p-6 max-w-2xl mx-auto" style={{ borderRadius: '2px', border: '1px solid rgba(240,192,64,0.32)' }}>
       <div className="font-mono text-xs tracking-widest mb-1" style={{ color: 'var(--gold-500)' }}>
-        // MARKET POSITION · review
+        // STAGE CARD · POLISH
       </div>
       <h3 className="font-display font-bold text-xl mt-1" style={{ color: 'var(--cream)' }}>
-        Confirm what your build is and who it's for
+        Polish your stage card
       </h3>
       <p className="font-light text-sm mt-1 mb-5" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-        We pre-filled what we could from your audit. Edit, complete, or skip — every field is optional.
+        Description + image show on your public card. One-liner / business model / stage add positioning context.
+        Everything is optional · skip and you can fill these in any time from your profile.
         {blanksCount > 0 && (
           <>
             {' '}<span style={{ color: 'var(--text-muted)' }}>
-              {blanksCount} field{blanksCount === 1 ? '' : 's'} blank · fill in if you know.
+              {blanksCount} field{blanksCount === 1 ? '' : 's'} blank.
             </span>
           </>
         )}
       </p>
+
+      {/* Description · public-card primary text (moved from Step 1 ·
+          2026-05-16). One sentence on what the product does · this is
+          the snippet shown under the project name on /products and in
+          search snippets. */}
+      <div className="mb-5">
+        <label className="block font-mono text-[10px] tracking-widest mb-1" style={{ color: 'var(--text-label)' }}>
+          ONE-LINE DESCRIPTION
+        </label>
+        <input
+          type="text"
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="What does your project do?"
+          maxLength={200}
+          className="w-full font-mono text-sm p-3"
+          style={{
+            background:   'var(--navy-950)',
+            color:        'var(--cream)',
+            border:       '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '2px',
+          }}
+        />
+      </div>
+
+      {/* Images · public-card visuals (moved from Step 1). Up to 3 ·
+          first one is the hero shot used as og:image fallback. */}
+      <div className="mb-5">
+        <label className="block font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-label)' }}>
+          IMAGES · UP TO 3
+        </label>
+        <ProjectImagesPicker value={images} onChange={setImages} max={3} />
+      </div>
 
       {/* One-liner */}
       <div className="mb-5">

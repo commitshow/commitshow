@@ -32,9 +32,15 @@ import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
 //   5 · result view (AnalysisResultCard)
 type Step = 1 | 2 | 3 | 4 | 5
 
+// 'form_factor' values mirror the engine's taxonomy in
+// supabase/functions/analyze-project/index.ts. Empty string = let the
+// engine auto-detect from GitHub signals (the existing behaviour).
+type FormFactorPick = '' | 'app' | 'native_app' | 'library' | 'scaffold' | 'skill'
+
 interface FormData {
   name: string; email: string; github: string; url: string; desc: string
   category: import('../lib/supabase').LadderCategory | ''
+  form_factor: FormFactorPick
 }
 
 interface SubmitFormProps {
@@ -68,7 +74,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
   const [step, setStep] = useState<Step>(1)
   const [form, setForm] = useState<FormData>({
     name: '', email: user?.email ?? '', github: prefilledGithub, url: '', desc: '',
-    category: '',
+    category: '', form_factor: '',
   })
   const [brief, setBrief] = useState<ExtractedBrief | null>(null)
   const [briefRaw, setBriefRaw] = useState('')
@@ -201,15 +207,18 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
 
   // Async Step-1 gate: field sanity + hard GitHub reachability check.
   // Private / 404 repos are rejected outright — transparency gate.
+  //
+  // 2026-05-16 · Step 1 lean (CEO ask): only require the fields the
+  // engine actually needs to ANALYZE. live_url, description, images
+  // are presentation/audition concerns — engine adapts to form_factor
+  // when live_url is missing, and the audition step asks for the
+  // polish fields before going on stage.
   const validateStep1 = async (): Promise<boolean> => {
-    if (!form.name || !form.email || !form.github || !form.url || !form.desc) {
-      setError('Please fill in all fields.'); return false
+    if (!form.name || !form.email || !form.github) {
+      setError('Project name, email, and GitHub URL are required.'); return false
     }
     if (!form.github.includes('github.com')) {
       setError('Please enter a valid GitHub URL.'); return false
-    }
-    if (images.length === 0) {
-      setError('At least one product image is required before you can continue.'); return false
     }
     // Hard GitHub gate — no submission if the repo is private or unreachable
     setGateBusy(true)
@@ -596,7 +605,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
               Tell us about your project.
             </h3>
             <p className="text-sm font-light" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.7 }}>
-              5 fields. Step 2 auto-generates your Build Brief from your AI tool — no typing required.
+              Just the basics so we can analyze. Description + images come later — when you're ready to put it on stage.
             </p>
           </div>
 
@@ -615,26 +624,70 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
               <span className="block font-mono text-xs tracking-widest mb-1.5" style={{ color: 'var(--gold-500)' }}>GITHUB URL *</span>
               <input className="w-full px-3 py-2.5" value={form.github} onChange={set('github')} placeholder="https://github.com/user/repo" />
             </label>
+            {/* LIVE URL is optional · the engine adapts when missing:
+                · 'app' form_factor scores the Live slot as 0 (just one
+                  signal out of 14 · doesn't block the audit)
+                · 'library' / 'cli' / 'scaffold' / 'skill' substitutes
+                  the slot meaning (npm published, etc.) so the URL is
+                  largely irrelevant anyway
+                Placeholder + sub-label adapt to the form_factor pick. */}
             <label className="block">
-              <span className="block font-mono text-xs tracking-widest mb-1.5" style={{ color: 'var(--gold-500)' }}>LIVE URL *</span>
-              <input className="w-full px-3 py-2.5" value={form.url} onChange={set('url')} placeholder="https://myapp.com" />
+              <span className="block font-mono text-xs tracking-widest mb-1.5" style={{ color: 'var(--gold-500)' }}>
+                {form.form_factor === 'native_app' ? 'APP STORE URL'
+                  : form.form_factor === 'library'  ? 'NPM / DEMO URL'
+                  : form.form_factor === 'scaffold' ? 'DEMO URL'
+                  : form.form_factor === 'skill'    ? 'MARKETPLACE URL'
+                  : 'LIVE URL'}
+                {' '}<span style={{ color: 'var(--text-muted)' }}>(optional)</span>
+              </span>
+              <input
+                className="w-full px-3 py-2.5"
+                value={form.url}
+                onChange={set('url')}
+                placeholder={
+                  form.form_factor === 'native_app' ? 'https://apps.apple.com/...'
+                    : form.form_factor === 'library'  ? 'https://npmjs.com/package/...'
+                    : form.form_factor === 'scaffold' ? 'https://demo.example.com'
+                    : form.form_factor === 'skill'    ? 'https://...'
+                    : 'https://myapp.com'
+                }
+              />
             </label>
           </div>
-          <label className="block">
-            <span className="block font-mono text-xs tracking-widest mb-1.5" style={{ color: 'var(--gold-500)' }}>ONE-LINE DESCRIPTION *</span>
-            <input className="w-full px-3 py-2.5" value={form.desc} onChange={set('desc')} placeholder="What does your app do?" />
-          </label>
 
+          {/* Form-factor pick · the engine auto-detects from GitHub
+              signals but a user hint reduces ambiguity (e.g. a starter
+              template that still has a `dev` script gets misread as
+              'app'). For V1 this is a UX hint only · drives label /
+              placeholder for LIVE URL above and signals intent to the
+              user that libraries / templates don't need a live demo. */}
           <div>
-            <span className="block font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-              PROJECT IMAGES * · UP TO 3
-            </span>
-            <ProjectImagesPicker
-              value={images}
-              onChange={setImages}
-              max={3}
-              required
-            />
+            <label className="block">
+              <span className="block font-mono text-[11px] tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+                FORM FACTOR (OPTIONAL)
+              </span>
+              <p className="font-mono text-[11px] mb-2" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                What shape is this product? Leave blank and the audit will infer it from your repo signals.
+              </p>
+              <select
+                value={form.form_factor}
+                onChange={(e) => setForm(f => ({ ...f, form_factor: e.target.value as FormFactorPick }))}
+                className="w-full px-3 py-2.5 font-mono text-xs"
+                style={{
+                  background: 'rgba(6,12,26,0.6)',
+                  color: form.form_factor ? 'var(--cream)' : 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '2px',
+                }}
+              >
+                <option value="">— Auto-detect from repo signals —</option>
+                <option value="app">Web app</option>
+                <option value="native_app">Native app (iOS · Android · desktop)</option>
+                <option value="library">Library / CLI / npm package</option>
+                <option value="scaffold">Starter / template</option>
+                <option value="skill">Agent skill (Claude SDK)</option>
+              </select>
+            </label>
           </div>
 
           {/* 7-cat ladder placement · optional · auto-detector fills if blank */}
@@ -763,7 +816,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
             onReset={() => {
               setStep(1)
               setResult(null)
-              setForm({ name: '', email: user?.email ?? '', github: '', url: '', desc: '', category: '' })
+              setForm({ name: '', email: user?.email ?? '', github: '', url: '', desc: '', category: '', form_factor: '' })
               setBrief(null)
               setBriefRaw('')
               setLastProjectId(null)
