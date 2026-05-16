@@ -127,6 +127,279 @@ async function inferLiveUrlFromGithub(slug: string): Promise<string | null> {
   }
 }
 
+// ── Live URL discovery · Tier 1b → 2 → 3a · 2026-05-17 ──
+//
+// Backstory: CLI walk-on (`commitshow audit github.com/foo/bar`) has no
+// --live flag. Before this, audit-preview only checked the GitHub repo's
+// `homepage` field (Tier 1a · ~80% miss for vibe-coded projects whose
+// Creator never filled that field). Every miss = web slot collapse:
+// Lighthouse 20 + Live URL Health 5 + Completeness 2 = 27/52 unscored.
+// SeizyC/mandoo paid for this: real site at mandoo.work, repo had no
+// hints in standard fields, audit returned score_total=17.
+//
+// Three new tiers chase the URL down to where vibe coders actually leave
+// it. Each tier returns null if no match; chain stops at first hit.
+//
+// False-positive discipline: deploy-platform conventions (.pages.dev /
+// .vercel.app / .netlify.app) are SKIPPED — probing 'mandoo' across
+// those three returned 3 different unrelated projects all 200 OK with
+// matching subdomain. Title-match validation isn't enough at that scale
+// because the subdomains predate the user's repo. Custom domains and
+// own-brand TLDs (.work .com .dev .io .co .ai .app) carry strong
+// ownership intent so a title-contains-name match is reliable.
+
+const DENY_HOSTS = new Set([
+  'github.com', 'www.github.com', 'github.io', 'gist.github.com',
+  'raw.githubusercontent.com', 'objects.githubusercontent.com',
+  'avatars.githubusercontent.com', 'user-images.githubusercontent.com',
+  'camo.githubusercontent.com', 'shields.io', 'img.shields.io',
+  'badge.fury.io', 'codecov.io', 'snyk.io', 'snyk.bz',
+  'npmjs.com', 'www.npmjs.com', 'npmjs.org', 'unpkg.com', 'jsdelivr.net',
+  'cdn.jsdelivr.net', 'example.com', 'example.org', 'www.example.com',
+  'localhost', '127.0.0.1', 'tldrlegal.com', 'opensource.org',
+  'creativecommons.org', 'lite.duckduckgo.com',
+  'fonts.googleapis.com', 'fonts.gstatic.com',
+  'developer.mozilla.org', 'wikipedia.org', 'en.wikipedia.org',
+  'stackoverflow.com', 'medium.com',
+])
+
+// Hosts where the subdomain is grabbed first-come-first-serve and many
+// independent projects sit on a name like 'mandoo'. Probing here yields
+// reliable HTTP 200 from a stranger's project. Skip unconditionally;
+// re-evaluate if we add a separate strong-signal validator later (e.g.
+// the deploy provider's API confirms the subdomain is owned by the same
+// GitHub account).
+const FALSE_POSITIVE_HOSTS = /\.(pages\.dev|vercel\.app|netlify\.app|workers\.dev|fly\.dev|onrender\.com|railway\.app|deno\.dev|fastly\.net|herokuapp\.com|web\.app|firebaseapp\.com)$/i
+
+function normalizeHostname(raw: string): string | null {
+  try {
+    const u = new URL(raw)
+    return u.hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function isCandidateUrl(raw: string): boolean {
+  if (!/^https?:\/\//i.test(raw)) return false
+  const host = normalizeHostname(raw)
+  if (!host) return false
+  if (DENY_HOSTS.has(host)) return false
+  // Strip any www. for denylist check too.
+  if (host.startsWith('www.') && DENY_HOSTS.has(host.slice(4))) return false
+  return true
+}
+
+// Strip non-alphanumeric to compare project_name ↔ page title robustly
+// ("mandoo.work" title vs "mandoo" name · "Cal.com" vs "cal.com" · etc.).
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+async function fetchTitleAndReachable(
+  url: string,
+  timeoutMs = 6000,
+): Promise<{ ok: boolean; title: string; finalUrl: string } | null> {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    const r = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'commit.show-live-url-discovery/1 (+https://commit.show)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      signal: ctrl.signal,
+    })
+    clearTimeout(timer)
+    if (!r.ok) return null
+    // Cap body read · we only need the <head> to find the title. Big
+    // SPA HTML can be megabytes; the title is always within the first
+    // ~8 KB. Aborting after that bounds CPU + memory.
+    const reader = r.body?.getReader()
+    if (!reader) return null
+    const decoder = new TextDecoder('utf-8', { fatal: false })
+    let body = ''
+    const HEAD_CAP = 16 * 1024
+    while (body.length < HEAD_CAP) {
+      const { done, value } = await reader.read()
+      if (done) break
+      body += decoder.decode(value, { stream: true })
+      if (body.includes('</title>')) break
+    }
+    try { await reader.cancel() } catch { /* ignore */ }
+    const m = body.match(/<title[^>]*>([^<]+)<\/title>/i)
+    const title = (m?.[1] ?? '').trim()
+    return { ok: true, title, finalUrl: r.url }
+  } catch {
+    return null
+  }
+}
+
+// Tier 1b · package.json.homepage. Tried right after the GitHub repo
+// homepage field. Same trust level (Creator explicitly typed it) so we
+// accept on HTTP 200 alone, no title-match required.
+async function inferLiveUrlFromPackageJson(slug: string): Promise<string | null> {
+  for (const branch of ['main', 'master']) {
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/${slug}/${branch}/package.json`)
+      if (!r.ok) continue
+      const j = await r.json().catch(() => null) as { homepage?: unknown } | null
+      const raw = typeof j?.homepage === 'string' ? j.homepage.trim() : ''
+      if (raw && isCandidateUrl(raw)) {
+        const probe = await fetchTitleAndReachable(raw)
+        if (probe?.ok) return probe.finalUrl
+      }
+      return null
+    } catch { /* try next branch */ }
+  }
+  return null
+}
+
+// Tier 2 · scan a handful of high-leverage repo files for https:// URLs,
+// then probe candidates with title-match validation. Files chosen for
+// "deploy URL gets mentioned here in practice": README, .env.example
+// (NEXT_PUBLIC_* or CALLBACK_URL hints), wrangler.toml, vercel.json,
+// netlify.toml, package.json (description / repository / bugs URLs are
+// already denied; only homepage gets through).
+async function inferLiveUrlFromRepoFiles(
+  slug: string,
+  projectName: string,
+): Promise<{ url: string; source: string } | null> {
+  const wantName = normalizeForMatch(projectName)
+  if (wantName.length < 3) return null   // 'go' / 'ai' / 'ui' too generic to match safely
+
+  const files = [
+    'README.md', 'readme.md', 'README.MD',
+    '.env.example', '.env.template', '.env.sample',
+    'wrangler.toml', 'vercel.json', 'netlify.toml',
+    'fly.toml', 'render.yaml',
+  ]
+  const branches = ['main', 'master']
+
+  // Collect all https URLs from all files, in priority order (README first
+  // because README links are usually canonical · then config files).
+  const seen = new Set<string>()
+  const candidates: string[] = []
+  for (const file of files) {
+    for (const branch of branches) {
+      let body: string
+      try {
+        const r = await fetch(`https://raw.githubusercontent.com/${slug}/${branch}/${file}`)
+        if (!r.ok) continue
+        body = await r.text()
+      } catch { continue }
+      // Cap regex scan size · huge READMEs (changelogs etc) can be 100 KB+.
+      const slice = body.slice(0, 32 * 1024)
+      const matches = slice.match(/https?:\/\/[^\s"'<>)\]}]+/gi) ?? []
+      for (const raw of matches) {
+        // Strip trailing punctuation that markdown / comments tend to glue on.
+        const cleaned = raw.replace(/[.,;:!?)\]}'"]+$/, '')
+        if (seen.has(cleaned)) continue
+        seen.add(cleaned)
+        if (!isCandidateUrl(cleaned)) continue
+        // Skip platform-collision hosts (the .pages.dev family).
+        const host = normalizeHostname(cleaned)
+        if (host && FALSE_POSITIVE_HOSTS.test(host)) continue
+        candidates.push(cleaned)
+      }
+      break  // Found this file on this branch · don't retry master.
+    }
+    if (candidates.length >= 12) break  // cap network budget
+  }
+
+  if (candidates.length === 0) return null
+
+  // Probe in parallel; first one whose title contains the project name
+  // wins. Title-match (after normalization) keeps the bar high — a
+  // random NAVER_API callback URL won't carry the project name in its
+  // <title>, but the actual deployed site will.
+  const probes = candidates.slice(0, 12).map(async (url) => {
+    const probe = await fetchTitleAndReachable(url)
+    if (!probe?.ok) return null
+    const titleNorm = normalizeForMatch(probe.title)
+    if (titleNorm.includes(wantName)) {
+      return { url: probe.finalUrl, source: 'repo_file', title: probe.title }
+    }
+    return null
+  })
+  const results = await Promise.all(probes)
+  const hit = results.find(r => r !== null)
+  return hit ? { url: hit.url, source: hit.source } : null
+}
+
+// Tier 3a · `<name>.<tld>` convention probe with title-match validation.
+// SKIPS .pages.dev / .vercel.app / .netlify.app (FALSE_POSITIVE_HOSTS).
+// Custom-domain TLDs only · ownership intent is strong enough that
+// title-contains-name (case-insensitive, alphanumeric-normalized) is a
+// reliable signal. We try apex first then www. fallback.
+async function inferLiveUrlFromConventions(projectName: string): Promise<{ url: string; source: string } | null> {
+  const wantName = normalizeForMatch(projectName)
+  if (wantName.length < 3) return null
+  // Reject if name has any non-DNS-safe chars (regex covers .toLowerCase()-d
+  // domain label syntax). Also reject single-word common English to avoid
+  // 'demo.com' / 'test.com' / 'app.com' false swings.
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(wantName)) return null
+  const COMMON_WORDS = new Set([
+    'app', 'web', 'site', 'demo', 'test', 'example', 'home', 'main',
+    'dev', 'beta', 'alpha', 'preview', 'staging', 'next', 'react',
+    'vue', 'svelte', 'admin', 'console', 'dashboard', 'api', 'docs',
+  ])
+  if (COMMON_WORDS.has(wantName)) return null
+
+  const TLDS = ['work', 'com', 'dev', 'io', 'co', 'ai', 'app']
+  // Try apex domains first (cleanest signal), www. second (rarer but real).
+  const candidates: string[] = []
+  for (const tld of TLDS) candidates.push(`https://${wantName}.${tld}`)
+  for (const tld of TLDS) candidates.push(`https://www.${wantName}.${tld}`)
+
+  const probes = candidates.map(async (url) => {
+    const probe = await fetchTitleAndReachable(url, 5000)
+    if (!probe?.ok) return null
+    const titleNorm = normalizeForMatch(probe.title)
+    if (titleNorm.includes(wantName)) {
+      return { url: probe.finalUrl, source: 'convention', title: probe.title }
+    }
+    return null
+  })
+  const results = await Promise.all(probes)
+  const hit = results.find(r => r !== null)
+  return hit ? { url: hit.url, source: hit.source } : null
+}
+
+// Chain · Tier 1a (already implemented · cached above) → 1b → 2 → 3a.
+// First hit wins. Logs the source so we can grep the logs to see which
+// tier is actually carrying its weight in production.
+async function discoverLiveUrl(slug: string, projectName: string): Promise<string | null> {
+  // Tier 1a · github.repo.homepage. Already battle-tested · keep as
+  // the first stop. Fast (single GitHub API call · usually warm cache).
+  const t1a = await inferLiveUrlFromGithub(slug)
+  if (t1a) {
+    console.log('[live-url] tier=1a github.homepage', slug, t1a)
+    return t1a
+  }
+  // Tier 1b · package.json.homepage (raw fetch · no API rate limit).
+  const t1b = await inferLiveUrlFromPackageJson(slug)
+  if (t1b) {
+    console.log('[live-url] tier=1b package.json.homepage', slug, t1b)
+    return t1b
+  }
+  // Tier 2 · repo file URL scan with title-match validation.
+  const t2 = await inferLiveUrlFromRepoFiles(slug, projectName)
+  if (t2) {
+    console.log('[live-url] tier=2 repo_file', slug, t2.url)
+    return t2.url
+  }
+  // Tier 3a · `<name>.<tld>` convention probe with title-match validation.
+  const t3 = await inferLiveUrlFromConventions(projectName)
+  if (t3) {
+    console.log('[live-url] tier=3a convention', slug, t3.url)
+    return t3.url
+  }
+  return null
+}
+
 // Pre-flight repo accessibility probe. Returns one of:
 //   · { ok: true }                  → repo is public · proceed with audit
 //   · { ok: false, reason: ... }    → bail early with a friendly error
@@ -445,12 +718,23 @@ Deno.serve(async (req) => {
     .limit(1)
     .maybeSingle()
 
-  // Resolve final live_url: explicit > existing row > GitHub homepage fetch.
-  // Without this, walk-ons of polished libraries (e.g. shadcn-ui/ui) lose
-  // ~30 pts they could've earned on Lighthouse + completeness + Live URL.
+  // Resolve final live_url: explicit > existing row > discovery chain.
+  // discoverLiveUrl tries 4 tiers · github.repo.homepage → package.json.
+  // homepage → repo-file URL scan with title-match → `<name>.<tld>`
+  // convention probe with title-match. Without this, CLI walk-ons (no
+  // --live flag) of vibe-coded apps lose ~27 pts on Lighthouse + Live
+  // URL + Completeness slots. SeizyC/mandoo case: real site at
+  // mandoo.work, github.homepage empty, README absent — only Tier 3a
+  // could find it. Custom domain + brand TLDs only · deploy-platform
+  // subdomains (.pages.dev / .vercel.app / .netlify.app) skipped because
+  // probing 'mandoo' across them all returned 3 different unrelated
+  // projects 200 OK.
+  //
+  // repoName feeds Tiers 2 + 3a as the title-match needle.
+  const repoName = canon.slug.split('/')[1] ?? ''
   let liveUrlEffective: string | null = body.live_url ?? existing?.live_url ?? null
   if (!liveUrlEffective) {
-    liveUrlEffective = await inferLiveUrlFromGithub(canon.slug)
+    liveUrlEffective = await discoverLiveUrl(canon.slug, repoName)
   }
 
   let projectId: string | null = existing?.id ?? null

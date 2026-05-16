@@ -5713,7 +5713,12 @@ Deno.serve(async (req) => {
       // Denormalized form_factor · drives Ladder form-filter without
       // an N+1 join on analysis_snapshots.github_signals. Re-audits
       // overwrite (creator might've added MCP signals later).
-      form_factor:       form_factor,
+      // 2026-05-17 · was bare `form_factor` → ReferenceError silently
+      // diverted every audit through the post-snapshot salvage path
+      // (which stamps score_* from snapshot but skips lh_* / tech_layers
+      // / verdict / claude_insight / detected_category). All other refs
+      // in this file use gh.form_factor consistently.
+      form_factor:       gh.form_factor,
     }
     // 2026-04-30 · auto-detector now writes ONLY to detected_category. The
     // user picks the canonical business_category at audit-result time (or
