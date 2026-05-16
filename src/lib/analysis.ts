@@ -268,33 +268,50 @@ export async function analyzeProject(
   // 504 timeouts). 2026-05-16 · fixes the runtime TypeError
   // 'Cannot read properties of undefined (reading brief)' that
   // surfaced as 'Submission blocked: Analysis failed'.
-  if (data.partial || !data.breakdown) {
-    if (data.post_error) {
-      console.warn('[analyze-project] partial response · falling back to snapshot read', data.post_error)
-    }
+  // Defense in depth · ANY non-canonical shape (partial salvage, missing
+  // breakdown, missing rich, missing lh) falls through to the snapshot-
+  // reload recovery path. The snapshot is the source of truth · the
+  // edge response is just an in-memory mirror. If the mirror's
+  // incomplete, read the truth.
+  const incomplete = data.partial
+                  || !data.breakdown
+                  || !data.lh
+                  || typeof data.score_auto !== 'number'
+  if (incomplete) {
+    console.warn('[analyze-project] non-canonical response · falling back to snapshot read', {
+      partial:        data.partial,
+      hasBreakdown:   !!data.breakdown,
+      hasLh:          !!data.lh,
+      scoreAutoType:  typeof data.score_auto,
+      postError:      data.post_error,
+    })
     const snap = await loadLatestSnapshotAsResult(projectId)
     if (snap) return snap
-    throw new Error(
-      data.post_error
-        ? `Analysis finished but the engine returned a partial response: ${data.post_error}. Try Re-audit in a minute.`
-        : 'Analysis returned an unexpected shape. Try Re-audit in a minute.',
-    )
+    // Snapshot reload ALSO failed · genuine pipeline crash before
+    // snapshot INSERT. Throw a friendly message · SubmitForm's
+    // friendlyAnalyzeError() maps this to retryable copy.
+    throw new Error('snapshot unavailable · the audit didn\'t land. try again in a minute.')
   }
 
+  // All happy-path accesses use optional chaining + sensible fallbacks
+  // so a future engine shape change can never recur as a TypeError.
+  // The cost of `?? 0` / `?? []` / `?? false` here is invisible · the
+  // benefit is a silent TypeError can't crash the user's submission.
+  const lh = data.lh ?? { performance: 0, accessibility: 0, bestPractices: 0, seo: 0 }
   return {
-    score_auto:        data.score_auto,
+    score_auto:        data.score_auto ?? 0,
     score_forecast:    0,
     score_community:   1,
-    score_total:       data.score_total ?? data.score_auto + 1,
+    score_total:       data.score_total ?? (data.score_auto ?? 0) + 1,
     score_total_delta: data.score_total_delta ?? null,
     delta_from_parent: data.delta_from_parent ?? null,
-    creator_grade:     gradeFromScore(data.score_auto, data.breakdown.brief?.filled ?? 0),
+    creator_grade:     gradeFromScore(data.score_auto ?? 0, data.breakdown?.brief?.filled ?? 0),
     verdict:           data.rich?.tldr ?? data.rich?.headline ?? '',
     insight:           data.rich?.honest_evaluation ?? '',
-    tech_layers:       data.breakdown.tech?.layers ?? [],
-    graduation_ready:  (data.score_total ?? data.score_auto) >= 75,
+    tech_layers:       data.breakdown?.tech?.layers ?? [],
+    graduation_ready:  (data.score_total ?? data.score_auto ?? 0) >= 75,
     unlock_level:      0,
-    lh:                data.lh,
+    lh,
     github_ok:         data.github?.accessible ?? false,
     rich:              data.rich ?? null,
   }

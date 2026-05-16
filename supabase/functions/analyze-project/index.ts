@@ -5598,40 +5598,49 @@ Deno.serve(async (req) => {
   // count toward the user-facing token leaderboard. Pricing pinned to
   // Sonnet 4.6 today · stored as a cost_usd snapshot so historical pricing
   // changes don't retroactively rewrite reported costs.
+  // Each post-snapshot side effect is wrapped in its own try/catch
+  // so a network blip / RLS misfire / unique-constraint race here
+  // CANNOT bubble up to the outer catch · the snapshot is already on
+  // disk and the user's audit is real, side-effect failures are
+  // logged but don't fail the request. 2026-05-16 hardening.
   if (snapshot?.id && engineUsage) {
-    const inputTok        = engineUsage.input_tokens        ?? 0
-    const outputTok       = engineUsage.output_tokens       ?? 0
-    const cacheCreateTok  = engineUsage.cache_create_tokens ?? 0
-    const cacheReadTok    = engineUsage.cache_read_tokens   ?? 0
-    // USD per 1M tokens · Anthropic Sonnet 4.6 · 2026-05 pricing.
-    const PRICE_INPUT  = 3.00
-    const PRICE_OUTPUT = 15.00
-    const PRICE_CACHE_CREATE = 3.75
-    const PRICE_CACHE_READ   = 0.30
-    const costUsd =
-      (inputTok       / 1_000_000) * PRICE_INPUT        +
-      (outputTok      / 1_000_000) * PRICE_OUTPUT       +
-      (cacheCreateTok / 1_000_000) * PRICE_CACHE_CREATE +
-      (cacheReadTok   / 1_000_000) * PRICE_CACHE_READ
+    try {
+      const inputTok        = engineUsage.input_tokens        ?? 0
+      const outputTok       = engineUsage.output_tokens       ?? 0
+      const cacheCreateTok  = engineUsage.cache_create_tokens ?? 0
+      const cacheReadTok    = engineUsage.cache_read_tokens   ?? 0
+      // USD per 1M tokens · Anthropic Sonnet 4.6 · 2026-05 pricing.
+      const PRICE_INPUT  = 3.00
+      const PRICE_OUTPUT = 15.00
+      const PRICE_CACHE_CREATE = 3.75
+      const PRICE_CACHE_READ   = 0.30
+      const costUsd =
+        (inputTok       / 1_000_000) * PRICE_INPUT        +
+        (outputTok      / 1_000_000) * PRICE_OUTPUT       +
+        (cacheCreateTok / 1_000_000) * PRICE_CACHE_CREATE +
+        (cacheReadTok   / 1_000_000) * PRICE_CACHE_READ
 
-    const { error: usageErr } = await admin.from('audit_token_usage').insert({
-      project_id:          projectId,
-      snapshot_id:         snapshot.id,
-      source:              'audit_engine',
-      verified:            true,
-      input_tokens:        inputTok,
-      output_tokens:       outputTok,
-      cache_create_tokens: cacheCreateTok,
-      cache_read_tokens:   cacheReadTok,
-      cost_usd:            Number(costUsd.toFixed(4)),
-      model_version:       engineUsage.model_version ?? 'claude-sonnet-4-6',
-      first_seen_at:       new Date().toISOString(),
-      last_seen_at:        new Date().toISOString(),
-      tool_version:        'analyze-project',
-      metadata:            { trigger_type: triggerType },
-    })
-    if (usageErr && usageErr.code !== '23505') {  // 23505 = uniqueness · expected on retry
-      console.error('audit_token_usage insert failed', usageErr)
+      const { error: usageErr } = await admin.from('audit_token_usage').insert({
+        project_id:          projectId,
+        snapshot_id:         snapshot.id,
+        source:              'audit_engine',
+        verified:            true,
+        input_tokens:        inputTok,
+        output_tokens:       outputTok,
+        cache_create_tokens: cacheCreateTok,
+        cache_read_tokens:   cacheReadTok,
+        cost_usd:            Number(costUsd.toFixed(4)),
+        model_version:       engineUsage.model_version ?? 'claude-sonnet-4-6',
+        first_seen_at:       new Date().toISOString(),
+        last_seen_at:        new Date().toISOString(),
+        tool_version:        'analyze-project',
+        metadata:            { trigger_type: triggerType },
+      })
+      if (usageErr && usageErr.code !== '23505') {  // 23505 = uniqueness · expected on retry
+        console.error('audit_token_usage insert failed', usageErr)
+      }
+    } catch (e) {
+      console.error('[audit_token_usage]', (e as Error)?.message ?? String(e))
     }
   }
 
@@ -5658,47 +5667,63 @@ Deno.serve(async (req) => {
   // if the project has none yet (Creator override wins · respected on
   // re-audits). Thresholds biased toward conservative inference — when
   // uncertain we default to 'other' rather than mis-bucket.
-  const detectedCategory = detectBusinessCategory({
-    formFactor: gh.form_factor,
-    isSaas:     gh.signals.is_saas,
-    techLayers: tech.layers,
-    pkgName:    project.project_name ?? '',
-    description: (project.description ?? '') + ' ' + (claude.headline ?? ''),
-    // Dev-tool sub-form routing · MCP / GitHub Action / VSCode Extension
-    // all land in dev_tools regardless of description thinness.
-    isMcpServer: gh.signals.mcp_server_files > 0 || gh.signals.uses_mcp_libs.length > 0,
-    isGhAction:  gh.signals.has_action_yml,
-    isVscodeExt: gh.signals.has_vscode_extension,
-  })
+  //
+  // Wrapped · detector failure shouldn't crash the audit. Falls back to
+  // 'other' on any throw so the projects UPDATE still runs.
+  let detectedCategory: string
+  try {
+    detectedCategory = detectBusinessCategory({
+      formFactor: gh.form_factor,
+      isSaas:     gh.signals.is_saas,
+      techLayers: tech.layers,
+      pkgName:    project.project_name ?? '',
+      description: (project.description ?? '') + ' ' + (claude.headline ?? ''),
+      // Dev-tool sub-form routing · MCP / GitHub Action / VSCode Extension
+      // all land in dev_tools regardless of description thinness.
+      isMcpServer: gh.signals.mcp_server_files > 0 || gh.signals.uses_mcp_libs.length > 0,
+      isGhAction:  gh.signals.has_action_yml,
+      isVscodeExt: gh.signals.has_vscode_extension,
+    })
+  } catch (e) {
+    console.error('[detectBusinessCategory]', (e as Error)?.message ?? String(e))
+    detectedCategory = 'other'
+  }
   const audit_count_increment = (project.audit_count ?? 0) + 1
 
-  // Update denormalized latest on projects
-  const projectUpdate: Record<string, unknown> = {
-    lh_performance:    lh.performance,
-    lh_accessibility:  lh.accessibility,
-    lh_best_practices: lh.bestPractices,
-    lh_seo:            lh.seo,
-    github_accessible: gh.accessible,
-    score_auto,
-    score_total:       scoreTotal,
-    tech_layers:       tech.layers,
-    verdict:           claude.tldr || claude.headline || '',
-    claude_insight:    claude.honest_evaluation || '',
-    unlock_level:      0,
-    last_analysis_at:  new Date().toISOString(),
-    updated_at:        new Date().toISOString(),
-    detected_category: detectedCategory,
-    audit_count:       audit_count_increment,
-    // Denormalized form_factor · drives Ladder form-filter without
-    // an N+1 join on analysis_snapshots.github_signals. Re-audits
-    // overwrite (creator might've added MCP signals later).
-    form_factor:       form_factor,
+  // Update denormalized latest on projects. Wrapped · DB blip here
+  // shouldn't tank the audit (snapshot is already on disk · the
+  // denormalized projects.score_* will catch up on the next re-audit).
+  try {
+    const projectUpdate: Record<string, unknown> = {
+      lh_performance:    lh.performance,
+      lh_accessibility:  lh.accessibility,
+      lh_best_practices: lh.bestPractices,
+      lh_seo:            lh.seo,
+      github_accessible: gh.accessible,
+      score_auto,
+      score_total:       scoreTotal,
+      tech_layers:       tech.layers,
+      verdict:           claude.tldr || claude.headline || '',
+      claude_insight:    claude.honest_evaluation || '',
+      unlock_level:      0,
+      last_analysis_at:  new Date().toISOString(),
+      updated_at:        new Date().toISOString(),
+      detected_category: detectedCategory,
+      audit_count:       audit_count_increment,
+      // Denormalized form_factor · drives Ladder form-filter without
+      // an N+1 join on analysis_snapshots.github_signals. Re-audits
+      // overwrite (creator might've added MCP signals later).
+      form_factor:       form_factor,
+    }
+    // 2026-04-30 · auto-detector now writes ONLY to detected_category. The
+    // user picks the canonical business_category at audit-result time (or
+    // via the project EDIT form). This prevents the detector's wrong guess
+    // from sticking and forces a deliberate Creator choice.
+    const { error: updErr } = await admin.from('projects').update(projectUpdate).eq('id', projectId)
+    if (updErr) console.error('[projects update]', updErr.message)
+  } catch (e) {
+    console.error('[projects update]', (e as Error)?.message ?? String(e))
   }
-  // 2026-04-30 · auto-detector now writes ONLY to detected_category. The
-  // user picks the canonical business_category at audit-result time (or
-  // via the project EDIT form). This prevents the detector's wrong guess
-  // from sticking and forces a deliberate Creator choice.
-  await admin.from('projects').update(projectUpdate).eq('id', projectId)
 
   // §11-NEW.2 · permanent milestones. Compute the project's all-time
   // category rank from current scores (cheap window-function query),
