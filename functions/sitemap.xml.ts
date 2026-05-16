@@ -27,7 +27,24 @@ interface Env {
 interface PostRow {
   id:           string
   type:         'build_log' | 'stack' | 'ask' | 'office_hours' | 'open_mic'
+  title:        string | null
   published_at: string | null
+}
+
+// Mirror of src/lib/postSlug.ts buildPostSlug · keep in sync. Emitted
+// URLs in sitemap must match the canonical we set on the page itself,
+// otherwise Googlebot sees two competing URLs for the same content
+// and either splits ranking signals or picks the non-canonical one.
+function buildPostSlug(title: string | null | undefined): string {
+  if (!title) return ''
+  return title
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '')
 }
 
 interface ProjectRow {
@@ -100,7 +117,7 @@ async function fetchPosts(env: Env): Promise<PostRow[]> {
   // community grows past that we'll split into sitemap-community-1.xml
   // etc. via a sitemap index.
   const res = await fetch(
-    `${url}/rest/v1/community_posts?select=id,type,published_at&status=in.(published,resolved,expired)&order=published_at.desc&limit=10000`,
+    `${url}/rest/v1/community_posts?select=id,type,title,published_at&status=in.(published,resolved,expired)&order=published_at.desc&limit=10000`,
     { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } },
   )
   if (!res.ok) return []
@@ -145,7 +162,10 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       .map(p => {
         const segment = TYPE_TO_SEGMENT[p.type]
         if (!segment) return ''
-        const loc     = `${base}/community/${segment}/${p.id}`
+        const slug    = buildPostSlug(p.title)
+        const loc     = slug
+          ? `${base}/community/${segment}/${slug}-${p.id}`
+          : `${base}/community/${segment}/${p.id}`
         const lastmod = p.published_at
         return urlEntry(loc, lastmod, 'weekly', '0.6')
       })

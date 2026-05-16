@@ -38,7 +38,28 @@ interface ResolvedPost {
   tags:         string[] | null
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// UUID anywhere at the end of the :id segment · matches both bare
+// /community/<seg>/<uuid> (legacy) and /community/<seg>/<slug>-<uuid>
+// (current canonical). Keep regex in lock-step with src/lib/postSlug.ts
+// — both files use the same trailing-UUID extraction.
+const POST_UUID_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+// Mirror of src/lib/postSlug.ts buildPostSlug · lowercase, strip
+// diacritics, collapse non-alphanumerics to single hyphens, trim and
+// cap at 60 chars. Keep in sync · the canonical URL we emit in
+// <link rel="canonical"> must match what the SPA generates client-side
+// so Googlebot doesn't see two competing canonicals.
+function buildPostSlug(title: string | null | undefined): string {
+  if (!title) return ''
+  return title
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '')
+}
 
 // Canonical mapping mirrors src/pages/CommunityPostDetailPage.tsx
 // SEGMENT_TO_TYPE. Must stay in sync · adding a new community type
@@ -186,10 +207,17 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     return ctx.next()
   }
 
-  const id = parts[2].replace(/\.html$/, '')
-  if (!UUID_RE.test(id)) {
+  // :id can be a bare UUID (legacy share links from before slug
+  // rollout) OR <slug>-<uuid> (current canonical). Either way we
+  // extract the trailing UUID, ignore the slug prefix · the slug
+  // we emit in the canonical link is rebuilt fresh from post.title
+  // so a stale slug in the URL is harmless.
+  const rawIdParam = parts[2].replace(/\.html$/, '')
+  const uuidMatch  = rawIdParam.match(POST_UUID_RE)
+  if (!uuidMatch) {
     return ctx.next()
   }
+  const id = uuidMatch[1]
 
   // Fetch the SPA HTML so HTMLRewriter has a stream to transform.
   // ctx.next() can fall through opaquely on Pages · explicit fetch of
@@ -215,7 +243,13 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   }
 
   const typeLabel    = TYPE_LABEL[post.type]
-  const canonicalUrl = `https://commit.show/community/${segment}/${post.id}`
+  // Canonical includes the slug prefix · rebuilt fresh from post.title
+  // so the URL Googlebot sees is always the current slug, even if the
+  // user landed on a stale-slug or bare-UUID URL.
+  const slug         = buildPostSlug(post.title)
+  const canonicalUrl = slug
+    ? `https://commit.show/community/${segment}/${slug}-${post.id}`
+    : `https://commit.show/community/${segment}/${post.id}`
   // SERP title pattern · keep under ~60 chars when the post title is
   // short so the suffix lands. Falls naturally to truncation when long.
   const title        = `${post.title} · ${typeLabel} · commit.show`

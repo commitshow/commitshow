@@ -18,6 +18,7 @@ import { useAuth } from '../lib/auth'
 import { resolveCreatorName } from '../lib/creatorName'
 import { IconComment, IconApplaud } from '../components/icons'
 import { fetchPostCommentCounts, fetchPostApplaudCounts } from '../lib/community'
+import { buildPostHref } from '../lib/postSlug'
 
 interface PostFeedItem {
   kind:        'post'
@@ -140,16 +141,8 @@ export function CommunityFeedPage() {
       )
 
       // Map type → URL segment for community-post links.
-      const typeSegment = (t: string) => {
-        switch (t) {
-          case 'build_log':    return 'build-logs'
-          case 'stack':        return 'stacks'
-          case 'ask':          return 'asks'
-          case 'office_hours': return 'office-hours'
-          case 'open_mic':     return 'open-mic'
-          default:             return 'open-mic'
-        }
-      }
+      // typeSegment helper removed — buildPostHref() owns the type→
+      // segment mapping now (single source of truth in lib/postSlug.ts).
 
       const postItems: PostFeedItemWithAvatar[] = posts.map(p => {
         const m = p.author_id ? memberMap.get(p.author_id) : null
@@ -164,7 +157,7 @@ export function CommunityFeedPage() {
           author_id:     p.author_id,
           author_name:   m?.display_name ?? null,
           author_avatar: m?.avatar_url   ?? null,
-          link:          `/community/${typeSegment(p.type)}/${p.id}`,
+          link:          buildPostHref(p.type as CommunityPostType, p.id, p.title),
           comment_count: commentCounts[p.id] ?? 0,
           applaud_count: applaudCounts[p.id] ?? 0,
         }

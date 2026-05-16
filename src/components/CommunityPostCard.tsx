@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import type { PostWithAuthor } from '../lib/community'
 import { STACK_SUBTYPES, ASK_SUBTYPES } from '../lib/community'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
+import { buildPostHref } from '../lib/postSlug'
 import { IconComment, IconApplaud } from './icons'
 
 interface Props {
@@ -21,11 +22,10 @@ interface Props {
 export function CommunityPostCard({ post, commentCount, applaudCount }: Props) {
   const accent = typeAccent(post.type)
   const subtypeLabel = subtypeOf(post)
-  const basePath = basePathFor(post.type)
 
   return (
     <Link
-      to={`${basePath}/${post.id}`}
+      to={buildPostHref(post.type, post.id, post.title)}
       className="block card-navy p-5 transition-all"
       style={{
         borderRadius: '2px',
@@ -168,16 +168,6 @@ function typeAccent(type: PostWithAuthor['type']): string {
     case 'ask':          return '#A78BFA'   // violet
     case 'office_hours': return '#00D4AA'   // teal
     case 'open_mic':     return '#F0C040'   // gold (matches the V1 'this is THE active surface' framing)
-  }
-}
-
-function basePathFor(type: PostWithAuthor['type']): string {
-  switch (type) {
-    case 'build_log':    return '/community/build-logs'
-    case 'stack':        return '/community/stacks'
-    case 'ask':          return '/community/asks'
-    case 'office_hours': return '/community/office-hours'
-    case 'open_mic':     return '/community/open-mic'
   }
 }
 

@@ -13,6 +13,7 @@ import { IconTrash } from '../components/icons'
 import { PostBody } from '../components/PostBody'
 import { PostCommentThread } from '../components/PostCommentThread'
 import { getPost, deletePost, STACK_SUBTYPES, ASK_SUBTYPES, type PostWithAuthor } from '../lib/community'
+import { buildPostHref, extractPostUuid } from '../lib/postSlug'
 import { resolveCreatorName, resolveCreatorInitial } from '../lib/creatorName'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -44,15 +45,28 @@ export function CommunityPostDetailPage() {
 
   useEffect(() => {
     if (!id) return
+    // :id param can be the bare UUID (legacy URLs) or
+    // <slug>-<uuid> (current canonical). Extract the trailing UUID
+    // either way · null = malformed param, treat as not-found.
+    const uuid = extractPostUuid(id)
+    if (!uuid) { setNotFound(true); setLoading(false); return }
     setLoading(true)
     setNotFound(false)
-    getPost(id).then(p => {
+    getPost(uuid).then(p => {
       if (!p) { setNotFound(true); setLoading(false); return }
       // Guard against someone deep-linking /community/stacks/:id to a build_log row.
       const wantedType = typeSegment ? SEGMENT_TO_TYPE[typeSegment] : null
       if (wantedType && p.type !== wantedType) {
-        navigate(`${listPathFor(p.type)}/${p.id}`, { replace: true })
+        navigate(buildPostHref(p.type, p.id, p.title), { replace: true })
         return
+      }
+      // Canonicalize URL · if the user arrived on a bare UUID or stale
+      // slug, replace history so the address bar matches the current
+      // canonical /community/<segment>/<slug>-<uuid>. Saves a redirect
+      // round trip and keeps Google's signal clean for re-shares.
+      const canonical = buildPostHref(p.type, p.id, p.title)
+      if (canonical !== window.location.pathname) {
+        navigate(canonical, { replace: true })
       }
       setPost(p)
       setLoading(false)
