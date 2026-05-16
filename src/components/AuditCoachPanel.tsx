@@ -131,6 +131,17 @@ export function AuditCoachPanel({
   }, [user?.id])
 
   const auditionNow = async () => {
+    // Polish gate · same rule as BackstageSection on /me · description
+    // + at least one image are required for the public stage card.
+    // Polish logic lives in one place (BackstagePolishGate) · the Coach
+    // just routes the user there when the card isn't ready. Keeps the
+    // gate from being duplicated across surfaces.
+    const hasDescription = !!(project.description && project.description.trim().length > 0)
+    const hasImages      = Array.isArray(project.images) && project.images.length > 0
+    if (!hasDescription || !hasImages) {
+      navigate('/me?polish=' + project.id)
+      return
+    }
     setAuditionBusy(true)
     setAuditionError(null)
     try {

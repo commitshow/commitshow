@@ -13,9 +13,10 @@
 //     status='backstage' due to RLS).
 
 import { useEffect, useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, PUBLIC_PROJECT_COLUMNS, type Project } from '../lib/supabase'
 import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
+import { BackstagePolishGate } from './BackstagePolishGate'
 
 interface TicketBalance {
   free_remaining: number
@@ -26,6 +27,7 @@ interface TicketBalance {
 }
 
 export function BackstageSection({ memberId }: { memberId: string }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [backstage,     setBackstage]     = useState<Project[] | null>(null)
   const [balance,       setBalance]       = useState<TicketBalance | null>(null)
   const [busyId,        setBusyId]        = useState<string | null>(null)
@@ -35,6 +37,11 @@ export function BackstageSection({ memberId }: { memberId: string }) {
   // a different row's Coach toggle collapses any other open one. null
   // when nothing is expanded.
   const [coachOpenId,   setCoachOpenId]   = useState<string | null>(null)
+  // §16.2 (2026-05-16) · which row has the polish gate expanded.
+  // Audition button click flips this when description / images are
+  // missing, so the creator fills the public-card fields before the
+  // project flips to active. One row at a time (mirrors coachOpenId).
+  const [polishOpenId,  setPolishOpenId]  = useState<string | null>(null)
 
   const loadAll = useCallback(async () => {
     const [projRes, balRes] = await Promise.all([
@@ -54,7 +61,50 @@ export function BackstageSection({ memberId }: { memberId: string }) {
     return () => window.removeEventListener('commitshow:tickets-updated', onUpdate)
   }, [loadAll])
 
+  // §16.2 (2026-05-16) · AuditCoachPanel on /projects/<id> routes
+  // unpolished projects here with ?polish=<id> so the user lands on
+  // /me with the right BackstagePolishGate already expanded. Once
+  // backstage rows load, match the param and pop the gate · then
+  // strip the query so a refresh doesn't re-open it after the user
+  // cancelled.
+  useEffect(() => {
+    const wantPolish = searchParams.get('polish')
+    if (!wantPolish || !backstage) return
+    const match = backstage.find(p => p.id === wantPolish)
+    if (match) {
+      setPolishOpenId(match.id)
+      setCoachOpenId(null)
+      // Scroll into view so the gate is visible after the route hop.
+      window.setTimeout(() => {
+        const el = document.getElementById(`backstage-row-${match.id}`)
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }, 100)
+    }
+    // Strip ?polish so a refresh doesn't re-trigger.
+    const next = new URLSearchParams(searchParams)
+    next.delete('polish')
+    setSearchParams(next, { replace: true })
+  }, [backstage, searchParams, setSearchParams])
+
   const handleAudition = async (projectId: string) => {
+    // Polish gate · description + at least one image are required for
+    // the audition stage so the public card has something to show. If
+    // either is missing, expand the BackstagePolishGate inline instead
+    // of going straight to audition_project · the gate's save handler
+    // chains projects UPDATE + audition_project so the creator still
+    // experiences this as a single audition flow.
+    const p = backstage?.find(x => x.id === projectId)
+    if (p) {
+      const hasDescription = !!(p.description && p.description.trim().length > 0)
+      const hasImages      = Array.isArray(p.images) && p.images.length > 0
+      if (!hasDescription || !hasImages) {
+        setPolishOpenId(projectId)
+        setCoachOpenId(null) // close any open Coach so the page doesn't grow two panels at once
+        setError(null)
+        return
+      }
+    }
+
     setBusyId(projectId)
     setError(null)
     try {
@@ -114,9 +164,10 @@ export function BackstageSection({ memberId }: { memberId: string }) {
 
       <div className="space-y-2">
         {backstage.map(p => {
-          const coachOpen = coachOpenId === p.id
+          const coachOpen  = coachOpenId === p.id
+          const polishOpen = polishOpenId === p.id
           return (
-            <div key={p.id}>
+            <div key={p.id} id={`backstage-row-${p.id}`}>
               <div className="card-navy p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
                 borderLeft: '3px solid var(--gold-500)',
                 borderRadius: '2px',
@@ -197,6 +248,20 @@ export function BackstageSection({ memberId }: { memberId: string }) {
                       to audition the next backstage project. */}
                   <PreAuditionCoachSlot projectId={p.id} navigateOnAuditioned />
                 </div>
+              )}
+              {polishOpen && (
+                <BackstagePolishGate
+                  project={p}
+                  onSavedAndAuditioned={async () => {
+                    setPolishOpenId(null)
+                    await loadAll()
+                  }}
+                  onCancel={() => setPolishOpenId(null)}
+                  onNoTicket={async (projectId) => {
+                    setPolishOpenId(null)
+                    await initiateStripeCheckout(projectId)
+                  }}
+                />
               )}
             </div>
           )
