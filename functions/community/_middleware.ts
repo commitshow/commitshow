@@ -144,8 +144,13 @@ function buildNoscriptArticle(post: ResolvedPost, canonicalUrl: string, typeLabe
       ).join('')
     : ''
   const dateAttr = post.published_at ? new Date(post.published_at).toISOString() : ''
+  // Tags stored in DB already include the leading '#' (e.g.
+  // "#vibe-life"), so we render verbatim. If a stored tag is missing
+  // the '#' we still emit it as-is rather than guessing — bad data
+  // surfacing in the markup is more useful for the writer to fix than
+  // a silent reformat.
   const tagsHtml = Array.isArray(post.tags) && post.tags.length > 0
-    ? `<p>${post.tags.map(t => `#${escapeHtml(String(t))}`).join(' ')}</p>`
+    ? `<p>${post.tags.map(t => escapeHtml(String(t))).join(' ')}</p>`
     : ''
   // Crawlers (and JS-disabled visitors) get the full article. React's
   // hydration into #root sits above this block · once JS boots, the
