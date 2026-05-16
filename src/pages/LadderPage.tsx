@@ -173,7 +173,7 @@ export function LadderPage() {
               border: 'none', borderRadius: '2px', textDecoration: 'none',
             }}
           >
-            {user ? 'AUDITION A NEW PROJECT →' : 'AUDITION YOUR PROJECT →'}
+            {user ? 'ANALYZE MY MVP →' : 'AUDITION YOUR PROJECT →'}
           </NavLink>
         </header>
 
