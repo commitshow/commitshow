@@ -7,7 +7,7 @@
 // Auth-gated · bounces to Landing with a sign-in prompt when unauth.
 
 import { useState, useEffect, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { createPost, STACK_SUBTYPES, ASK_SUBTYPES } from '../lib/community'
 import type { CommunityPostType } from '../lib/supabase'
@@ -33,15 +33,23 @@ const TITLE_MAX: Record<CommunityPostType, number> = {
 export function NewCommunityPostPage() {
   const { typeSegment } = useParams<{ typeSegment: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user, loading: authLoading } = useAuth()
 
   const postType: CommunityPostType = (typeSegment && TYPE_BY_SEGMENT[typeSegment]) || 'build_log'
 
-  const [title,   setTitle]   = useState('')
-  const [tldr,    setTldr]    = useState('')
-  const [body,    setBody]    = useState('')
+  // Prefill from URL params · used by AuditCoachPanel's 'Share your
+  // climb on Open Mic' link after a successful re-audit climb. Title,
+  // body, and tags are seeded from the audit context so the creator
+  // just edits a sentence and ships rather than starting from blank.
+  const [title,   setTitle]   = useState(() => searchParams.get('title') ?? '')
+  const [tldr,    setTldr]    = useState(() => searchParams.get('tldr')  ?? '')
+  const [body,    setBody]    = useState(() => searchParams.get('body')  ?? '')
   const [subtype, setSubtype] = useState<string>('')
-  const [tags,    setTags]    = useState<string[]>([])
+  const [tags,    setTags]    = useState<string[]>(() => {
+    const raw = searchParams.get('tags')
+    return raw ? raw.split(',').map(t => t.trim()).filter(Boolean) : []
+  })
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState<string | null>(null)
 

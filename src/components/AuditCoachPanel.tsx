@@ -285,10 +285,32 @@ export function AuditCoachPanel({
           Each card is something we measured and didn't see. Knock out a few, hit Re-audit, and watch the score move
           — no audition needed until you like the number.
         </p>
+        {/* Normalization · iteration is the work. No counts, no peer
+            comparison numbers (CEO directive · the user base is still
+            small and concrete counts feel hollow). Just the message
+            that climbing in cycles is the norm, not the exception. */}
+        <p className="font-mono text-[11px] mt-2" style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
+          The climb is iterative · most builders run a few cycles before they're happy with the number.
+        </p>
         {checkedCount > 0 && (
           <div className="mt-3 font-mono text-xs" style={{ color: '#00D4AA' }}>
             ✓ {checkedCount} marked done · ≈ +{totalImpact}pt on re-audit
           </div>
+        )}
+        {/* Open Mic share · only after at least one re-audit so we're
+            inviting the user to share an actual climb story, not a
+            fresh empty post. previousBand is set the moment the user
+            kicks off a re-audit (parent state) — using it as the
+            'has iterated at least once' signal. */}
+        {previousBand && (
+          <a
+            href={`/community/open-mic/new?title=${encodeURIComponent(`${displayScore(project)} after re-audit · ${project.project_name}`)}&tldr=${encodeURIComponent("What I fixed this cycle and what the audit found next.")}&tags=vibe-life,ship-log`}
+            className="inline-flex items-center gap-1.5 mt-3 font-mono text-[11px] tracking-wide"
+            style={{ color: '#00D4AA', textDecoration: 'none' }}
+          >
+            <span>Share your climb on Open Mic</span>
+            <span aria-hidden="true">→</span>
+          </a>
         )}
       </div>
 
