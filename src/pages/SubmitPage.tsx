@@ -15,7 +15,7 @@ export function SubmitPage() {
             // AUDIT YOUR PROJECT
           </div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-3">
-            Free audit · audition when you're ready
+            Free analyze first, audition when you're ready
           </h2>
           <p className="font-light" style={{ color: 'rgba(248,245,238,0.4)' }}>
             Engine-extracted brief · multi-axis audit in ~90s · sits backstage until you put it on the league
