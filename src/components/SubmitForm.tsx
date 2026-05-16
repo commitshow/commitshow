@@ -11,7 +11,7 @@ import { ProjectImagesPicker } from './ProjectImagesPicker'
 import type { ProjectImage } from '../lib/supabase'
 import { probeGithubPublic } from '../lib/githubProbe'
 import { AnalysisProgressModal, EDGE_TOTAL_MS } from './AnalysisProgressModal'
-import { analyzeProject, triggerMDDiscovery, type AnalysisResult } from '../lib/analysis'
+import { analyzeProject, triggerMDDiscovery, CooldownError, type AnalysisResult } from '../lib/analysis'
 import type { ExtractedBrief } from '../lib/extractionPrompt'
 import { integrityScore } from '../lib/extractionPrompt'
 import {
@@ -64,6 +64,34 @@ function canonicalGithubUrl(raw: string): string {
   const m = s.match(/^([\w.-]+)\/([\w.-]+?)(?:\/.*)?$/)
   if (!m) return ''
   return `https://github.com/${m[1]}/${m[2]}`
+}
+
+// Map an analyzeProject() exception to a single short, vibe-coder-
+// friendly sentence. Raw error messages from the engine (TypeError,
+// "Cannot read properties of undefined", "analyze-project 500: ...")
+// must never reach the SUBMISSION BLOCKED card · the console keeps
+// the technical detail for dev debugging, the user sees this.
+function friendlyAnalyzeError(e: unknown, isRetry = false): string {
+  if (e instanceof CooldownError) {
+    return isRetry
+      ? `Still cooling down · re-audit available in ~${e.retryAfterHours}h.`
+      : `Audit is on cooldown · available again in ~${e.retryAfterHours}h.`
+  }
+  const msg = (e as Error)?.message ?? ''
+  if (/already_in_progress|already running|in progress|90.?seconds/i.test(msg)) {
+    return "An audit's already running for this project. Give it 60 seconds and try again."
+  }
+  if (/network|fetch|timed out|timeout|gateway/i.test(msg)) {
+    return isRetry
+      ? "Still can't reach the audit engine. Check your connection and try once more."
+      : "We couldn't reach the audit engine. Check your connection and hit Try again."
+  }
+  if (/snapshot|partial|unexpected shape/i.test(msg)) {
+    return "The audit ran but the result didn't come back cleanly. Try again in a minute · we'll pick up the snapshot."
+  }
+  return isRetry
+    ? "Same hiccup again. Wait a minute or come back later · the audit will be there."
+    : "We hit a hiccup analyzing your repo. Hit Try again — we'll pick up from here."
 }
 
 export function SubmitForm({ onComplete }: SubmitFormProps) {
@@ -204,6 +232,15 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     setForm(f => ({ ...f, [k]: e.target.value }))
 
   const [gateBusy, setGateBusy] = useState(false)
+  // §16.2 (2026-05-16) · retry closure for the failure modal. When set,
+  // the SUBMISSION BLOCKED card renders a TRY AGAIN button alongside
+  // GOT IT. Used when the projects row + brief INSERT already landed
+  // and only the analyze step failed — re-running analyzeProject is
+  // safe (engine's concurrency guard + cooldown handle duplicates) and
+  // saves the user from re-uploading the brief. Cleared when the user
+  // dismisses or successfully retries.
+  const [retryAnalyze, setRetryAnalyze] = useState<{ projectId: string; attempt: number } | null>(null)
+  const [retryBusy,    setRetryBusy]    = useState(false)
 
   // Async Step-1 gate: field sanity + hard GitHub reachability check.
   // Private / 404 repos are rejected outright — transparency gate.
@@ -327,7 +364,7 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
           jwtUserId: session.user.id,
           reactUserId: user?.id,
         })
-        setError(`Failed to claim preview project: ${updErr.message} (code ${(updErr as { code?: string }).code ?? '?'})`)
+        setError("We couldn't claim this preview project. Sign out and back in, then try again.")
         setStep(2); return
       }
       insertedId = verdict.projectId
@@ -336,7 +373,8 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       const { data: inserted, error: projectErr } = await supabase
         .from('projects').insert([projectFields]).select('id').single()
       if (projectErr || !inserted?.id) {
-        setError(`Failed to save project: ${projectErr?.message ?? 'unknown'}`)
+        console.error('[submit] project insert failed', projectErr)
+        setError("We couldn't save your project. Refresh and try again — if it keeps happening, ping support.")
         setStep(2); return
       }
       insertedId = inserted.id
@@ -367,7 +405,8 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
     if (briefErr) {
       // Persist failure was a silent black hole before · audit reads brief_id
       // off this row, so missing it tanks Brief Integrity scoring.
-      setError(`Failed to save brief: ${briefErr.message}`)
+      console.error('[submit] brief upsert failed', briefErr)
+      setError("We couldn't save your brief. Refresh and try again.")
       setStep(2); return
     }
 
@@ -381,7 +420,15 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
       final = await analyzeProject(inserted.id, 'initial')
     } catch (e) {
       setEdgeStartedAt(null)
-      setError(`Analysis failed: ${(e as Error).message}`)
+      // Log full error to console for dev debugging · the user gets a
+      // human-readable summary, not a TypeError stack. The retry path
+      // (TRY AGAIN button in the modal) hands them a way out without
+      // restarting the brief upload — engine concurrency guard +
+      // SHA-aware cooldown make re-running analyzeProject safe.
+      console.error('[submit] analyze failed', e)
+      const friendly = friendlyAnalyzeError(e)
+      setError(friendly)
+      setRetryAnalyze({ projectId: inserted.id, attempt: 1 })
       setStep(2); return
     }
 
@@ -562,24 +609,87 @@ export function SubmitForm({ onComplete }: SubmitFormProps) {
             }}
           >
             <div className="font-mono text-xs tracking-widest mb-3" style={{ color: '#F87171' }}>
-              // SUBMISSION BLOCKED
+              // SOMETHING WENT WRONG
             </div>
             <div className="font-mono text-sm mb-5" style={{ color: 'var(--cream)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
               {error}
             </div>
-            <button
-              onClick={() => setError('')}
-              className="w-full py-2.5 font-mono text-xs tracking-wide transition-colors"
-              style={{
-                background: 'var(--gold-500)',
-                color: 'var(--navy-900)',
-                border: 'none',
-                borderRadius: '2px',
-                cursor: 'pointer',
-              }}
-            >
-              GOT IT
-            </button>
+            {retryAnalyze ? (
+              // Analysis failed AFTER project + brief landed. The retry
+              // closure re-runs analyzeProject on the same project_id ·
+              // engine concurrency guard + SHA-aware cooldown handle
+              // duplicates, so we don't re-insert anything. Snapshot
+              // landing routes through the same success path as the
+              // first attempt (lands on Step 4 polish).
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!retryAnalyze || retryBusy) return
+                    setRetryBusy(true)
+                    setError('')
+                    setEdgeStartedAt(Date.now())
+                    setEdgeProgress(0)
+                    setLoaderIndex(2)
+                    setStep(3)
+                    try {
+                      const next = await analyzeProject(retryAnalyze.projectId, 'initial')
+                      setResult(next)
+                      setEdgeProgress(100)
+                      setLoaderIndex(3)
+                      await new Promise(r => setTimeout(r, 400))
+                      setStep(4)
+                      setRetryAnalyze(null)
+                    } catch (e) {
+                      console.error('[submit] retry analyze failed', e)
+                      setError(friendlyAnalyzeError(e, true))
+                      setRetryAnalyze({ projectId: retryAnalyze.projectId, attempt: retryAnalyze.attempt + 1 })
+                      setStep(2)
+                    } finally {
+                      setRetryBusy(false)
+                      setEdgeStartedAt(null)
+                    }
+                  }}
+                  disabled={retryBusy}
+                  className="flex-1 py-2.5 font-mono text-xs tracking-wide transition-colors"
+                  style={{
+                    background: retryBusy ? 'rgba(240,192,64,0.4)' : 'var(--gold-500)',
+                    color: 'var(--navy-900)',
+                    border: 'none',
+                    borderRadius: '2px',
+                    cursor: retryBusy ? 'wait' : 'pointer',
+                  }}
+                >
+                  {retryBusy ? 'TRYING…' : 'TRY AGAIN'}
+                </button>
+                <button
+                  onClick={() => { setError(''); setRetryAnalyze(null) }}
+                  className="flex-1 py-2.5 font-mono text-xs tracking-wide transition-colors"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--cream)',
+                    border: '1px solid rgba(248,245,238,0.18)',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  CLOSE
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setError('')}
+                className="w-full py-2.5 font-mono text-xs tracking-wide transition-colors"
+                style={{
+                  background: 'var(--gold-500)',
+                  color: 'var(--navy-900)',
+                  border: 'none',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                }}
+              >
+                GOT IT
+              </button>
+            )}
           </div>
         </div>,
         document.body,
