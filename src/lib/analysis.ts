@@ -258,7 +258,28 @@ export async function analyzeProject(
     const body = await res.text()
     throw new Error(`analyze-project ${res.status}: ${body}`)
   }
-  const data = (await res.json()) as EdgeResponse
+  const data = (await res.json()) as EdgeResponse & { partial?: boolean; post_error?: string }
+
+  // Salvage path · engine had a post-snapshot crash and returned the
+  // minimal `{ ok, partial, snapshot_id, score_total, post_error }`
+  // shape without breakdown/lh/github fields. The snapshot itself
+  // landed cleanly though · reconstruct the full AnalysisResult by
+  // reading the snapshot back from the DB (same recovery used for
+  // 504 timeouts). 2026-05-16 · fixes the runtime TypeError
+  // 'Cannot read properties of undefined (reading brief)' that
+  // surfaced as 'Submission blocked: Analysis failed'.
+  if (data.partial || !data.breakdown) {
+    if (data.post_error) {
+      console.warn('[analyze-project] partial response · falling back to snapshot read', data.post_error)
+    }
+    const snap = await loadLatestSnapshotAsResult(projectId)
+    if (snap) return snap
+    throw new Error(
+      data.post_error
+        ? `Analysis finished but the engine returned a partial response: ${data.post_error}. Try Re-audit in a minute.`
+        : 'Analysis returned an unexpected shape. Try Re-audit in a minute.',
+    )
+  }
 
   return {
     score_auto:        data.score_auto,
@@ -267,14 +288,14 @@ export async function analyzeProject(
     score_total:       data.score_total ?? data.score_auto + 1,
     score_total_delta: data.score_total_delta ?? null,
     delta_from_parent: data.delta_from_parent ?? null,
-    creator_grade:     gradeFromScore(data.score_auto, data.breakdown.brief.filled),
+    creator_grade:     gradeFromScore(data.score_auto, data.breakdown.brief?.filled ?? 0),
     verdict:           data.rich?.tldr ?? data.rich?.headline ?? '',
     insight:           data.rich?.honest_evaluation ?? '',
-    tech_layers:       data.breakdown.tech.layers,
+    tech_layers:       data.breakdown.tech?.layers ?? [],
     graduation_ready:  (data.score_total ?? data.score_auto) >= 75,
     unlock_level:      0,
     lh:                data.lh,
-    github_ok:         data.github.accessible,
+    github_ok:         data.github?.accessible ?? false,
     rich:              data.rich ?? null,
   }
 }
