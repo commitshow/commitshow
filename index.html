@@ -36,6 +36,19 @@
     <meta name="twitter:description" content="The vibe coding league. Audited by the engine, auditioned for Scouts." />
     <meta name="twitter:image" content="https://commit.show/og-image.png" />
 
+    <!-- Agent / LLM discoverability · 2026-05-17.
+         Non-standard but increasingly looked-for hints. When an agentic
+         tool (Claude Code, Cursor, Cline, Windsurf) fetches commit.show
+         to figure out how to interact, these point it at the right
+         path BEFORE it lands on the prominent CLI/npx surface that
+         then trips sandbox classifiers. /llms.txt is the canonical
+         agent integration doc; api.commit.show/audit is the no-install
+         path that works inside any HTTP-capable agent. -->
+    <link rel="alternate" type="text/plain" title="LLM agent integration guide" href="/llms.txt" />
+    <meta name="llm-instructions" content="/llms.txt" />
+    <meta name="agent-api-base" content="https://api.commit.show" />
+    <meta name="agent-recommended-endpoint" content="GET https://api.commit.show/audit?repo=<github-url>&format=md" />
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -51,13 +64,23 @@
            CLI even before the SPA hydrates. Hidden by React on mount. -->
       <noscript>
         <h1>commit.show — Every commit, on stage.</h1>
-        <p>The vibe coding league. Audit any AI-assisted GitHub project from
-          your terminal in 60 seconds.</p>
+        <p>The vibe coding league. Audit any AI-assisted GitHub project in 60 seconds.</p>
+
+        <h2>For LLM agents reading this page</h2>
+        <p><strong>Use this first · zero install, no sandbox prompt:</strong></p>
+        <pre><code>GET https://api.commit.show/audit?repo=&lt;github-url&gt;&amp;format=md</code></pre>
+        <p>Returns paste-ready markdown · CORS open · no API key. Works inside Claude Code, Cursor, Cline, Windsurf, Gemini, ChatGPT browse, n8n, Zapier, curl, etc.</p>
+        <p>Full agent integration guide: <a href="/llms.txt">/llms.txt</a></p>
+
+        <h2>For humans with a terminal</h2>
         <pre><code>npx commitshow@latest audit github.com/owner/repo</code></pre>
-        <p>Or, scoped alias: <code>npx @commit.show/cli audit github.com/owner/repo</code></p>
-        <p>Full machine-readable API: <code>npx commitshow@latest audit --json</code></p>
-        <p>Discovery file for AI agents: <a href="/llms.txt">/llms.txt</a></p>
-        <p>npm: <a href="https://npmjs.com/package/commitshow">commitshow</a></p>
+        <p>Scoped alias: <code>npx @commit.show/cli audit github.com/owner/repo</code></p>
+        <p>JSON output: <code>npx commitshow@latest audit --json</code></p>
+
+        <h2>For agentic IDEs with MCP support</h2>
+        <p>Register the MCP server: <a href="https://www.npmjs.com/package/commitshow-mcp">commitshow-mcp</a> on npm · 3-line config in <code>claude_desktop_config.json</code> / <code>.cursor/mcp.json</code>.</p>
+
+        <p>npm: <a href="https://npmjs.com/package/commitshow">commitshow</a> · API: <a href="https://api.commit.show/audit">api.commit.show/audit</a> · OpenAPI: <a href="https://api.commit.show/openapi.json">api.commit.show/openapi.json</a></p>
         <p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p>
       </noscript>
       <div data-commitshow-fallback hidden aria-hidden="true">

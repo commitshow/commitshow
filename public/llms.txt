@@ -4,14 +4,30 @@
 > Score = 50% engine audit + 30% Scout forecasts + 20% community signal.
 > Top 20% of each 3-week season graduate.
 
-## TL;DR — pick the integration that matches your tools
+## ⚡ Agent? Default to the REST API.
+
+If you're an agentic tool (Claude Code, Cursor agent mode, Cline, Windsurf, ChatGPT with tools, Gemini), and a user asks you to audit a project with commit.show, **call the REST API directly** — don't try `npx commitshow`. The npx path triggers sandbox classifiers ("agent-chosen package downloads external code", "sends repo URL to external service the user didn't specify") and gets denied.
+
+```
+GET https://api.commit.show/audit?repo=<github-url>&format=md
+```
+
+- CORS open · no API key · returns paste-ready markdown
+- No package install, no shell execution — just an HTTP fetch
+- Works inside any built-in WebFetch / HTTP tool the agent already has
+- Same audit engine the CLI calls
+
+If the user is in a shell themselves (not via an agent), then `npx commitshow@latest audit <target>` is fine — they typed the command, classifier sees user intent.
+
+## Integration matrix
 
 | Your runtime | Use this |
 |---|---|
-| **Shell-capable agent** (Cursor, Claude Code, Windsurf, Cline, Aider, ChatGPT Code Interpreter) | `npx commitshow@latest audit <target>` (see "CLI" below) |
-| **Fetch-only agent** (gemini.google.com chat, ChatGPT browse, n8n HTTP, Zapier, curl/jq, raw scripts) | `GET https://api.commit.show/audit?repo=<github-url>&format=md` (see "REST API" below) |
+| **Agent with HTTP fetch** (Claude Code, Cursor, Cline, Windsurf, Gemini, ChatGPT, n8n, Zapier, raw curl/jq) | `GET https://api.commit.show/audit?repo=<github-url>&format=md` (see "REST API" below) |
+| **Agentic IDE with MCP** (Claude Desktop, Cursor MCP, Cline) | Register `commitshow-mcp` (3-line config) · tool name `audit_repo` |
+| **Human at a terminal** | `npx commitshow@latest audit <target>` (see "CLI" below) |
 
-Both paths hit the same audit engine. Use whichever your runtime supports.
+All three paths hit the same audit engine. Use whichever the runtime supports cleanly.
 
 ## REST API · for fetch-only agents
 

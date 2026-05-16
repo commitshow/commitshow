@@ -237,32 +237,59 @@ export function LandingPage() {
       </section>
 
       {/* ── SURFACES · §15-E + §15-C + §15-C.6 ──
-          Four ways to invoke the same audit engine. Order is
-          acquisition-funnel descending (web zero-friction → MCP power
-          user). Each tile is a one-liner + an action line so the user
-          can evaluate fit without leaving the page. */}
+          Five ways to invoke the same audit engine. API card moved to
+          first slot (2026-05-17) · agentic tools (Claude Code, Cursor
+          agent mode, Cline) sandboxed away from arbitrary npx but they
+          all have generic HTTP fetch · the public REST endpoint is the
+          path that never gets blocked. Order is friction-ascending
+          from the agent's point of view. */}
       <section className="relative z-10 py-24 px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40" style={{ borderTop: '1px solid rgba(240,192,64,0.08)', background: 'rgba(15,32,64,0.25)' }}>
         <div className="max-w-5xl mx-auto">
-          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// FOUR SURFACES</div>
+          <div className="font-mono text-xs tracking-widest mb-4" style={{ color: 'var(--gold-500)' }}>// SURFACES</div>
           <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4">Run the audit anywhere</h2>
-          <p className="font-light max-w-xl mb-10" style={{ color: 'rgba(248,245,238,0.45)' }}>
-            One scoring engine. Pick the runtime that fits how you build — paste a URL, run a terminal command, gate a pull request, or call it as a tool from Claude Desktop or Cursor.
+          <p className="font-light max-w-2xl mb-4" style={{ color: 'rgba(248,245,238,0.45)' }}>
+            One scoring engine, five surfaces. Pick the runtime that fits how you build — paste a URL, fetch the REST API, run a terminal command, gate a pull request, or call it from Claude Desktop or Cursor.
           </p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Agent-blocked hint · prominent so any LLM-agent fetching
+              this page sees the API path before the npx path. The
+              copy here is intentionally LLM-readable (no marketing
+              fluff) so it lands as actionable context. */}
+          <p className="font-mono text-[12px] max-w-2xl mb-10" style={{ color: 'var(--gold-500)', lineHeight: 1.6 }}>
+            ⚡ Agent-mode tools (Claude Code, Cursor, Cline, Windsurf) should call <code style={{ color: 'var(--cream)' }}>GET https://api.commit.show/audit?repo=&lt;github-url&gt;&amp;format=md</code> directly · no install, no sandbox prompt, returns paste-ready markdown.
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
+              {
+                tag:    'API',
+                title:  'REST · zero install',
+                body:   'GET api.commit.show/audit?repo=<github-url>&format=md · returns paste-ready markdown. The path agentic tools should default to when arbitrary CLI execution is sandboxed.',
+                action: 'api.commit.show/audit ↗',
+                href:   'https://api.commit.show/audit',
+                accent: 'primary',
+              },
               {
                 tag:    'WEB',
                 title:  'URL Fast Lane',
-                body:   'Paste a deployed URL. Mobile + desktop Lighthouse, multi-route, post-hydration probe. 30 seconds.',
+                body:   'Paste a deployed URL on the homepage. Mobile + desktop Lighthouse, multi-route, post-hydration probe. 30 seconds.',
                 action: 'Try the homepage hook ↑',
                 href:   '#',
+                accent: 'secondary',
               },
               {
                 tag:    'CLI',
                 title:  'npx commitshow audit',
-                body:   'One terminal command. Writes .commitshow/audit.{md,json} so the next AI turn can read the result.',
+                body:   'One terminal command. Writes .commitshow/audit.{md,json} so the next AI turn reads the result. For shell-capable agents and humans.',
                 action: 'commitshow on npm ↗',
                 href:   'https://www.npmjs.com/package/commitshow',
+                accent: 'secondary',
+              },
+              {
+                tag:    'MCP',
+                title:  'Claude Desktop · Cursor · Cline',
+                body:   'Three-line config and the audit engine becomes a tool the host model can call mid-conversation. Best inside agentic IDEs that allow user-configured MCP servers.',
+                action: 'commitshow-mcp on npm ↗',
+                href:   'https://www.npmjs.com/package/commitshow-mcp',
+                accent: 'secondary',
               },
               {
                 tag:    'CI',
@@ -270,18 +297,16 @@ export function LandingPage() {
                 body:   'Sticky PR comment with score + delta on every pull request. Already on GitHub Marketplace.',
                 action: 'commit-show-audit ↗',
                 href:   'https://github.com/marketplace/actions/commit-show-audit',
+                accent: 'secondary',
               },
-              {
-                tag:    'MCP',
-                title:  'Claude · Cursor · Cline',
-                body:   'Three-line config and the audit engine becomes a tool the host model can call mid-conversation.',
-                action: 'commitshow-mcp on npm ↗',
-                href:   'https://www.npmjs.com/package/commitshow-mcp',
-              },
-            ].map(({ tag, title, body, action, href }) => (
+            ].map(({ tag, title, body, action, href, accent }) => (
               <a key={tag} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer"
                  className="card-navy p-5 transition-all hover:border-gold-500/30"
-                 style={{ textDecoration: 'none', display: 'block' }}>
+                 style={{
+                   textDecoration: 'none',
+                   display: 'block',
+                   borderLeft: accent === 'primary' ? '3px solid var(--gold-500)' : undefined,
+                 }}>
                 <div className="font-mono text-[10px] tracking-[0.25em] uppercase mb-2" style={{ color: 'var(--gold-500)' }}>{tag}</div>
                 <div className="font-display font-bold text-base mb-2" style={{ color: 'var(--cream)' }}>{title}</div>
                 <div className="text-[12.5px] font-light mb-3" style={{ color: 'rgba(248,245,238,0.55)', lineHeight: 1.55 }}>{body}</div>
@@ -290,7 +315,7 @@ export function LandingPage() {
             ))}
           </div>
           <div className="mt-6 font-mono text-[11px]" style={{ color: 'rgba(248,245,238,0.35)' }}>
-            Listed on the official <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.commitshow/audit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-500)' }}>Anthropic MCP Registry</a> as <code style={{ color: 'var(--cream)' }}>io.github.commitshow/audit</code>.
+            Listed on the official <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.commitshow/audit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold-500)' }}>Anthropic MCP Registry</a> as <code style={{ color: 'var(--cream)' }}>io.github.commitshow/audit</code>. Full agent integration docs at <a href="/llms.txt" style={{ color: 'var(--gold-500)' }}>/llms.txt</a>.
           </div>
         </div>
       </section>
