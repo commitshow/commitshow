@@ -144,13 +144,14 @@ function buildNoscriptArticle(post: ResolvedPost, canonicalUrl: string, typeLabe
       ).join('')
     : ''
   const dateAttr = post.published_at ? new Date(post.published_at).toISOString() : ''
-  // Tags stored in DB already include the leading '#' (e.g.
-  // "#vibe-life"), so we render verbatim. If a stored tag is missing
-  // the '#' we still emit it as-is rather than guessing — bad data
-  // surfacing in the markup is more useful for the writer to fix than
-  // a silent reformat.
+  // Tags are stored without '#' by spec (TagInput normalizes that
+  // out) but historic rows can still hold '#vibe-life' from before the
+  // fix. Strip any leading '#' chars and prepend exactly one so the
+  // indexed output is always '#vibe-life #all-nighter' regardless of
+  // stored shape · matches the React render behaviour for visual
+  // consistency between crawled HTML and live SPA.
   const tagsHtml = Array.isArray(post.tags) && post.tags.length > 0
-    ? `<p>${post.tags.map(t => escapeHtml(String(t))).join(' ')}</p>`
+    ? `<p>${post.tags.map(t => `#${escapeHtml(String(t).replace(/^#+/, ''))}`).join(' ')}</p>`
     : ''
   // Crawlers (and JS-disabled visitors) get the full article. React's
   // hydration into #root sits above this block · once JS boots, the

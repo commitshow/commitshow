@@ -273,7 +273,11 @@ export function CommunityPostDetailPage() {
                   borderRadius: '2px',
                 }}
               >
-                #{tag}
+                {/* Defensive strip · existing rows from before the
+                    TagInput fix may still have a leading '#' (e.g.
+                    '#vibe-life'). Strip + re-prepend so display is
+                    always exactly one '#' regardless of stored shape. */}
+                #{tag.replace(/^#+/, '')}
               </span>
             ))}
           </div>

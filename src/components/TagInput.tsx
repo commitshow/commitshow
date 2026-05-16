@@ -16,7 +16,12 @@ export function TagInput({ value, onChange, max = 6, placeholder = 'Add a tag…
   const [draft, setDraft] = useState('')
 
   const toggle = (tag: string) => {
-    const normalized = tag.trim().toLowerCase().replace(/\s+/g, '-')
+    // Strip any user-typed '#' prefix during normalization · we store
+    // tags without '#' and the UI prepends one at render time. Without
+    // this, '#vibe-life' typed by the user lands as literal '#vibe-life'
+    // in DB and renders as '##vibe-life' everywhere. Replacing all '#'
+    // (not just the leading one) defends against '##' or stray hashes.
+    const normalized = tag.trim().toLowerCase().replace(/#/g, '').replace(/\s+/g, '-')
     if (!normalized) return
     const next = value.includes(normalized)
       ? value.filter(t => t !== normalized)

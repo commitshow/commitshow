@@ -77,7 +77,7 @@ export function CommunityPostCard({ post, commentCount, applaudCount }: Props) {
               className="font-mono text-[10px] px-1.5 py-0.5"
               style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}
             >
-              #{tag}
+              #{tag.replace(/^#+/, '')}
             </span>
           ))}
         </div>
