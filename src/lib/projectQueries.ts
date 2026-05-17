@@ -85,11 +85,16 @@ export async function resolvePreviewClaim(
   return { kind: 'fresh' }
 }
 
-// 1) Just registered — NEW AUDITS lane.
+// 1) Just registered — legacy NEW AUDITS lane.
 // 2026-05-09 widened to 14 days (was 7). Reason: low submission cadence
 // in early V1 means a 7-day window often had < 3 entries · the lane
 // looked empty for visitors. 2 weeks gives a fuller "fresh" tape
 // without polluting it with stale projects.
+//
+// 2026-05-17 · FeaturedLanes swapped this lane out for fetchBackstageReady
+// (BACKSTAGE) — see below. Kept exported for compatibility in case
+// another surface still references "new auditions". Remove once nothing
+// imports it.
 export async function fetchJustRegistered(): Promise<Project[]> {
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000).toISOString()
   const { data } = await supabase
@@ -100,6 +105,83 @@ export async function fetchJustRegistered(): Promise<Project[]> {
     .order('created_at', { ascending: false })
     .limit(LANE_LIMIT)
   return (data ?? []) as unknown as Project[]
+}
+
+// ── Member stage buckets · drives Hero + LadderPage dynamic state ──
+//
+// Cheap counts of the caller's own projects in each stage. Hero and
+// LadderPage header use this to pick a state-appropriate primary CTA:
+//
+//   · backstage > 0           → "Continue in Backstage (N) →"
+//   · backstage = 0, active >0 → "Re-audit your stage projects →"
+//   · encore > 0 (no others)   → "View your Encore archive →"
+//   · all zero                 → "Analyze your MVP →" (default)
+//
+// Single round-trip · returns three integers so the consumer can also
+// surface a hint strip like "3 backstage · 2 on stage · 1 encore".
+// Encore = graduated + valedictorian (both are score-84+ permanent
+// states). RLS is not relevant here because we filter by
+// creator_id=auth.uid() · the owner sees all their own rows regardless.
+export interface MemberStageBuckets {
+  backstage: number
+  onStage:   number   // active
+  encore:    number   // graduated + valedictorian (+ honors / retry treated as on-stage tail)
+}
+
+export async function fetchMemberStageBuckets(memberId: string): Promise<MemberStageBuckets> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('status')
+    .eq('creator_id', memberId)
+  if (error || !data) return { backstage: 0, onStage: 0, encore: 0 }
+  const buckets: MemberStageBuckets = { backstage: 0, onStage: 0, encore: 0 }
+  for (const r of data as Array<{ status: string }>) {
+    if (r.status === 'backstage') buckets.backstage++
+    else if (r.status === 'active' || r.status === 'retry') buckets.onStage++
+    else if (r.status === 'graduated' || r.status === 'valedictorian') buckets.encore++
+  }
+  return buckets
+}
+
+// 1b) Backstage-ready — BACKSTAGE lane on /products.
+//
+// New lane (2026-05-17) replacing NEW AUDITS. The old lane filtered
+// status='active' newest-14d, but those projects are already on the
+// body ladder · the lane was effectively a duplicate spotlight on
+// rows users could already find. BACKSTAGE surfaces a different
+// population entirely: projects iterating + polished, not yet
+// auditioned. Completes the journey narrative shown across the lanes:
+//
+//     BACKSTAGE  →  ON STAGE  →  ENCORE
+//     iterating     active        score 84+
+//
+// Eligibility mirrors RLS migration 20260517_backstage_lane_public.sql:
+//   · status = 'backstage'        · audit done, not yet auditioned
+//   · audit_count >= 2            · iterated at least once (vs drive-by)
+//   · thumbnail_url IS NOT NULL   · visual identity registered
+//   · length(description) > 30    · real description, not placeholder
+//
+// RLS lets these rows escape the owner-private cage; non-eligible
+// backstage rows stay invisible to anon/other-creator readers.
+// Sorted by last_analysis_at desc so the freshest re-audits surface
+// first (matches "currently iterating" intuition · BACKSTAGE is about
+// movement, not creation date).
+export async function fetchBackstageReady(): Promise<Project[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select(PUBLIC_PROJECT_COLUMNS)
+    .eq('status', 'backstage')
+    .gte('audit_count', 2)
+    .not('thumbnail_url', 'is', null)
+    .order('last_analysis_at', { ascending: false, nullsFirst: false })
+    .limit(LANE_LIMIT * 2)   // over-fetch so the description-length client filter
+                              // can throw out short-bio rows without starving the lane
+  if (error || !data) return []
+  // length(description) > 30 not expressible in PostgREST · client-side
+  // filter is fine because over-fetch covers the trim.
+  return (data as unknown as Project[])
+    .filter(p => (p.description ?? '').trim().length > 30)
+    .slice(0, LANE_LIMIT)
 }
 
 // 2) Climbing — projects whose latest snapshot has a positive score delta.

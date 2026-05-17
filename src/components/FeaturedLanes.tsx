@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import {
-  fetchJustRegistered,
+  fetchBackstageReady,
   fetchClimbing,
   fetchGraduating,
   fetchCreatorsByIds,
@@ -20,19 +21,36 @@ type ClimberRow = Project & { delta: number }
 // card, but is wider/more breathable in the horizontal lane.
 const CARD_WIDTH_PX = 300
 
+// 2026-05-17 · NEW AUDITS lane (fetchJustRegistered · status='active'
+// newest-14d) was swapped for BACKSTAGE (fetchBackstageReady ·
+// status='backstage' + audit_count≥2 + thumbnail + 30-char description).
+//
+// Motivation: NEW AUDITS surfaced rows that were already on the body
+// ladder — the lane was a duplicate spotlight, not new information.
+// BACKSTAGE surfaces a population the ladder *cannot* show (rows still
+// in iteration before audition), making the three lanes a stage-by-stage
+// journey instead of three slices of the same active set:
+//
+//     BACKSTAGE  →  ON STAGE (climbing)  →  ENCORE
+//     iterating     active, biggest moves   crossed 84+ permanent
+//
+// CLIMBING lane was renamed ON STAGE so the stage vocabulary is
+// consistent across lane labels, StageBadge, ProjectDetail, Hero CTA,
+// and ProfilePage. Same underlying query (positive delta this week);
+// "biggest moves this week" is now framed as on-stage performance.
 export function FeaturedLanes() {
-  const [rookie, setRookie] = useState<LaneState>({ loading: true, rows: [] })
-  const [climbers, setClimbers] = useState<LaneState<ClimberRow>>({ loading: true, rows: [] })
+  const [backstage,  setBackstage]  = useState<LaneState>({ loading: true, rows: [] })
+  const [climbers,   setClimbers]   = useState<LaneState<ClimberRow>>({ loading: true, rows: [] })
   const [graduating, setGraduating] = useState<LaneState>({ loading: true, rows: [] })
-  const [creators, setCreators] = useState<Record<string, CreatorIdentity>>({})
+  const [creators,   setCreators]   = useState<Record<string, CreatorIdentity>>({})
 
   useEffect(() => {
-    Promise.all([fetchJustRegistered(), fetchClimbing(), fetchGraduating()]).then(async ([r, c, g]) => {
-      setRookie({ loading: false, rows: r })
+    Promise.all([fetchBackstageReady(), fetchClimbing(), fetchGraduating()]).then(async ([b, c, g]) => {
+      setBackstage({ loading: false, rows: b })
       setClimbers({ loading: false, rows: c })
       setGraduating({ loading: false, rows: g })
 
-      const allCreatorIds = [...r, ...c, ...g].map(p => p.creator_id).filter((x): x is string => !!x)
+      const allCreatorIds = [...b, ...c, ...g].map(p => p.creator_id).filter((x): x is string => !!x)
       if (allCreatorIds.length > 0) setCreators(await fetchCreatorsByIds(allCreatorIds))
     })
   }, [])
@@ -40,36 +58,39 @@ export function FeaturedLanes() {
   return (
     <div className="flex flex-col gap-6">
       <Lane
-        label="NEW AUDITS"
-        hint="Just on the ladder · scores fresh"
+        label="BACKSTAGE"
+        hint="Iterating · polished · ready for the stage soon"
         tone="var(--cream)"
-        loading={rookie.loading}
-        empty="Nothing new this week."
+        loading={backstage.loading}
+        empty="Nothing in backstage yet. Audit, fix, re-audit, dress your project — and your audition lands here."
+        footerCta={{
+          label: 'How a backstage audition works →',
+          to:    '/backstage',
+        }}
       >
-        {rookie.rows.map(p => (
+        {backstage.rows.map(p => (
           <FeaturedLaneCard
             key={p.id}
             project={p}
             creator={p.creator_id ? creators[p.creator_id] : undefined}
-            accent={{ tone: 'rookie', leftBadge: daysAgo(p.created_at) }}
-            /* hideScore dropped 2026-05-15 · NEW AUDITS now flows through
-               the band gate like every other list surface. "— PTS"
-               placeholder didn't match the band visual language and
-               implied a privacy state these freshly-audited rows never
-               had (round-1 privacy is on the project detail page only,
-               not on list cards). Band gate gives public viewers a
-               proper Building / Strong chip; Encore-tier reveal still
-               applies. */
+            accent={{
+              tone: 'backstage',
+              leftBadge: `${p.audit_count ?? 1} audits`,
+            }}
           />
         ))}
       </Lane>
 
       <Lane
-        label="CLIMBING"
-        hint="Biggest positive deltas this week"
+        label="ON STAGE"
+        hint="Active on the league · biggest moves this week"
         tone="#00D4AA"
         loading={climbers.loading}
-        empty="No climbers yet — be the first to push."
+        empty="No movers yet — be the first to push score upward."
+        footerCta={{
+          label: 'Audition your project →',
+          to:    '/submit',
+        }}
       >
         {climbers.rows.map(p => (
           <FeaturedLaneCard
@@ -83,10 +104,14 @@ export function FeaturedLanes() {
 
       <Lane
         label="ENCORE"
-        hint="Products that crossed the 85 line · permanent badge"
+        hint="Crossed the 84 line · permanent badge"
         tone="#F0C040"
         loading={graduating.loading}
         empty="None over the Encore line yet."
+        footerCta={{
+          label: 'Encore criteria →',
+          to:    '/rulebook',
+        }}
       >
         {graduating.rows.map(p => (
           <FeaturedLaneCard
@@ -101,8 +126,14 @@ export function FeaturedLanes() {
   )
 }
 
-function Lane({ label, hint, tone, loading, empty, children }: {
-  label: string; hint: string; tone: string; loading: boolean; empty: string; children: React.ReactNode
+interface LaneFooterCta {
+  label: string
+  to:    string
+}
+
+function Lane({ label, hint, tone, loading, empty, children, footerCta }: {
+  label: string; hint: string; tone: string; loading: boolean; empty: string;
+  children: React.ReactNode; footerCta?: LaneFooterCta;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const count = (Array.isArray(children) ? children : [children]).filter(Boolean).length
@@ -153,7 +184,7 @@ function Lane({ label, hint, tone, loading, empty, children }: {
           Loading…
         </div>
       ) : count === 0 ? (
-        <div className="font-mono text-xs flex items-center justify-center py-10" style={{
+        <div className="font-mono text-xs flex items-center justify-center py-10 px-6 text-center" style={{
           background: 'rgba(255,255,255,0.02)',
           border: '1px dashed rgba(255,255,255,0.08)',
           color: 'rgba(248,245,238,0.3)',
@@ -197,6 +228,23 @@ function Lane({ label, hint, tone, loading, empty, children }: {
           ))}
         </div>
       )}
+
+      {/* Lane footer · stage-entry CTA. Renders even on empty/loading
+          so visitors always have the next-step pointer regardless of
+          how full the lane is. */}
+      {footerCta && (
+        <div className="flex justify-end px-1">
+          <Link
+            to={footerCta.to}
+            className="font-mono text-[10px] tracking-wide transition-colors"
+            style={{ color: `${tone}`, opacity: 0.75 }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '0.75')}
+          >
+            {footerCta.label}
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
@@ -232,11 +280,4 @@ function ArrowBtn({ dir, onClick, tone }: { dir: 'left' | 'right'; onClick: () =
       </svg>
     </button>
   )
-}
-
-function daysAgo(iso: string): string {
-  const hrs = (Date.now() - new Date(iso).getTime()) / 3_600_000
-  if (hrs < 1)  return 'just now'
-  if (hrs < 24) return `${Math.floor(hrs)}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
 }

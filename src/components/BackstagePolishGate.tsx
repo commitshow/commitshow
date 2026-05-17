@@ -99,9 +99,24 @@ export function BackstagePolishGate({ project, onSavedAndAuditioned, onCancel, o
       <h4 className="font-display font-bold text-lg mb-1" style={{ color: 'var(--cream)' }}>
         Add a description + image first
       </h4>
-      <p className="font-light text-sm mb-5" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+      <p className="font-light text-sm mb-3" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
         These show on your public card · what other creators and Scouts see before they click through.
         One sentence and one screenshot is plenty to start with.
+      </p>
+      {/* Publish-to-lane disclosure · once description ≥ 30 chars and a
+          thumbnail are set, the second audit on this project promotes
+          it onto /products' public BACKSTAGE lane (RLS migration
+          20260517_backstage_lane_public.sql). Naming the consequence
+          before the action keeps the contract explicit · creators who
+          would rather keep the project private can stop here and skip
+          the polish until they're ready to be seen. */}
+      <p className="font-mono text-[11px] mb-5 px-3 py-2" style={{
+        color: 'var(--cream)', background: 'rgba(248,245,238,0.05)',
+        border: '1px solid rgba(248,245,238,0.18)', borderRadius: '2px', lineHeight: 1.55,
+      }}>
+        Heads up · with a 30+ char description, a thumbnail, and 2+ audits,
+        this audition starts appearing on <span style={{ color: 'var(--gold-500)' }}>/products' BACKSTAGE lane</span>
+        — publicly visible, still owner-private from the league until you audition.
       </p>
 
       <div className="mb-4">

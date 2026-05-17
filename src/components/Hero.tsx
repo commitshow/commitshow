@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { HeroStats } from '../lib/heroStats'
 import { HeroTerminal } from './HeroTerminal'
+import { useAuth } from '../lib/auth'
+import { fetchMemberStageBuckets, type MemberStageBuckets } from '../lib/projectQueries'
 
 // Hero h1 · 2026-05-14 tribe-flag rewrite.
 // Line 1 names the tribe (people who built with Cursor / Claude / Lovable /
@@ -48,13 +50,51 @@ interface HeroProps {
 
 export function Hero(_props: HeroProps) {
   const navigate = useNavigate()
-  // Single entry: "Audit your project" → /submit. The first 3 auditions
-  // are free (eligibility.freeQuota), so new visitors don't hit a paywall
-  // and we don't need to expose the audit-vs-audition distinction in the
-  // hero. Members on their 4th+ audition encounter the Stripe gate inside
-  // SubmitForm — by then they understand what audition means.
-  const onSubmitClick = () => navigate('/submit')
-  const onFeedClick = () => navigate('/projects')
+  const { user } = useAuth()
+
+  // Stage-aware Hero (2026-05-17). Returning members land on the same
+  // hero as visitors, which made the primary CTA — "Analyze your MVP"
+  // — push them into a fresh /submit flow even when they already had a
+  // project waiting in backstage. The journey would silently restart.
+  //
+  // We now read the caller's stage buckets once on mount and pick the
+  // primary CTA from where they actually need to go next:
+  //
+  //   buckets.backstage > 0  → "Continue in Backstage (N) →" (/me)
+  //                            the high-leverage state · they have
+  //                            audited work that wants iteration or
+  //                            audition decision · do not bury them
+  //                            in a fresh-audit funnel.
+  //   buckets.onStage   > 0  → "Your stage standings →" (/me)
+  //                            secondary state · live projects worth
+  //                            checking before starting another.
+  //   buckets.encore    > 0  → "Your Encore archive →" (/me)
+  //                            cold state · they already cleared the
+  //                            84 line, nudge to next audition exists
+  //                            on secondary CTA.
+  //   else / anon            → "Analyze your MVP →" (/submit)
+  //                            the original visitor default.
+  //
+  // The secondary CTA stays as a "browse / analyze another" depending
+  // on state so even a returning user with backstage rows still sees
+  // a one-click path to start a fresh audit. The user-facing copy in
+  // the value-prop paragraphs above does NOT change · headline +
+  // animation are the brand impression and switching them on state
+  // would be jarring across logins.
+  const [buckets, setBuckets] = useState<MemberStageBuckets | null>(null)
+  useEffect(() => {
+    if (!user?.id) { setBuckets(null); return }
+    let alive = true
+    fetchMemberStageBuckets(user.id).then(b => { if (alive) setBuckets(b) })
+    return () => { alive = false }
+  }, [user?.id])
+
+  const primary = pickHeroPrimaryCta(buckets)
+  const onPrimary   = () => navigate(primary.to)
+  const onSecondary = () => navigate(buckets && (buckets.backstage > 0 || buckets.onStage > 0 || buckets.encore > 0) ? '/submit' : '/projects')
+  const secondaryLabel = buckets && (buckets.backstage > 0 || buckets.onStage > 0 || buckets.encore > 0)
+    ? 'Analyze another →'
+    : 'Browse products →'
 
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 md:px-10 lg:px-24 xl:px-32 2xl:px-40 pt-20 pb-16 overflow-hidden">
@@ -108,7 +148,7 @@ export function Hero(_props: HeroProps) {
 
           <div className="stagger-4 flex gap-4 justify-center lg:justify-start flex-wrap">
             <button
-              onClick={onSubmitClick}
+              onClick={onPrimary}
               className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
               style={{
                 background: 'var(--gold-500)',
@@ -123,10 +163,10 @@ export function Hero(_props: HeroProps) {
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--gold-400)'; e.currentTarget.style.boxShadow = '0 0 60px rgba(240,192,64,0.35)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'var(--gold-500)'; e.currentTarget.style.boxShadow = '0 0 40px rgba(240,192,64,0.2)'; }}
             >
-              Analyze your MVP →
+              {primary.label}
             </button>
             <button
-              onClick={onFeedClick}
+              onClick={onSecondary}
               className="px-8 py-3.5 text-sm font-medium tracking-wide transition-all"
               style={{
                 background: 'transparent',
@@ -140,9 +180,51 @@ export function Hero(_props: HeroProps) {
               onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.5)')}
               onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(248,245,238,0.2)')}
             >
-              Browse products →
+              {secondaryLabel}
             </button>
           </div>
+
+          {/* Stage-buckets strip · returning user awareness. Shows the
+              caller's BACKSTAGE / ON STAGE / ENCORE counts once they
+              have at least one in any bucket. Anchored on /me deep-links
+              by bucket so each chip is a navigation atom, not just a
+              count. Anon and empty-bucket members see nothing here —
+              the hero stays on the brand-impression default. */}
+          {buckets && (buckets.backstage > 0 || buckets.onStage > 0 || buckets.encore > 0) && (
+            <div className="stagger-4 mt-6 flex gap-2 flex-wrap justify-center lg:justify-start font-mono text-[10px] tracking-widest">
+              <span style={{ color: 'rgba(248,245,238,0.35)' }}>YOUR JOURNEY · </span>
+              {buckets.backstage > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/me')}
+                  className="px-2 py-1 transition-colors"
+                  style={{ background: 'rgba(248,245,238,0.06)', color: 'var(--cream)', border: '1px solid rgba(248,245,238,0.18)', borderRadius: '2px', cursor: 'pointer' }}
+                >
+                  {buckets.backstage} BACKSTAGE
+                </button>
+              )}
+              {buckets.onStage > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/me')}
+                  className="px-2 py-1 transition-colors"
+                  style={{ background: 'rgba(0,212,170,0.08)', color: '#00D4AA', border: '1px solid rgba(0,212,170,0.25)', borderRadius: '2px', cursor: 'pointer' }}
+                >
+                  {buckets.onStage} ON STAGE
+                </button>
+              )}
+              {buckets.encore > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/me')}
+                  className="px-2 py-1 transition-colors"
+                  style={{ background: 'rgba(240,192,64,0.10)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.35)', borderRadius: '2px', cursor: 'pointer' }}
+                >
+                  {buckets.encore} ENCORE
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── RIGHT · live terminal · header + animated audit demo ── */}
@@ -171,6 +253,33 @@ export function Hero(_props: HeroProps) {
       )}
     </section>
   )
+}
+
+// ── Primary CTA picker · drives the gold button label + target.
+// Anon and zero-bucket members → fresh-audit funnel (current default).
+// Members with any active stage → land on /me where they can continue.
+// Priority order (backstage > onStage > encore) matches "where is the
+// most actionable next step": backstage rows want decisions
+// (audition? polish? re-audit?), on-stage rows are passively progressing,
+// encore rows are completed work · least urgent.
+function pickHeroPrimaryCta(buckets: MemberStageBuckets | null): { label: string; to: string } {
+  if (!buckets) {
+    return { label: 'Analyze your MVP →', to: '/submit' }
+  }
+  if (buckets.backstage > 0) {
+    const n = buckets.backstage
+    return {
+      label: `Continue in Backstage (${n}) →`,
+      to:    '/me',
+    }
+  }
+  if (buckets.onStage > 0) {
+    return { label: 'Your stage standings →', to: '/me' }
+  }
+  if (buckets.encore > 0) {
+    return { label: 'Your Encore archive →', to: '/me' }
+  }
+  return { label: 'Analyze your MVP →', to: '/submit' }
 }
 
 // ── Typed-terminal headline ───────────────────────────────────

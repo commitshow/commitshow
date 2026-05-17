@@ -39,6 +39,7 @@ import { VibeConcernsPanel } from '../components/VibeConcernsPanel'
 import { NativeAppPanel, type NativeAppBreakdown, type NativeFootguns } from '../components/NativeAppPanel'
 import { ForecastModal } from '../components/ForecastModal'
 import { ApplaudButton } from '../components/ApplaudButton'
+import { StageBadge } from '../components/StageBadge'
 import { EditProjectModal } from '../components/EditProjectModal'
 import { ProjectActionFooter } from '../components/ProjectActionFooter'
 import { fetchAuditionStreak } from '../lib/auditionStreak'
@@ -666,8 +667,23 @@ export function ProjectDetailPage() {
             )}
             <div className="p-4 sm:p-6 flex flex-col gap-4 justify-between">
               <div>
-                <div className="font-mono text-[10px] tracking-widest mb-2 flex items-center gap-2 flex-wrap" style={{ color: 'var(--gold-500)' }}>
-                  <span>PROJECT · {(project.status === 'retry' ? 'ROOKIE CIRCLE' : project.status.toUpperCase())}</span>
+                <div className="mb-3 flex items-center gap-2 flex-wrap">
+                  {/* StageBadge replaces the old PROJECT · STATUS eyebrow
+                      (2026-05-17). Same source of truth used in Hero,
+                      LadderRow, FeaturedLaneCard, ProfilePage. preview
+                      rows (CLI walk-on, no creator) get no badge; their
+                      banner above already explains the state. */}
+                  <StageBadge project={project} size="md" />
+                  {project.status === 'retry' && (
+                    <span className="font-mono text-[10px] tracking-widest px-2 py-0.5" style={{
+                      background: 'rgba(200,16,46,0.10)',
+                      color: 'var(--scarlet)',
+                      border: '1px solid rgba(200,16,46,0.35)',
+                      borderRadius: '2px',
+                    }}>
+                      ROOKIE CIRCLE
+                    </span>
+                  )}
                   {streakClimbs >= 2 && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 tracking-wider" style={{
                       background: 'rgba(248,146,42,0.14)',

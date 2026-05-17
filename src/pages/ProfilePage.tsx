@@ -10,6 +10,7 @@ import { IconGraduation, IconWand } from '../components/icons'
 import { VerifiedIdentities } from '../components/VerifiedIdentities'
 import { ShareUserTemplateButton } from '../components/ShareUserTemplateButton'
 import { BackstageSection } from '../components/BackstageSection'
+import { StageBadge } from '../components/StageBadge'
 import { TicketWalletCard } from '../components/TicketWalletCard'
 
 const TIER_COLOR: Record<ScoutTier, string> = {
@@ -401,6 +402,12 @@ export function ProfilePage() {
                         {p.score_total}
                       </span>
                     )}
+                    {/* StageBadge bottom-left · matches FeaturedLaneCard
+                        + ProjectDetail. Skipped on retry (already shown
+                        as separate ROOKIE CIRCLE pill elsewhere). */}
+                    <div className="absolute bottom-1 left-1">
+                      <StageBadge project={p} size="xs" iconless />
+                    </div>
                   </div>
                   <div className="px-2 py-1.5">
                     <div className="font-mono text-[11px] truncate" style={{ color: 'var(--cream)' }}>

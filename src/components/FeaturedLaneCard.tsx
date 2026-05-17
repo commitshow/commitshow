@@ -6,7 +6,10 @@ import { useViewer } from '../lib/useViewer'
 import { scoreBand, bandLabel, bandTone, viewerCanSeeDigitOnList } from '../lib/laneScore'
 
 export interface LaneCardAccent {
-  tone: 'rookie' | 'climber' | 'graduating'
+  // 2026-05-17 · 'backstage' added when NEW AUDITS lane was swapped
+  // for BACKSTAGE on /products. 'rookie' kept for any legacy
+  // callers (FeaturedLanes itself no longer emits it).
+  tone: 'rookie' | 'backstage' | 'climber' | 'graduating'
   leftBadge?: string
   rightBadge?: string
 }
@@ -20,6 +23,7 @@ interface FeaturedLaneCardProps {
 
 const TONE_COLOR: Record<LaneCardAccent['tone'], string> = {
   rookie:      '#6B7280',
+  backstage:   '#F8F5EE',   // cream · matches StageBadge backstage tone
   climber:     '#00D4AA',
   graduating:  '#F0C040',
 }

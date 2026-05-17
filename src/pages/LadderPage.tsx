@@ -24,7 +24,8 @@ import {
   getCachedLadder, getCachedLadderProjects, getCachedCounts,
   type LadderRow,
 } from '../lib/ladder'
-import { fetchCreatorsByIds, fetchApplaudCounts, type CreatorIdentity } from '../lib/projectQueries'
+import { fetchCreatorsByIds, fetchApplaudCounts, fetchMemberStageBuckets, type CreatorIdentity, type MemberStageBuckets } from '../lib/projectQueries'
+import { StageBadge } from '../components/StageBadge'
 import { ProjectCardEditorial } from '../components/ProjectCardEditorial'
 import { FeaturedLanes } from '../components/FeaturedLanes'
 import { useAuth } from '../lib/auth'
@@ -49,6 +50,21 @@ export function LadderPage() {
   const navigate    = useNavigate()
   const { user }    = useAuth()
   const [params, setParams] = useSearchParams()
+
+  // Stage buckets for the dynamic header (2026-05-17). Same data the
+  // Hero CTA picker uses · here it drives the eyebrow + title + CTA so
+  // a returning member sees "Your journey · N backstage · …" instead of
+  // the visitor-default "Every audited product, ranked" with a fresh-
+  // audit CTA. Fired once on mount when authenticated; anon stays on
+  // the default copy.
+  const [buckets, setBuckets] = useState<MemberStageBuckets | null>(null)
+  useEffect(() => {
+    if (!user?.id) { setBuckets(null); return }
+    let alive = true
+    fetchMemberStageBuckets(user.id).then(b => { if (alive) setBuckets(b) })
+    return () => { alive = false }
+  }, [user?.id])
+  const headerCopy = useMemo(() => pickProductsHeader(user, buckets), [user, buckets])
 
   const category: CatFilter      = isCategoryFilter(params.get('cat')) ? params.get('cat') as CatFilter : 'all'
   const window:   LadderWindow   = isWindow(params.get('window'))   ? params.get('window') as LadderWindow : 'week'
@@ -150,30 +166,54 @@ export function LadderPage() {
         <header className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
           <div className="min-w-0">
             <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-              // PRODUCTS
+              {headerCopy.eyebrow}
             </div>
             <h1 className="font-display font-bold text-3xl md:text-4xl mb-3" style={{ color: 'var(--cream)' }}>
-              Every audited product, ranked
+              {headerCopy.title}
             </h1>
             <p className="font-light text-sm md:text-base max-w-2xl" style={{ color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-              Seven categories. Four time windows. Score 84+ earns Encore. Live ranking updates the moment any audit finishes.
+              {headerCopy.sub}
             </p>
+            {/* Stage-buckets chip strip · same data as Hero, repeated
+                here so /products lands a returning user with their
+                journey already named. Anon + zero-bucket members see
+                nothing extra. Each chip deep-links to /me. */}
+            {buckets && (buckets.backstage > 0 || buckets.onStage > 0 || buckets.encore > 0) && (
+              <div className="mt-4 flex gap-2 flex-wrap font-mono text-[10px] tracking-widest">
+                {buckets.backstage > 0 && (
+                  <NavLink to="/me" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(248,245,238,0.06)', color: 'var(--cream)', border: '1px solid rgba(248,245,238,0.18)', borderRadius: '2px' }}>
+                    {buckets.backstage} BACKSTAGE
+                  </NavLink>
+                )}
+                {buckets.onStage > 0 && (
+                  <NavLink to="/me" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(0,212,170,0.08)', color: '#00D4AA', border: '1px solid rgba(0,212,170,0.25)', borderRadius: '2px' }}>
+                    {buckets.onStage} ON STAGE
+                  </NavLink>
+                )}
+                {buckets.encore > 0 && (
+                  <NavLink to="/me" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(240,192,64,0.10)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.35)', borderRadius: '2px' }}>
+                    {buckets.encore} ENCORE
+                  </NavLink>
+                )}
+              </div>
+            )}
           </div>
-          {/* CTA · always on. The original gate hid this from signed-in
-              users, which was backwards — members are the ones who
-              actually have a new vibecoded MVP to audition. /submit
-              handles both anon (auth wall → flow) and member (jump
-              straight in) paths. Copy varies slightly for members so
-              the page recognises they've already signed up. */}
+          {/* CTA · state-aware (2026-05-17). Anon + zero-bucket members
+              see the "analyze / audition" funnel (same as before).
+              Members with backstage rows see "Continue in Backstage" so
+              the journey is one click from /products too. The fresh-
+              audit funnel is always reachable via the BACKSTAGE lane
+              CTA below ("How a backstage audition works →") + the
+              ON STAGE lane footer ("Audition your project →"). */}
           <NavLink
-            to="/submit"
+            to={headerCopy.ctaTo}
             className="font-mono text-xs font-medium tracking-wide px-4 py-2 whitespace-nowrap self-start md:self-auto"
             style={{
               background: 'var(--gold-500)', color: 'var(--navy-900)',
               border: 'none', borderRadius: '2px', textDecoration: 'none',
             }}
           >
-            {user ? 'ANALYZE MY MVP →' : 'AUDITION YOUR PROJECT →'}
+            {headerCopy.ctaLabel}
           </NavLink>
         </header>
 
@@ -413,10 +453,12 @@ function LadderRowItem({ row, isFirst, onOpen }: { row: LadderRow; isFirst?: boo
             <span>{ago}</span>
             <span>·</span>
             <span>{row.audit_count} audit{row.audit_count === 1 ? '' : 's'}</span>
-            {row.status === 'graduated' && <>
-              <span>·</span>
-              <span style={{ color: '#00D4AA' }}>encore</span>
-            </>}
+            {(row.status === 'graduated' || row.status === 'valedictorian' || (row.score_total ?? 0) >= 84) && (
+              <>
+                <span>·</span>
+                <StageBadge stage="encore" size="xs" iconless />
+              </>
+            )}
             <StreakBadge row={row} />
           </div>
         </div>
@@ -515,4 +557,56 @@ function formatAgo(d: Date): string {
   if (day < 30)   return `${day}d ago`
   const mo = Math.floor(day / 30)
   return `${mo}mo ago`
+}
+
+// ── /products header copy picker · stage-aware ──
+// Anon and zero-bucket members get the visitor default ("Every audited
+// product, ranked"). Members with backstage rows see the journey-aware
+// variant so the page lands them on the right next step instead of the
+// fresh-audit funnel they don't need.
+interface ProductsHeaderCopy {
+  eyebrow:  string
+  title:    string
+  sub:      string
+  ctaLabel: string
+  ctaTo:    string
+}
+function pickProductsHeader(user: { id: string } | null | undefined, buckets: MemberStageBuckets | null): ProductsHeaderCopy {
+  const DEFAULT: ProductsHeaderCopy = {
+    eyebrow:  '// PRODUCTS',
+    title:    'Every audited product, ranked',
+    sub:      'Seven categories. Four time windows. Score 84+ earns Encore. Live ranking updates the moment any audit finishes.',
+    ctaLabel: user ? 'ANALYZE MY MVP →' : 'AUDITION YOUR PROJECT →',
+    ctaTo:    '/submit',
+  }
+  if (!user || !buckets) return DEFAULT
+  if (buckets.backstage > 0) {
+    const n = buckets.backstage
+    return {
+      eyebrow:  '// YOUR JOURNEY · PRODUCTS',
+      title:    n === 1 ? 'You have 1 audition in backstage' : `You have ${n} auditions in backstage`,
+      sub:      'Iterate, re-audit, polish — then put them on stage when they\'re ready. The full ladder below is everyone else who already did.',
+      ctaLabel: `CONTINUE BACKSTAGE (${n}) →`,
+      ctaTo:    '/me',
+    }
+  }
+  if (buckets.onStage > 0) {
+    return {
+      eyebrow:  '// YOUR JOURNEY · PRODUCTS',
+      title:    'Your projects are on the stage',
+      sub:      'Watch where they sit in the ranking · re-audit any one to push the score up · audition another to enter a fresh category.',
+      ctaLabel: 'YOUR STANDINGS →',
+      ctaTo:    '/me',
+    }
+  }
+  if (buckets.encore > 0) {
+    return {
+      eyebrow:  '// YOUR JOURNEY · PRODUCTS',
+      title:    'You\'ve crossed the Encore line',
+      sub:      'The Encore archive is yours · audition your next project to keep the streak going.',
+      ctaLabel: 'ANALYZE THE NEXT →',
+      ctaTo:    '/submit',
+    }
+  }
+  return DEFAULT
 }
