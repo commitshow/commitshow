@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 import { Hero } from '../components/Hero'
 import { HeroUrlHook } from '../components/HeroUrlHook'
 import { AuditShowcase } from '../components/AuditShowcase'
@@ -65,12 +66,31 @@ const GRADE_DATA = [
 
 export function LandingPage() {
   const stats = useHeroStats()
+  const { user, loading: authLoading } = useAuth()
   const [currentQuarterly, setCurrentQuarterly] = useState<Season | null>(null)
   useEffect(() => {
     let alive = true
     loadCurrentSeason().then(s => { if (alive) setCurrentQuarterly(s) })
     return () => { alive = false }
   }, [])
+
+  // 2026-05-17 · CEO 피드백 · `/` is the marketing/acquisition surface.
+  // For signed-in members it's redundant — they've already converted,
+  // and the visitor Hero buries the actionable surfaces (their
+  // backstage / standings / library) under a fold of pitch copy.
+  // Once auth resolves, redirect members straight to /products (the
+  // live league surface). Anon visitors keep the landing. Hash links
+  // (`#what-we-catch` etc.) and explicit re-visits via the brand
+  // wordmark still work — they pass through this same redirect and
+  // land on a richer page.
+  //
+  // During auth load we render the landing optimistically because the
+  // majority of `/` traffic is anonymous; the brief flash a returning
+  // member sees on hard reload is the lesser cost than blanking the
+  // page for visitors.
+  if (!authLoading && user) {
+    return <Navigate to="/products" replace />
+  }
 
   return (
     <div className="relative min-h-screen">
