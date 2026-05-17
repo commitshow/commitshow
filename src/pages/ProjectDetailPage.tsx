@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
@@ -147,7 +148,7 @@ export function ProjectDetailPage() {
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase | undefined>(undefined)
   const [seasonProgress, setSeasonProgress] = useState<SeasonProgress | null>(null)
   const [creator, setCreator] = useState<CreatorIdentity | null>(null)
-  const [activeSection, setActiveSection] = useState<string>('overview')
+  const [activeSection, setActiveSection] = useState<string>('analysis')
   // 2026-05-17 · once-per-mount guard so the backstage-owner Coach
   // auto-scroll fires exactly once after the snapshot loads. Without
   // it the effect would re-trigger on every snapshot update (re-audit
@@ -159,6 +160,10 @@ export function ProjectDetailPage() {
   // a two-step confirm tied to backstage status only (active rows
   // can't be deleted — RLS gates it too, 20260517 migration).
   const [polishOpen,      setPolishOpen]      = useState(false)
+  // 2026-05-18 · Market edit modal · Market tab dropped from
+  // OwnerToolsTabs · About section now carries the inline EDIT
+  // affordance, this state opens MarketPositionForm in a modal.
+  const [marketEditOpen,  setMarketEditOpen]  = useState(false)
   const [confirmRemove,   setConfirmRemove]   = useState(false)
   const [removeBusy,      setRemoveBusy]      = useState(false)
   const [removeError,     setRemoveError]     = useState<string | null>(null)
@@ -418,7 +423,7 @@ export function ProjectDetailPage() {
   // Scroll-spy · highlight the section nav chip that matches the viewport
   useEffect(() => {
     if (loading) return
-    const ids = ['overview', 'analysis', 'activity', 'backstage', 'brief']
+    const ids = ['analysis', 'activity', 'backstage', 'brief', 'owner-utilities']
     const observer = new IntersectionObserver(
       entries => {
         // Pick the most-visible intersecting section; fall back to first hit
@@ -515,13 +520,18 @@ export function ProjectDetailPage() {
   const isVotingPhase = seasonPhase === 'week_1' || seasonPhase === 'week_2' || seasonPhase === 'week_3'
 
   // ── Section nav config (order = scroll order) ───────────────
+  // 2026-05-18 (CEO 피드백) · Overview tab removed · its content
+  // (description pullquote, screenshots, ScoreTimeline, VibeConcerns,
+  // NativeApp panel) moved into the top of Analysis where it shares
+  // context with the audit report (the framework panels ARE audit
+  // findings, not separate "overview" data). "Private brief" tab
+  // renamed to match the section heading change ("Creator's notes").
   const sections: Array<{ id: string; label: string; ownerOnly?: boolean }> = [
-    { id: 'overview',  label: 'Overview' },
     { id: 'analysis',  label: 'Analysis' },
     { id: 'activity',  label: 'Activity' },
     { id: 'backstage', label: 'Backstage' },
   ]
-  if (isOwner) sections.push({ id: 'brief', label: 'Private brief', ownerOnly: true })
+  if (isOwner) sections.push({ id: 'brief', label: "Creator's notes", ownerOnly: true })
 
   // Audition delta badge · latest round change (reused in hero + scan strip)
   const latestSnap = timeline[timeline.length - 1]
@@ -1033,7 +1043,12 @@ export function ProjectDetailPage() {
               seconds without scrolling into the audit. Hides itself
               when no signals exist. */}
         <div className="mt-4">
-          <AboutProjectSection projectId={project.id} projectName={project.project_name} />
+          <AboutProjectSection
+            projectId={project.id}
+            projectName={project.project_name}
+            isOwner={isOwner}
+            onEditMarket={() => setMarketEditOpen(true)}
+          />
         </div>
 
         {/* ── Coach + Polish gate · 2026-05-17 moved here from top of
@@ -1154,15 +1169,14 @@ export function ProjectDetailPage() {
             on the right because of the badge snippet pre. */}
         <div className="grid grid-cols-1 gap-10 min-w-0">
           {/* OVERVIEW */}
-          <section id="overview" className="scroll-mt-28">
-            <SectionHeader label="OVERVIEW" />
-
-            {/* MarketPositionCard removed from here 2026-05-08 · the
-                AboutProjectSection above the section nav now carries
-                the one-liner / model / stage chips alongside the rest
-                of the casual narrative. OVERVIEW becomes pure
-                description + screenshots. */}
-
+          {/* ANALYSIS · 2026-05-18 · merged the standalone Overview
+              section into Analysis (CEO 피드백 consolidation). The
+              top of Analysis carries description pullquote +
+              screenshots + ScoreTimeline + VibeConcerns + NativeApp
+              panels (all the "what's the project + what did the
+              audit find graphically" content), then the full
+              AnalysisResultCard with the textual audit report. */}
+          <section id="analysis" className="scroll-mt-28">
             {/* Description pullquote — the hero text now lives here, styled up */}
             {project.description && (
               <DescriptionPullquote
@@ -1197,16 +1211,7 @@ export function ProjectDetailPage() {
               </div>
             )}
 
-            {/* GraduationStanding moved to end of ANALYSIS section ·
-                'this score → which Encore tier' is the conclusion of
-                score analysis, not an overview fact. Tier 1 page-tighten
-                pass · 2026-05-07. */}
-            <div className="grid gap-5">
-              {/* Last timeline point reflects the live ladder total
-                  (engagement-driven). Earlier points stay as audit-time
-                  snapshots — you can't rewrite history. delta is recomputed
-                  against the previous point so the chart's rightmost label
-                  agrees with ScanStrip / AnalysisResultCard / Ladder. */}
+            <div className="grid gap-5 mb-8">
               <ScoreTimeline
                 showAsBand={showAsBand}
                 points={(() => {
@@ -1227,7 +1232,7 @@ export function ProjectDetailPage() {
                 score timeline and full Analysis card so beginners see the
                 most actionable failure-mode summary first. */}
             {vibeConcerns && (
-              <div className="mt-8">
+              <div className="mb-8">
                 <VibeConcernsPanel vibeConcerns={vibeConcerns} />
               </div>
             )}
@@ -1237,14 +1242,12 @@ export function ProjectDetailPage() {
                 footguns + distribution evidence in lieu of Lighthouse
                 / live URL probes. */}
             {nativeBreakdown && (
-              <div className="mt-8">
+              <div className="mb-8">
                 <NativeAppPanel breakdown={nativeBreakdown} footguns={nativeFootguns} />
               </div>
             )}
-          </section>
 
-          {/* ANALYSIS */}
-          <section id="analysis" className="scroll-mt-28">
+            {/* Analysis report header + AnalysisResultCard below */}
             <SectionHeader
               label="ANALYSIS"
               hint={
@@ -1409,18 +1412,48 @@ export function ProjectDetailPage() {
             <BackstagePanel project={project} scoreHidden={scoreHidden} />
           </CollapsibleSection>
 
-          {/* BRIEF · owner only · 3 tools as tabs (Brief edit · README badge · Token receipt) */}
+          {/* CREATOR'S NOTES · owner only · the Phase 2 brief moat
+              content (Failure Log · Decisions · Delegation · Next
+              Blocker · Stack Fingerprint). 2026-05-18 (CEO 피드백 ·
+              "분석과 PRIVATE BRIEF 가 여러면에서 겹친다") · was
+              "PRIVATE BRIEF" with tab bar (Brief / Market / README /
+              Token). Market dropped (now editable inline via About
+              card's EDIT button). README badge + Token receipt
+              demoted to a small Owner Utilities footer below ·
+              brief tab is now just the brief panel itself, no tab
+              wrapper · name updated to "CREATOR'S NOTES" to signal
+              this is user-written content distinct from the
+              engine-generated Analysis above. */}
           {isOwner && (
             <section id="brief" className="scroll-mt-28">
-              <SectionHeader label="PRIVATE BRIEF" hint="Only you can see this — three creator tools, one tab at a time." />
-              <OwnerToolsTabs
+              <SectionHeader
+                label="CREATOR'S NOTES"
+                hint="Failures · decisions · delegation · next blocker · stack fingerprint. Your own write-up, distinct from the audit."
+              />
+              <OwnerBriefPanel projectId={project.id} />
+            </section>
+          )}
+
+          {/* Owner Utilities · 2026-05-18 · README badge snippet +
+              Token receipt extracted from the old OwnerToolsTabs bar
+              (they're utility tools, not brief content, so they
+              don't belong under CREATOR'S NOTES). Default collapsed
+              · owner opens when they need either tool. */}
+          {isOwner && (
+            <CollapsibleSection
+              id="owner-utilities"
+              label="OWNER UTILITIES"
+              hint="README badge snippet · Token receipt form. Optional tools."
+              summary="Click to expand"
+            >
+              <OwnerUtilities
                 projectId={project.id}
                 projectName={project.project_name}
                 projectSlug={project.slug}
                 githubUrl={project.github_url}
                 projectScore={project.score_total}
               />
-            </section>
+            </CollapsibleSection>
           )}
 
           {/* Danger zone · owner-only · backstage-only. Deleting a
@@ -1551,6 +1584,16 @@ export function ProjectDetailPage() {
           project={project}
           onClose={() => setEditOpen(false)}
           onSaved={(updated) => { setProject(updated); setEditOpen(false) }}
+        />
+      )}
+
+      {/* 2026-05-18 · Market position edit modal · MarketPositionForm
+          lifted from the old "Market" tab inside OwnerToolsTabs ·
+          About card now carries the EDIT button that opens this. */}
+      {marketEditOpen && isOwner && (
+        <MarketEditModal
+          projectId={project.id}
+          onClose={() => setMarketEditOpen(false)}
         />
       )}
 
@@ -2002,11 +2045,73 @@ function CollapsibleSection({
   )
 }
 
-// OwnerToolsTabs · 3 owner-only tools (Brief edit · README badge ·
-// Token receipt) folded into a single tab bar so the page doesn't
-// stack 3 heavy cards on top of each other. One tool visible at a
-// time; sticky tab bar lets the owner switch between them.
-function OwnerToolsTabs({
+// 2026-05-18 · OwnerToolsTabs deleted (CEO 피드백 consolidation).
+//   · Brief tab → became the CREATOR'S NOTES section (OwnerBriefPanel
+//     rendered directly, no tab wrapper)
+//   · Market tab → AboutProjectSection's inline EDIT button opens
+//     MarketEditModal below (single editable surface)
+//   · README badge + Token receipt → demoted to OwnerUtilities
+//     (collapsed-by-default section at the bottom of the page)
+
+// MarketEditModal · portal-mounted MarketPositionForm. Triggered by
+// AboutProjectSection's EDIT button on owner view. Same form the old
+// Market tab hosted · just lives in a modal instead of a tab now.
+function MarketEditModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position:       'fixed',
+        inset:          0,
+        zIndex:         100,
+        background:     'rgba(6,12,26,0.78)',
+        backdropFilter: 'blur(4px)',
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        padding:        '20px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="card-navy w-full max-w-2xl p-5 max-h-[90vh] overflow-y-auto"
+        style={{ borderRadius: '2px' }}
+      >
+        <div className="flex items-baseline justify-between mb-4 gap-3">
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+            // EDIT · MARKET POSITION
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="font-mono text-[10px] tracking-widest px-2 py-1"
+            style={{
+              background:   'transparent',
+              color:        'var(--text-secondary)',
+              border:       '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '2px',
+              cursor:       'pointer',
+            }}
+          >
+            CLOSE
+          </button>
+        </div>
+        <MarketPositionForm
+          projectId={projectId}
+          prefill={{}}
+          onConfirmed={() => onClose()}
+        />
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// OwnerUtilities · README badge snippet + Token receipt form stacked
+// vertically inside the new "OWNER UTILITIES" collapsible section.
+// No tab bar · these are two small standalone tools, easier to scan
+// when both are visible at once after the user opens the section.
+function OwnerUtilities({
   projectId, projectName, projectSlug, githubUrl, projectScore,
 }: {
   projectId:    string
@@ -2015,63 +2120,24 @@ function OwnerToolsTabs({
   githubUrl:    string | null
   projectScore: number | null
 }) {
-  type Tab = 'brief' | 'market' | 'badge' | 'tokens'
-  const [tab, setTab] = useState<Tab>('brief')
-
-  const tabs: Array<{ id: Tab; label: string; sub: string }> = [
-    { id: 'brief',  label: 'Brief',         sub: 'edit your build brief' },
-    { id: 'market', label: 'Market',        sub: 'one-liner · model · stage' },
-    { id: 'badge',  label: 'README badge',  sub: 'show the score on GitHub' },
-    { id: 'tokens', label: 'Token receipt', sub: 'join the token leaderboard' },
-  ]
-
   return (
-    <div>
-      <div className="flex flex-wrap gap-1 mb-4">
-        {tabs.map(t => {
-          const active = tab === t.id
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className="font-mono text-[11px] tracking-wide px-3 py-2 transition-colors"
-              style={{
-                background:   active ? 'rgba(240,192,64,0.12)' : 'transparent',
-                color:        active ? 'var(--gold-500)'      : 'var(--text-secondary)',
-                border:       `1px solid ${active ? 'rgba(240,192,64,0.45)' : 'rgba(255,255,255,0.1)'}`,
-                borderRadius: '2px',
-                cursor:       'pointer',
-                fontWeight:   active ? 600 : 400,
-              }}
-            >
-              {t.label}
-            </button>
-          )
-        })}
-      </div>
-      {tab === 'brief' && (
-        <OwnerBriefPanel projectId={projectId} />
-      )}
-      {tab === 'market' && (
-        <MarketPositionForm
-          projectId={projectId}
-          // Standalone edit · no audit context here, prefill comes from
-          // current build_briefs row inside the form via useEffect.
-          prefill={{}}
-          onConfirmed={() => { /* stay on tab · success state handled inline */ }}
-        />
-      )}
-      {tab === 'badge' && (
+    <div className="space-y-6">
+      <div>
+        <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-label)' }}>
+          README BADGE · show the score on GitHub
+        </div>
         <BadgeSnippet projectId={projectId} projectName={projectName} projectSlug={projectSlug} githubUrl={githubUrl} />
-      )}
-      {tab === 'tokens' && (
+      </div>
+      <div>
+        <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--text-label)' }}>
+          TOKEN RECEIPT · join the token leaderboard
+        </div>
         <TokenReceiptForm
           projectId={projectId}
           projectScore={projectScore}
           projectGithubUrl={githubUrl}
         />
-      )}
+      </div>
     </div>
   )
 }

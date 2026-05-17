@@ -35,7 +35,7 @@ export function OwnerBriefPanel({ projectId }: Props) {
   const failures = (brief.failure_log ?? []) as Array<{ symptom: string; cause: string; fix: string; prevention?: string }>
   const decisions = (brief.decision_archaeology ?? []) as Array<{ original_plan?: string; final_choice?: string; outcome?: string; chose?: string; over?: string; reason?: string }>
   const delegation = (brief.ai_delegation_map ?? []) as Array<{ domain: string; ai_pct: number; human_pct: number; notes?: string }>
-  const liveProof = (brief.live_proof ?? {}) as Record<string, string | undefined>
+  // liveProof destructure removed 2026-05-18 (LIVE PROOF block dropped · duplicate of hero)
 
   const stackOrder: Array<{ key: string; label: string }> = [
     { key: 'runtime',      label: 'Runtime' },
@@ -133,16 +133,13 @@ export function OwnerBriefPanel({ projectId }: Props) {
         ))}
       </BriefSection>
 
-      {/* Live proof */}
-      <BriefSection title="LIVE PROOF">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
-          <KV k="Deployed URL"  v={liveProof.deployed_url ?? ''} />
-          <KV k="GitHub URL"    v={liveProof.github_url ?? ''} />
-          <KV k="API"           v={liveProof.api_endpoints ?? liveProof.api_url ?? ''} />
-          <KV k="On-chain"      v={liveProof.contract_addresses ?? liveProof.contract_addr ?? ''} />
-          <KV k="Other"         v={liveProof.other_evidence ?? ''} />
-        </div>
-      </BriefSection>
+      {/* LIVE PROOF block removed 2026-05-18 (CEO 피드백 · duplicate).
+          Deployed URL + GitHub URL are already canonical on the hero
+          (OPEN LIVE button + GitHub icon link). API + on-chain + other
+          evidence drop entirely · the moat content of this brief is
+          failure_log / decisions / delegation / next_blocker, not
+          published URLs the audit can already see. liveProof variable
+          dropped from useMemo destructuring below to keep TS happy. */}
 
       {/* Next blocker */}
       {brief.next_blocker && (

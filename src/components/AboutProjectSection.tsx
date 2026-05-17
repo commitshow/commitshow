@@ -63,7 +63,14 @@ const STAGE_LABELS: Record<string, string> = {
   scaling:  'Scaling',
 }
 
-export function AboutProjectSection({ projectId, projectName }: { projectId: string; projectName: string }) {
+export function AboutProjectSection({
+  projectId, projectName, isOwner = false, onEditMarket,
+}: {
+  projectId:     string
+  projectName:   string
+  isOwner?:      boolean
+  onEditMarket?: () => void
+}) {
   const [row, setRow]         = useState<BriefRow | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -136,8 +143,32 @@ export function AboutProjectSection({ projectId, projectName }: { projectId: str
         borderRadius: '2px',
       }}
     >
-      <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-        // ABOUT THIS PROJECT
+      {/* Header strip · 2026-05-18 · added owner-edit affordance after
+          the Market tab was removed from OwnerToolsTabs (Market data
+          is the same as About's headline + features + target_user +
+          stage/business_model chips · single editable location now). */}
+      <div className="flex items-baseline justify-between gap-3 mb-2">
+        <div className="font-mono text-[10px] tracking-widest" style={{ color: 'var(--gold-500)' }}>
+          // ABOUT THIS PROJECT
+        </div>
+        {isOwner && onEditMarket && (
+          <button
+            type="button"
+            onClick={onEditMarket}
+            className="font-mono text-[10px] tracking-widest px-2 py-1 transition-colors"
+            style={{
+              background:   'transparent',
+              color:        'var(--gold-500)',
+              border:       '1px solid rgba(240,192,64,0.3)',
+              borderRadius: '2px',
+              cursor:       'pointer',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(240,192,64,0.08)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            EDIT
+          </button>
+        )}
       </div>
 
       {headline && (
