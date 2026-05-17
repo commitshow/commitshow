@@ -59,6 +59,11 @@ interface AuditCoachPanelProps {
    *  current band > previous, surface the soft audition prompt. Parent
    *  remembers this in state across re-audit firings. */
   previousBand?:  ReturnType<typeof scoreBand> | null
+  /** Fires when the polish gate is needed (project missing description /
+   *  thumbnail). Parent should expand BackstagePolishGate inline so the
+   *  user never leaves the management hub. Falls back to a navigate
+   *  redirect if the parent doesn't provide the callback. */
+  onPolishNeeded?: () => void
   /** Fires after audition_project flips status backstage→active. Parent
    *  must refetch the project so the page re-renders without the Coach
    *  (status='active' gates it out) — the user is already on
@@ -87,7 +92,7 @@ const BAND_RANK: Record<string, number> = {
 export function AuditCoachPanel({
   project, snapshotRich, lighthouse, githubSignals,
   onReanalyze, reanalyzing = false, previousBand = null,
-  onAuditioned,
+  onAuditioned, onPolishNeeded,
 }: AuditCoachPanelProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -139,7 +144,15 @@ export function AuditCoachPanel({
     const hasDescription = !!(project.description && project.description.trim().length > 0)
     const hasImages      = Array.isArray(project.images) && project.images.length > 0
     if (!hasDescription || !hasImages) {
-      navigate('/me?polish=' + project.id)
+      // 2026-05-17 · prefer inline polish gate via parent callback so
+      // the user stays on the management hub. Falls back to the
+      // legacy navigate path for surfaces that haven't wired the
+      // callback yet.
+      if (onPolishNeeded) {
+        onPolishNeeded()
+      } else {
+        navigate('/me?polish=' + project.id)
+      }
       return
     }
     setAuditionBusy(true)
@@ -510,21 +523,107 @@ function CoachRow({ item, checked, onToggle }: { item: CoachItem; checked: boole
         </button>
       </div>
 
-      {/* Expanded · how-to */}
+      {/* Expanded · how-to with Copy button (2026-05-17 paste-ready).
+          Previously rendered as plain pre-wrapped text · users had to
+          select-then-copy manually and got the explanation prose
+          along with the code. CopyButton extracts the paste-ready
+          portion (catalog howTo strings mix narration with concrete
+          code snippets · the helper finds the code lines) and copies
+          them so the next click in the user's editor / AI is a paste,
+          not a re-type. Falls back to whole-text copy if no code-like
+          lines are detected. */}
       {expanded && (
-        <div
-          className="mx-3 mb-3 px-3 py-3 font-mono text-[12px] whitespace-pre-wrap"
-          style={{
-            background:    'rgba(6,12,26,0.5)',
-            border:        '1px solid rgba(255,255,255,0.06)',
-            borderRadius:  '2px',
-            color:         'var(--text-primary)',
-            lineHeight:    1.6,
-          }}
-        >
-          {item.howTo}
+        <div className="mx-3 mb-3">
+          <div className="flex justify-end mb-1.5">
+            <CopyButton howTo={item.howTo} />
+          </div>
+          <div
+            className="px-3 py-3 font-mono text-[12px] whitespace-pre-wrap"
+            style={{
+              background:    'rgba(6,12,26,0.5)',
+              border:        '1px solid rgba(255,255,255,0.06)',
+              borderRadius:  '2px',
+              color:         'var(--text-primary)',
+              lineHeight:    1.6,
+            }}
+          >
+            {item.howTo}
+          </div>
         </div>
       )}
     </li>
+  )
+}
+
+// Extract the paste-ready portion of a Coach howTo string. Catalog
+// howTos look like "Add to your <head>:\n<meta property=...>\n\nUse a
+// 1200×630 PNG that shows..." — the user only wants the meta tag, not
+// the narration. Heuristic: pick lines that look like code (tags /
+// JSON braces / config keys / shell commands) and return them joined.
+// If the heuristic finds nothing structural, fall back to the entire
+// string so the Copy button always does *something* useful.
+function extractCodeBlock(raw: string): string {
+  const lines = raw.split('\n')
+  const codeLike = lines.filter(l => {
+    const t = l.trim()
+    if (!t) return false
+    return /^[<{}\[\]]/.test(t)                              // tags · JSON · arrays
+        || /^[A-Z][A-Za-z-]*-[A-Za-z-]+:/.test(t)            // HTTP headers (Content-Security-Policy: …)
+        || /^(npm|npx|pnpm|yarn|bun|node|deno|git|curl|supabase)\s/.test(t)  // CLI commands
+        || /^\s{2,}["'][^"']+["']\s*:/.test(t)               // nested JSON keys
+        || /^\s*"[^"]+"\s*:/.test(t)                          // JSON keys at root
+        || (t.includes('=') && t.length < 200 && /^[A-Z_][A-Z0-9_]*=/.test(t))  // env-var lines
+  })
+  // Need a meaningful block — single character or no hits = bail.
+  if (codeLike.length === 0) return raw
+  return codeLike.join('\n')
+}
+
+function CopyButton({ howTo }: { howTo: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    const payload = extractCodeBlock(howTo)
+    try {
+      await navigator.clipboard.writeText(payload)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      // Clipboard API can be blocked (insecure context, denied permission).
+      // Fallback: select the howTo text via textarea hack.
+      const ta = document.createElement('textarea')
+      ta.value = payload
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      try { document.execCommand('copy'); setCopied(true); window.setTimeout(() => setCopied(false), 1600) } catch { /* give up */ }
+      document.body.removeChild(ta)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[10px] tracking-wide transition-all"
+      style={{
+        background:   copied ? 'rgba(0,212,170,0.14)' : 'rgba(248,245,238,0.04)',
+        color:        copied ? '#00D4AA' : 'var(--cream)',
+        border:       `1px solid ${copied ? 'rgba(0,212,170,0.45)' : 'rgba(248,245,238,0.18)'}`,
+        borderRadius: '2px',
+        cursor:       'pointer',
+      }}
+    >
+      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {copied ? (
+          <path d="M5 12l4 4L19 6" />
+        ) : (
+          <>
+            <rect x="9" y="9" width="13" height="13" rx="1.5" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+          </>
+        )}
+      </svg>
+      {copied ? 'Copied · paste into your AI / editor' : 'Copy paste-ready snippet'}
+    </button>
   )
 }

@@ -40,6 +40,8 @@ import { NativeAppPanel, type NativeAppBreakdown, type NativeFootguns } from '..
 import { ForecastModal } from '../components/ForecastModal'
 import { ApplaudButton } from '../components/ApplaudButton'
 import { StageBadge } from '../components/StageBadge'
+import { BackstagePolishGate } from '../components/BackstagePolishGate'
+import { deleteProject } from '../lib/projectQueries'
 import { EditProjectModal } from '../components/EditProjectModal'
 import { ProjectActionFooter } from '../components/ProjectActionFooter'
 import { fetchAuditionStreak } from '../lib/auditionStreak'
@@ -145,6 +147,15 @@ export function ProjectDetailPage() {
   const [seasonProgress, setSeasonProgress] = useState<SeasonProgress | null>(null)
   const [creator, setCreator] = useState<CreatorIdentity | null>(null)
   const [activeSection, setActiveSection] = useState<string>('overview')
+  // 2026-05-17 · owner-only management hub state. Polish gate expands
+  // inline when Coach reports the card isn't ready (no description /
+  // no thumbnail) so the user never leaves the page. Remove zone uses
+  // a two-step confirm tied to backstage status only (active rows
+  // can't be deleted — RLS gates it too, 20260517 migration).
+  const [polishOpen,      setPolishOpen]      = useState(false)
+  const [confirmRemove,   setConfirmRemove]   = useState(false)
+  const [removeBusy,      setRemoveBusy]      = useState(false)
+  const [removeError,     setRemoveError]     = useState<string | null>(null)
   const [descExpanded, setDescExpanded] = useState(false)
 
   useEffect(() => {
@@ -496,14 +507,15 @@ export function ProjectDetailPage() {
           />
         )}
 
-        {/* ── Backstage banner · status='backstage' (owner-only · RLS) ──
-              Audit-then-audition split (§16.2). Owners viewing their
-              own backstage project get an explicit reminder that it's
-              not on the league yet, plus a one-click promote affordance
-              that lands them on /me where BackstageSection handles the
-              audition flow with full ticket visibility. */}
+        {/* Backstage banner · status='backstage' (owner-only · RLS) ──
+              2026-05-17 · CTA removed (was "BRING IT ON STAGE → /me"
+              which routed the user away from the management hub when
+              the AuditCoachPanel directly below already exposes the
+              audition button inline). Banner is now informational
+              only — names the state + reminds the privacy contract.
+              The Coach panel handles the actual action. */}
         {project.status === 'backstage' && isOwner && (
-          <div className="mb-4 p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
+          <div className="mb-4 p-4 flex items-baseline gap-3 flex-wrap" style={{
             background: 'rgba(240,192,64,0.07)',
             border: '1px solid rgba(240,192,64,0.35)',
             borderRadius: '2px',
@@ -516,19 +528,6 @@ export function ProjectDetailPage() {
                 Backstage is private. Climb the coach below first, then audition to share with the MVPs already on stage.
               </div>
             </div>
-            <a
-              href="/me"
-              className="px-4 py-2 font-mono text-xs font-medium tracking-wide whitespace-nowrap"
-              style={{
-                background: 'var(--gold-500)',
-                color: 'var(--navy-900)',
-                border: 'none',
-                borderRadius: '2px',
-                textDecoration: 'none',
-              }}
-            >
-              BRING IT ON STAGE →
-            </a>
           </div>
         )}
 
@@ -555,6 +554,15 @@ export function ProjectDetailPage() {
             onReanalyze={handleHeroReanalyze}
             reanalyzing={heroRerunBusy}
             previousBand={preReauditBand}
+            onPolishNeeded={() => {
+              // Coach detected the card isn't ready · expand the polish
+              // gate inline so the user stays in the management hub.
+              setPolishOpen(true)
+              // Scroll the gate into view after the next paint.
+              window.setTimeout(() => {
+                document.getElementById('backstage-polish-gate')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              }, 80)
+            }}
             onAuditioned={async () => {
               // audition_project flipped status backstage→active on the
               // server · refetch so the local state catches up and the
@@ -564,6 +572,29 @@ export function ProjectDetailPage() {
               if (refreshed) setProject(refreshed)
             }}
           />
+        )}
+
+        {/* Inline polish gate · expanded by Coach's onPolishNeeded
+            callback. Sits below the Coach so re-audit + audition CTAs
+            stay where the user expects after the gate closes. */}
+        {project.status === 'backstage' && isOwner && polishOpen && (
+          <div id="backstage-polish-gate" className="mb-4">
+            <BackstagePolishGate
+              project={project}
+              onSavedAndAuditioned={async () => {
+                setPolishOpen(false)
+                const refreshed = await fetchProjectById(project.id)
+                if (refreshed) setProject(refreshed)
+              }}
+              onCancel={() => setPolishOpen(false)}
+              onNoTicket={() => {
+                // Out of tickets after polish save · funnel into Stripe
+                // via /backstage where the wallet card lives.
+                setPolishOpen(false)
+                navigate('/backstage')
+              }}
+            />
+          </div>
         )}
 
         {/* ── Compact Hero (description moved to Overview pullquote) ── */}
@@ -1325,6 +1356,99 @@ export function ProjectDetailPage() {
                 githubUrl={project.github_url}
                 projectScore={project.score_total}
               />
+            </section>
+          )}
+
+          {/* Danger zone · owner-only · backstage-only. Deleting a
+              project that's already auditioned would orphan scout
+              votes, applauds, snapshots, ladder rank, encore
+              certificates — so we only expose Remove while the
+              project is still in the private backstage state. RLS
+              enforces the same gate server-side (20260517 migration).
+              Two-step confirm so a misclick can't wipe the audit. */}
+          {isOwner && project.status === 'backstage' && (
+            <section className="scroll-mt-28 mt-12">
+              <SectionHeader label="DANGER ZONE" hint="Remove this audition entirely — backstage rows only · auditioned projects can't be deleted." />
+              {removeError && (
+                <div className="mb-3 px-3 py-2 font-mono text-xs" style={{
+                  background: 'rgba(200,16,46,0.08)',
+                  border: '1px solid rgba(200,16,46,0.4)',
+                  borderRadius: '2px',
+                  color: 'var(--scarlet)',
+                }}>
+                  {removeError}
+                </div>
+              )}
+              <div className="card-navy p-4 flex items-center justify-between gap-3 flex-wrap" style={{
+                border: '1px solid rgba(200,16,46,0.25)',
+                borderRadius: '2px',
+              }}>
+                <div className="font-mono text-xs" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                  Permanently delete this audition · snapshots, audit-token history,
+                  and the thumbnail are removed too. Cannot be undone.
+                </div>
+                {confirmRemove ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[10px]" style={{ color: 'var(--scarlet)' }}>Sure?</span>
+                    <button
+                      type="button"
+                      disabled={removeBusy}
+                      onClick={async () => {
+                        setRemoveBusy(true)
+                        setRemoveError(null)
+                        const { error: e } = await deleteProject(project.id)
+                        if (e) {
+                          setRemoveError(`Remove failed · ${e}`)
+                          setRemoveBusy(false)
+                          return
+                        }
+                        navigate('/backstage')
+                      }}
+                      className="px-3 py-1.5 font-mono text-[11px] font-medium tracking-wide"
+                      style={{
+                        background:   'var(--scarlet)',
+                        color:        'var(--cream)',
+                        border:       'none',
+                        borderRadius: '2px',
+                        cursor:       removeBusy ? 'wait' : 'pointer',
+                        opacity:      removeBusy ? 0.6 : 1,
+                      }}
+                    >
+                      {removeBusy ? 'REMOVING…' : 'REMOVE FOREVER'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={removeBusy}
+                      onClick={() => setConfirmRemove(false)}
+                      className="px-3 py-1.5 font-mono text-[11px] tracking-wide"
+                      style={{
+                        background:   'transparent',
+                        color:        'var(--cream)',
+                        border:       '1px solid rgba(248,245,238,0.2)',
+                        borderRadius: '2px',
+                        cursor:       'pointer',
+                      }}
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRemove(true)}
+                    className="px-3 py-1.5 font-mono text-[11px] tracking-wide whitespace-nowrap"
+                    style={{
+                      background:   'transparent',
+                      color:        'var(--scarlet)',
+                      border:       '1px solid rgba(200,16,46,0.4)',
+                      borderRadius: '2px',
+                      cursor:       'pointer',
+                    }}
+                  >
+                    Remove audition
+                  </button>
+                )}
+              </div>
             </section>
           )}
         </div>
