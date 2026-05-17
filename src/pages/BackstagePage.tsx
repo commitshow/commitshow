@@ -83,6 +83,15 @@ export function BackstagePage() {
           </div>
         )}
 
+        {/* 2026-05-17 · For members with backstage rows, the marketing
+            spiel ("Document what no one else captures" + 5 deep
+            sections + closing CTA) is noise sitting under their actual
+            work. Collapsed into a single expandable card · only the
+            users who explicitly click open it see the full pitch.
+            Anonymous visitors still get it expanded (their primary
+            reason to be here). */}
+        <MarketingFold defaultOpen={!(user && hasBackstage)}>
+
         <header className="mb-12">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
             {user && hasBackstage ? '// HOW BACKSTAGE WORKS' : '// BACKSTAGE'}
@@ -204,6 +213,8 @@ export function BackstagePage() {
             </Link>
           </div>
         </div>
+
+        </MarketingFold>
       </div>
     </section>
   )
@@ -267,6 +278,47 @@ function Table({ rows }: { rows: Array<[string, string, string] | [string, strin
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// MarketingFold · collapsible wrapper around the Backstage marketing
+// copy. Members with backstage rows see a single "How Backstage works"
+// summary line (defaultOpen=false) instead of the full 5-section pitch
+// sitting under their work. Anonymous visitors get it expanded
+// (defaultOpen=true · they're here to learn what Backstage means).
+function MarketingFold({ defaultOpen, children }: { defaultOpen: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="card-navy" style={{ borderRadius: '2px' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-3 text-left p-5"
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+      >
+        <div className="min-w-0">
+          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+            // HOW BACKSTAGE WORKS
+          </div>
+          <div className="font-display font-bold text-lg mt-1" style={{ color: 'var(--cream)' }}>
+            What Backstage is + why the data is the moat
+          </div>
+          {!open && (
+            <div className="font-mono text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+              Click to read the full explanation · failure logs, decision archaeology, delegation map, next blocker.
+            </div>
+          )}
+        </div>
+        <span className="font-mono text-sm flex-shrink-0" style={{ color: 'var(--gold-500)' }}>
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open && (
+        <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(240,192,64,0.12)' }}>
+          {children}
+        </div>
+      )}
     </div>
   )
 }
