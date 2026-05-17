@@ -193,17 +193,26 @@ export function ProjectDetailPage() {
       // (may diverge from project.creator_name which was stored at submission).
       if (proj.creator_id) fetchProjectCreator(proj.creator_id).then(setCreator)
 
+      // 2026-05-18 bugfix · these queries were keyed off the URL param
+      // `id`, which is the slug ("10m") on the canonical-URL path.
+      // analysis_snapshots.project_id / timeline / forecasts / applauds
+      // are all UUID-keyed columns, so the slug never matched and the
+      // page rendered as "no snapshots yet" even when the project had
+      // a real audit on file. Coach gate (latestSnapRaw !== null) also
+      // stayed false because of this · which was why /projects/10m
+      // never showed the coaching panel. Switched to proj.id (the
+      // resolved UUID from fetchProjectByIdOrSlug above).
       const [{ data: latest }, tlPts, fcRows, apRows] = await Promise.all([
         supabase
           .from('analysis_snapshots')
           .select('id, score_auto, score_total, score_total_delta, delta_from_parent, rich_analysis, lighthouse, github_signals, trigger_type, created_at')
-          .eq('project_id', id)
+          .eq('project_id', proj.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
-        fetchProjectTimeline(id),
-        fetchProjectForecasts(id),
-        fetchProjectApplauds(id),
+        fetchProjectTimeline(proj.id),
+        fetchProjectForecasts(proj.id),
+        fetchProjectApplauds(proj.id),
       ])
 
       if (latest) {
