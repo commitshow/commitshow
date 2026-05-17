@@ -83,14 +83,12 @@ export function BackstagePage() {
           </div>
         )}
 
-        {/* 2026-05-17 · For members with backstage rows, the marketing
-            spiel ("Document what no one else captures" + 5 deep
-            sections + closing CTA) is noise sitting under their actual
-            work. Collapsed into a single expandable card · only the
-            users who explicitly click open it see the full pitch.
-            Anonymous visitors still get it expanded (their primary
-            reason to be here). */}
-        <MarketingFold defaultOpen={!(user && hasBackstage)}>
+        {/* 2026-05-17 · Marketing spiel ("Document what no one else
+            captures" + 5 deep sections + closing CTA) is collapsed by
+            default for every viewer (CEO 피드백 · the page should not
+            lead with a wall of copy regardless of who's reading).
+            Anyone curious can click the fold open. */}
+        <MarketingFold defaultOpen={false}>
 
         <header className="mb-12">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
