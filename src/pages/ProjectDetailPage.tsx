@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { projectSlug, projectShareUrl } from '../lib/projectSlug'
@@ -481,6 +481,18 @@ export function ProjectDetailPage() {
 
   const canForecast = !!user && user.id !== project.creator_id
   const isOwner     = !!user && user.id === project.creator_id
+
+  // 2026-05-18 · BACKSTAGE non-owner curtain page (CEO 피드백 ·
+  // "백스테이지 = 리스트에 작성자/점수밴드/프로젝트 상세 내용 노출안함").
+  // /products lists backstage rows now (RLS opened 2026-05-18) · clicking
+  // through must keep the curtain. Render a minimal page with title +
+  // thumbnail placeholder + StageBadge + curtain explanation · no
+  // description, no audit report, no comments, no forecast/applaud,
+  // no Coach. Owner viewing their own backstage gets the full
+  // management hub (handled below the early return).
+  if (project.status === 'backstage' && !isOwner) {
+    return <BackstageCurtainPage project={project} />
+  }
   // §re-audit privacy · 2026-05-10 directive · initial-only audits
   // (audit_count <= 1) hide the score from non-owners until the creator
   // re-audits. Lets creators iterate before public reveal · the first
@@ -542,29 +554,48 @@ export function ProjectDetailPage() {
           />
         )}
 
-        {/* Backstage banner · status='backstage' (owner-only · RLS) ──
-              2026-05-17 · CTA removed (was "BRING IT ON STAGE → /me"
-              which routed the user away from the management hub when
-              the AuditCoachPanel directly below already exposes the
-              audition button inline). Banner is now informational
-              only — names the state + reminds the privacy contract.
-              The Coach panel handles the actual action. */}
+        {/* Backstage banner · status='backstage' (owner-only) ──
+              2026-05-18 · Audition CTA promoted back into this banner
+              after CEO 피드백 · "백스테이지에서 온스테이지로의 권유가
+              현재 노출되지 않고 있는 상태". The audition button was
+              buried inside the Coach panel's auto-audition prompt
+              (which only fires after a band climb), so a backstage
+              owner with a never-re-audited project had no visible
+              path to "Put it on stage". Now the option is explicit
+              at the top of every backstage owner page · the Coach
+              handles the climb-first flow underneath. */}
         {project.status === 'backstage' && isOwner && (
-          <div className="mb-4 p-4 flex items-baseline gap-3 flex-wrap" style={{
+          <div className="mb-4 p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
             background: 'rgba(240,192,64,0.07)',
             border: '1px solid rgba(240,192,64,0.35)',
             borderRadius: '2px',
           }}>
             <div>
               <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
-                // BACKSTAGE · ONLY YOU CAN SEE
+                // BACKSTAGE · LISTED PUBLICLY · CREATOR + DETAILS HIDDEN
               </div>
-              <div className="font-mono text-[11px] mt-1" style={{ color: 'rgba(248,245,238,0.65)' }}>
-                Backstage is private. Climb the coach below first, then audition to share with the MVPs already on stage.
+              <div className="font-mono text-[11px] mt-1 max-w-2xl" style={{ color: 'rgba(248,245,238,0.65)', lineHeight: 1.6 }}>
+                Your project shows on /products as a curtain card · score, byline, description all sealed.
+                Climb the coach below if you want a higher score first, OR put it on stage now to open the
+                full card and start collecting forecasts.
               </div>
             </div>
+            <Link
+              to="/backstage"
+              className="font-mono text-xs font-medium tracking-widest px-4 py-2 whitespace-nowrap"
+              style={{
+                background:     'var(--gold-500)',
+                color:          'var(--navy-900)',
+                border:         'none',
+                borderRadius:   '2px',
+                textDecoration: 'none',
+              }}
+            >
+              PUT ON STAGE →
+            </Link>
           </div>
         )}
+
 
         {/* ── Pre-audition Coach · §16.2 (2026-05-15) ──
               Backstage-only owner surface. Lists 3-6 detected quick wins
@@ -1540,6 +1571,73 @@ export function ProjectDetailPage() {
         url={typeof window !== 'undefined' ? `${window.location.origin}/projects/${project.id}` : `/projects/${project.id}`}
         takeaway={shareJump?.takeaway ?? null}
       />
+    </section>
+  )
+}
+
+// Backstage non-owner curtain page · 2026-05-18 · CEO 피드백 · once
+// /products started listing all backstage rows publicly, clicking
+// through couldn't reveal the author or any project details. This is
+// the minimum-info card a non-owner sees: title + thumbnail (or
+// curtain placeholder) + StageBadge + a single sentence telling them
+// the rest is sealed until audition. No description, no audit
+// report, no comments, no forecast/applaud UI.
+function BackstageCurtainPage({ project }: { project: Project }) {
+  return (
+    <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen">
+      <div className="max-w-3xl mx-auto">
+        <Link
+          to="/products"
+          className="inline-block mb-3 font-mono text-xs tracking-wide"
+          style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
+        >
+          ← BACK TO PRODUCTS
+        </Link>
+
+        <div className="card-navy overflow-hidden" style={{ borderRadius: '2px' }}>
+          {/* Hero image · falls back to the same curtain placeholder
+              the lane card uses · single visual identity for
+              un-thumbnailed backstage projects. */}
+          <div className="relative" style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)' }}>
+            {project.thumbnail_url ? (
+              <img src={project.thumbnail_url} alt="" loading="lazy" className="w-full h-full block" style={{ objectFit: 'cover' }} />
+            ) : (
+              <div
+                className="w-full h-full flex flex-col items-center justify-center"
+                style={{ background: 'linear-gradient(135deg, #0F2040 0%, #060C1A 60%, #0F2040 100%)' }}
+              >
+                <svg width={64} height={64} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: 'rgba(240,192,64,0.55)' }}>
+                  <path d="M4 4h16" />
+                  <path d="M6 4v16c0-3 1.5-5 3-7-1.5 2-3 4-3 7" />
+                  <path d="M18 4v16c0-3-1.5-5-3-7 1.5 2 3 4 3 7" />
+                  <path d="M12 4v16" />
+                </svg>
+                <div className="font-mono text-[11px] mt-3 tracking-widest" style={{ color: 'rgba(248,245,238,0.5)' }}>
+                  BEHIND THE CURTAIN
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-5 md:p-7">
+            <div className="mb-3">
+              <StageBadge stage="backstage" size="md" />
+            </div>
+            <h1 className="font-display font-black text-2xl md:text-3xl leading-tight mb-3" style={{ color: 'var(--cream)' }}>
+              {project.project_name || 'Untitled audition'}
+            </h1>
+            <p className="font-light text-sm md:text-base" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+              This audition is behind the curtain. The creator hasn't put it on stage yet, so the
+              audit report, the score, and the author are kept private. Once they audition, the full
+              card opens up to the room.
+            </p>
+            <p className="font-mono text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
+              Browse other vibe coders' work →{' '}
+              <Link to="/products" style={{ color: 'var(--gold-500)' }}>/products</Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </section>
   )
 }

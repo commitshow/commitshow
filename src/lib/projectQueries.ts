@@ -160,45 +160,28 @@ export async function fetchMemberStageBuckets(memberId: string): Promise<MemberS
   return buckets
 }
 
-// 1b) Backstage-ready — BACKSTAGE lane on /products.
+// 1b) Backstage — BACKSTAGE lane on /products.
 //
-// New lane (2026-05-17) replacing NEW AUDITS. The old lane filtered
-// status='active' newest-14d, but those projects are already on the
-// body ladder · the lane was effectively a duplicate spotlight on
-// rows users could already find. BACKSTAGE surfaces a different
-// population entirely: projects iterating + polished, not yet
-// auditioned. Completes the journey narrative shown across the lanes:
+// 2026-05-18 (CEO 피드백) · dropped the polish gate (audit_count≥2 +
+// thumbnail + 30-char description) that used to filter this lane.
+// Stage definition: any project that has run an analysis but hasn't
+// auditioned yet is BACKSTAGE · publicly listed anonymously so peers
+// can see what's incubating. UI handles the anonymity (curtain
+// treatment on cards, hidden creator + score band, hidden details).
+// RLS now allows public-read for every status='backstage' row
+// (migration 20260518_backstage_lane_open.sql).
 //
-//     BACKSTAGE  →  ON STAGE  →  ENCORE
-//     iterating     active        score 84+
-//
-// Eligibility mirrors RLS migration 20260517_backstage_lane_public.sql:
-//   · status = 'backstage'        · audit done, not yet auditioned
-//   · audit_count >= 2            · iterated at least once (vs drive-by)
-//   · thumbnail_url IS NOT NULL   · visual identity registered
-//   · length(description) > 30    · real description, not placeholder
-//
-// RLS lets these rows escape the owner-private cage; non-eligible
-// backstage rows stay invisible to anon/other-creator readers.
-// Sorted by last_analysis_at desc so the freshest re-audits surface
-// first (matches "currently iterating" intuition · BACKSTAGE is about
-// movement, not creation date).
+// Sorted by last_analysis_at desc so the freshest analyses surface
+// first (matches "currently iterating" intuition).
 export async function fetchBackstageReady(): Promise<Project[]> {
   const { data, error } = await supabase
     .from('projects')
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq('status', 'backstage')
-    .gte('audit_count', 2)
-    .not('thumbnail_url', 'is', null)
     .order('last_analysis_at', { ascending: false, nullsFirst: false })
-    .limit(LANE_LIMIT * 2)   // over-fetch so the description-length client filter
-                              // can throw out short-bio rows without starving the lane
+    .limit(LANE_LIMIT)
   if (error || !data) return []
-  // length(description) > 30 not expressible in PostgREST · client-side
-  // filter is fine because over-fetch covers the trim.
-  return (data as unknown as Project[])
-    .filter(p => (p.description ?? '').trim().length > 30)
-    .slice(0, LANE_LIMIT)
+  return data as unknown as Project[]
 }
 
 // 2) Climbing — projects whose latest snapshot has a positive score delta.

@@ -77,7 +77,11 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
     >
       {/* Image region — pure visual, no text overlay or gradient.
-          Badges (grade + accent) sit on top with their own backdrop chip. */}
+          Badges (grade + accent) sit on top with their own backdrop chip.
+          2026-05-18 · BACKSTAGE with no thumbnail gets a curtain
+          placeholder (CEO 피드백 · "백스테이지에 어울리는 공용 썸네일")
+          instead of the generic "NO IMAGE" text · creates a recognizable
+          stage metaphor across all un-thumbnailed backstage cards. */}
       <div className="relative overflow-hidden" style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)' }}>
         {p.thumbnail_url ? (
           <img
@@ -87,6 +91,8 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
             className="w-full h-full transition-transform duration-500 group-hover:scale-[1.04]"
             style={{ objectFit: 'cover' }}
           />
+        ) : isBackstage ? (
+          <BackstageCurtainPlaceholder />
         ) : (
           <div className="w-full h-full flex items-center justify-center font-mono text-xs" style={{ color: 'rgba(248,245,238,0.25)' }}>
             NO IMAGE
@@ -138,18 +144,38 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
         >
           {p.project_name}
         </h4>
-        <span
-          className="font-mono text-xs font-medium px-2 py-0.5 flex-shrink-0"
-          style={{
-            background: hideScore ? 'rgba(255,255,255,0.04)' : (canSeeDigit ? 'rgba(240,192,64,0.1)' : `${bandColor}1A`),
-            color:      hideScore ? 'var(--text-secondary)' : (canSeeDigit ? 'var(--gold-500)' : bandColor),
-            border:     `1px solid ${hideScore ? 'rgba(255,255,255,0.08)' : (canSeeDigit ? 'rgba(240,192,64,0.3)' : `${bandColor}4D`)}`,
-            borderRadius: '2px',
-            ...(canSeeDigit ? { fontVariantNumeric: 'tabular-nums' } : { textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '10px' }),
-          }}
-        >
-          {hideScore ? '— pts' : canSeeDigit ? `${p.score_total} pts` : bandLabel(band)}
-        </span>
+        {/* Score chip · BACKSTAGE keeps it fully hidden (no band, no
+            digit, no '— pts' placeholder) so the lane reads as
+            "incubating · score withheld until on stage". §1-A ⑥
+            curtain treatment. Everywhere else (ON STAGE / ENCORE)
+            shows band/digit per the standard rules. */}
+        {isBackstage ? (
+          <span
+            className="font-mono text-[10px] font-medium px-2 py-0.5 flex-shrink-0 tracking-widest"
+            style={{
+              background: 'rgba(248,245,238,0.05)',
+              color: 'var(--text-muted)',
+              border: '1px solid rgba(248,245,238,0.15)',
+              borderRadius: '2px',
+            }}
+            title="Score is hidden while this project is backstage. Auditioning reveals it."
+          >
+            SCORE HIDDEN
+          </span>
+        ) : (
+          <span
+            className="font-mono text-xs font-medium px-2 py-0.5 flex-shrink-0"
+            style={{
+              background: hideScore ? 'rgba(255,255,255,0.04)' : (canSeeDigit ? 'rgba(240,192,64,0.1)' : `${bandColor}1A`),
+              color:      hideScore ? 'var(--text-secondary)' : (canSeeDigit ? 'var(--gold-500)' : bandColor),
+              border:     `1px solid ${hideScore ? 'rgba(255,255,255,0.08)' : (canSeeDigit ? 'rgba(240,192,64,0.3)' : `${bandColor}4D`)}`,
+              borderRadius: '2px',
+              ...(canSeeDigit ? { fontVariantNumeric: 'tabular-nums' } : { textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '10px' }),
+            }}
+          >
+            {hideScore ? '— pts' : canSeeDigit ? `${p.score_total} pts` : bandLabel(band)}
+          </span>
+        )}
       </div>
 
       {/* Creator region — own band at the bottom with subtle separator.
@@ -211,6 +237,46 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
             {accent.leftBadge}
           </span>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Shared curtain placeholder for BACKSTAGE cards without a thumbnail.
+// Single visual identity across the lane · creator can override by
+// uploading their own thumbnail. Pure SVG so it scales to any
+// container without an asset round-trip · stays on-brand (gold +
+// cream + navy) and reinforces the stage metaphor.
+function BackstageCurtainPlaceholder() {
+  return (
+    <div
+      className="w-full h-full flex flex-col items-center justify-center"
+      style={{
+        background: 'linear-gradient(135deg, #0F2040 0%, #060C1A 60%, #0F2040 100%)',
+      }}
+    >
+      <svg
+        width={56}
+        height={56}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        style={{ color: 'rgba(240,192,64,0.55)' }}
+      >
+        <path d="M4 4h16" />
+        <path d="M6 4v16c0-3 1.5-5 3-7-1.5 2-3 4-3 7" />
+        <path d="M18 4v16c0-3-1.5-5-3-7 1.5 2 3 4 3 7" />
+        <path d="M12 4v16" />
+      </svg>
+      <div
+        className="font-mono text-[10px] mt-3 tracking-widest"
+        style={{ color: 'rgba(248,245,238,0.5)' }}
+      >
+        BEHIND THE CURTAIN
       </div>
     </div>
   )
