@@ -13,45 +13,27 @@
 //     status='backstage' due to RLS).
 
 import { useEffect, useState, useCallback } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { supabase, PUBLIC_PROJECT_COLUMNS, type Project } from '../lib/supabase'
-import { PreAuditionCoachSlot } from './PreAuditionCoachSlot'
-import { BackstagePolishGate } from './BackstagePolishGate'
-
-interface TicketBalance {
-  free_remaining: number
-  paid_credit:    number
-  total_tickets:  number
-  free_quota:     number
-  prior_active:   number
-}
+import { deleteProject } from '../lib/projectQueries'
 
 export function BackstageSection({ memberId }: { memberId: string }) {
-  const [searchParams, setSearchParams] = useSearchParams()
   const [backstage,     setBackstage]     = useState<Project[] | null>(null)
-  const [balance,       setBalance]       = useState<TicketBalance | null>(null)
-  const [busyId,        setBusyId]        = useState<string | null>(null)
   const [error,         setError]         = useState<string | null>(null)
-  // §16.2 (2026-05-15) · which backstage row currently has its
-  // pre-audition Coach panel expanded inline. One at a time · clicking
-  // a different row's Coach toggle collapses any other open one. null
-  // when nothing is expanded.
-  const [coachOpenId,   setCoachOpenId]   = useState<string | null>(null)
-  // §16.2 (2026-05-16) · which row has the polish gate expanded.
-  // Audition button click flips this when description / images are
-  // missing, so the creator fills the public-card fields before the
-  // project flips to active. One row at a time (mirrors coachOpenId).
-  const [polishOpenId,  setPolishOpenId]  = useState<string | null>(null)
+  // 2026-05-17 · which row is being confirm-removed inline. Two-step
+  // remove (click trash icon → row shows "Sure? · REMOVE / CANCEL")
+  // so the destructive action lives in the same visual space as the
+  // row. Cleans up duplicate / abandoned backstage entries.
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [removingId,      setRemovingId]      = useState<string | null>(null)
 
   const loadAll = useCallback(async () => {
-    const [projRes, balRes] = await Promise.all([
-      supabase.from('projects').select(PUBLIC_PROJECT_COLUMNS)
-        .eq('creator_id', memberId).eq('status', 'backstage')
-        .order('created_at', { ascending: false }),
-      supabase.rpc('ticket_balance', { p_member_id: memberId }),
-    ])
-    setBackstage((projRes.data ?? []) as unknown as Project[])
-    if (!balRes.error) setBalance(balRes.data as TicketBalance)
+    const { data } = await supabase.from('projects').select(PUBLIC_PROJECT_COLUMNS)
+      .eq('creator_id', memberId).eq('status', 'backstage')
+      .order('created_at', { ascending: false })
+    setBackstage((data ?? []) as unknown as Project[])
+    // Ticket balance is shown by TicketWalletCard on /me · this list
+    // no longer renders it inline, so we skip the RPC round-trip.
   }, [memberId])
 
   useEffect(() => {
@@ -61,76 +43,24 @@ export function BackstageSection({ memberId }: { memberId: string }) {
     return () => window.removeEventListener('commitshow:tickets-updated', onUpdate)
   }, [loadAll])
 
-  // §16.2 (2026-05-16) · AuditCoachPanel on /projects/<id> routes
-  // unpolished projects here with ?polish=<id> so the user lands on
-  // /me with the right BackstagePolishGate already expanded. Once
-  // backstage rows load, match the param and pop the gate · then
-  // strip the query so a refresh doesn't re-open it after the user
-  // cancelled.
-  useEffect(() => {
-    const wantPolish = searchParams.get('polish')
-    if (!wantPolish || !backstage) return
-    const match = backstage.find(p => p.id === wantPolish)
-    if (match) {
-      setPolishOpenId(match.id)
-      setCoachOpenId(null)
-      // Scroll into view so the gate is visible after the route hop.
-      window.setTimeout(() => {
-        const el = document.getElementById(`backstage-row-${match.id}`)
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      }, 100)
-    }
-    // Strip ?polish so a refresh doesn't re-trigger.
-    const next = new URLSearchParams(searchParams)
-    next.delete('polish')
-    setSearchParams(next, { replace: true })
-  }, [backstage, searchParams, setSearchParams])
-
-  const handleAudition = async (projectId: string) => {
-    // Polish gate · description + at least one image are required for
-    // the audition stage so the public card has something to show. If
-    // either is missing, expand the BackstagePolishGate inline instead
-    // of going straight to audition_project · the gate's save handler
-    // chains projects UPDATE + audition_project so the creator still
-    // experiences this as a single audition flow.
-    const p = backstage?.find(x => x.id === projectId)
-    if (p) {
-      const hasDescription = !!(p.description && p.description.trim().length > 0)
-      const hasImages      = Array.isArray(p.images) && p.images.length > 0
-      if (!hasDescription || !hasImages) {
-        setPolishOpenId(projectId)
-        setCoachOpenId(null) // close any open Coach so the page doesn't grow two panels at once
-        setError(null)
-        return
-      }
-    }
-
-    setBusyId(projectId)
+  const handleRemove = async (projectId: string) => {
+    setRemovingId(projectId)
     setError(null)
     try {
-      const { data, error: e } = await supabase.rpc('audition_project', { p_project_id: projectId })
-      if (e) throw new Error(e.message)
-      const result = data as { ok: boolean; reason?: string }
-      if (result.ok) {
-        // Broadcast for other ticket-balance surfaces (Nav callout,
-        // /me wallet card) before our own reload so they all refresh
-        // off the same successful flip.
-        window.dispatchEvent(new CustomEvent('commitshow:tickets-updated'))
-        // Reload list + balance · the auditioned row drops off backstage.
-        await loadAll()
-        return
-      }
-      if (result.reason === 'no_ticket') {
-        await initiateStripeCheckout(projectId)
-        return
-      }
-      throw new Error(result.reason ?? 'Audition failed')
+      const { error: e } = await deleteProject(projectId)
+      if (e) throw new Error(e)
+      setConfirmRemoveId(null)
+      await loadAll()
     } catch (err) {
-      setError((err as Error).message)
+      setError(`Remove failed · ${(err as Error).message}`)
     } finally {
-      setBusyId(null)
+      setRemovingId(null)
     }
   }
+
+  // Audition + Polish flow live on /projects/<id> now (the management
+  // hub). The audition_project RPC + Stripe fallback + polish gate are
+  // all surfaced there. This section is a list, not a dispatcher.
 
   // Backstage list hasn't loaded yet · render nothing (parent already
   // shows skeleton state via its own loading prop chain).
@@ -164,8 +94,6 @@ export function BackstageSection({ memberId }: { memberId: string }) {
 
       <div className="space-y-2">
         {backstage.map(p => {
-          const coachOpen  = coachOpenId === p.id
-          const polishOpen = polishOpenId === p.id
           return (
             <div key={p.id} id={`backstage-row-${p.id}`}>
               <div className="card-navy p-4 flex items-baseline justify-between gap-3 flex-wrap" style={{
@@ -187,82 +115,107 @@ export function BackstageSection({ memberId }: { memberId: string }) {
                     </div>
                   )}
                 </div>
+                {/* Single primary action · "Open" enters the project
+                    detail page where audit report + Coach panel +
+                    Polish gate + Re-audit + Audition CTA + Remove zone
+                    all live as one management hub. Previously each row
+                    sprouted 3-4 buttons (Coach toggle / View report /
+                    Audition / Remove) which read as decision-overload
+                    on a scan · 2026-05-17 consolidation. The Remove
+                    icon stays inline because it's the one action that
+                    only makes sense from the list view (cleaning a
+                    duplicate row · you don't need to open it first). */}
                 <div className="flex gap-2 flex-wrap">
-                  {/* §16.2 (2026-05-15) · inline Coach toggle. Lets the
-                      creator climb without leaving /me · friction cut
-                      vs the View-report → /projects/<id> detour. One
-                      panel open at a time keeps the page scannable
-                      when multiple backstage rows exist. */}
-                  <button
-                    type="button"
-                    onClick={() => setCoachOpenId(coachOpen ? null : p.id)}
-                    className="px-3 py-1.5 font-mono text-[11px] tracking-wide whitespace-nowrap"
-                    style={{
-                      background:   coachOpen ? 'rgba(240,192,64,0.14)' : 'transparent',
-                      color:        coachOpen ? 'var(--gold-500)' : 'var(--cream)',
-                      border:       `1px solid ${coachOpen ? 'rgba(240,192,64,0.45)' : 'rgba(248,245,238,0.2)'}`,
+                  {confirmRemoveId === p.id ? (
+                    <div className="flex items-center gap-2 px-2 py-1.5" style={{
+                      background: 'rgba(200,16,46,0.08)',
+                      border: '1px solid rgba(200,16,46,0.35)',
                       borderRadius: '2px',
-                      cursor:       'pointer',
-                    }}
-                  >
-                    {coachOpen ? 'Hide coach ↑' : 'Coach & climb ↓'}
-                  </button>
-                  <Link
-                    to={`/projects/${p.id}`}
-                    className="px-3 py-1.5 font-mono text-[11px] tracking-wide whitespace-nowrap"
-                    style={{
-                      background:     'transparent',
-                      color:          'var(--cream)',
-                      border:         '1px solid rgba(248,245,238,0.2)',
-                      borderRadius:   '2px',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    View report →
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => handleAudition(p.id)}
-                    disabled={busyId === p.id}
-                    className="px-3 py-1.5 font-mono text-[11px] font-medium tracking-wide whitespace-nowrap"
-                    style={{
-                      background:   'var(--gold-500)',
-                      color:        'var(--navy-900)',
-                      border:       'none',
-                      borderRadius: '2px',
-                      cursor:       busyId === p.id ? 'wait' : 'pointer',
-                      opacity:      busyId === p.id ? 0.6 : 1,
-                    }}
-                  >
-                    {busyId === p.id ? 'PROCESSING…' : 'PUT ON AUDITION STAGE →'}
-                  </button>
+                    }}>
+                      <span className="font-mono text-[10px]" style={{ color: 'var(--scarlet)' }}>Remove this audition?</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemove(p.id)}
+                        disabled={removingId === p.id}
+                        className="px-2 py-1 font-mono text-[10px] tracking-wide"
+                        style={{
+                          background:   'var(--scarlet)',
+                          color:        'var(--cream)',
+                          border:       'none',
+                          borderRadius: '2px',
+                          cursor:       removingId === p.id ? 'wait' : 'pointer',
+                          opacity:      removingId === p.id ? 0.6 : 1,
+                        }}
+                      >
+                        {removingId === p.id ? 'REMOVING…' : 'REMOVE'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(null)}
+                        disabled={removingId === p.id}
+                        className="px-2 py-1 font-mono text-[10px] tracking-wide"
+                        style={{
+                          background:   'transparent',
+                          color:        'var(--cream)',
+                          border:       '1px solid rgba(248,245,238,0.2)',
+                          borderRadius: '2px',
+                          cursor:       'pointer',
+                        }}
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(p.id)}
+                        aria-label="Remove this backstage audition"
+                        title="Remove this backstage audition"
+                        className="flex items-center justify-center transition-colors"
+                        style={{
+                          width: 32, height: 32,
+                          background:   'transparent',
+                          color:        'var(--text-muted)',
+                          border:       '1px solid rgba(248,245,238,0.12)',
+                          borderRadius: '2px',
+                          cursor:       'pointer',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--scarlet)'; e.currentTarget.style.borderColor = 'rgba(200,16,46,0.45)' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'rgba(248,245,238,0.12)' }}
+                      >
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6" />
+                          <path d="M14 11v6" />
+                        </svg>
+                      </button>
+                      <Link
+                        to={`/projects/${p.id}`}
+                        className="px-4 py-2 font-mono text-[11px] font-medium tracking-wide whitespace-nowrap"
+                        style={{
+                          background:     'var(--gold-500)',
+                          color:          'var(--navy-900)',
+                          border:         'none',
+                          borderRadius:   '2px',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        OPEN →
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
-              {coachOpen && (
-                <div className="mt-2">
-                  {/* navigateOnAuditioned=true · the Coach's done-state
-                      copy says "Redirecting to your product page…",
-                      and the user just spent a ticket — landing them on
-                      /projects/<id> honors the promise + lets them see
-                      the live result. They can always come back to /me
-                      to audition the next backstage project. */}
-                  <PreAuditionCoachSlot projectId={p.id} navigateOnAuditioned />
-                </div>
-              )}
-              {polishOpen && (
-                <BackstagePolishGate
-                  project={p}
-                  onSavedAndAuditioned={async () => {
-                    setPolishOpenId(null)
-                    await loadAll()
-                  }}
-                  onCancel={() => setPolishOpenId(null)}
-                  onNoTicket={async (projectId) => {
-                    setPolishOpenId(null)
-                    await initiateStripeCheckout(projectId)
-                  }}
-                />
-              )}
+              {/* 2026-05-17 · inline Coach panel + PolishGate were
+                  moved off this list view onto /projects/<id> (the
+                  owner-mode management hub). The list stays minimal:
+                  one row per audition, single OPEN action, single
+                  Remove icon. Multi-button rows + collapsible panels
+                  conflicted with the "scan list → enter one" mental
+                  model the page is supposed to support. */}
             </div>
           )
         })}
@@ -275,18 +228,6 @@ export function BackstageSection({ memberId }: { memberId: string }) {
   )
 }
 
-async function initiateStripeCheckout(projectId: string) {
-  const { data: sessionRes } = await supabase.auth.getSession()
-  const token = sessionRes.session?.access_token
-  if (!token) throw new Error('Sign in expired · refresh and try again')
-
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout-session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ kind: 'audit_fee', audition_target: projectId }),
-  })
-  const body = await res.json()
-  if (!res.ok || !body.url) throw new Error(body.error || `Checkout failed (${res.status})`)
-  window.location.assign(body.url)
-}
+// initiateStripeCheckout moved to ProjectDetailPage's owner-mode
+// management hub (2026-05-17 consolidation) — audition + ticket
+// fallback live where the rest of the project actions live.

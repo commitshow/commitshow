@@ -69,6 +69,23 @@ export async function resolvePreviewClaim(
   const ownActive = exact.find(r => r.status === 'active' && r.creator_id === userId && userId)
   if (ownActive) return { kind: 'already_yours', projectId: ownActive.id }
 
+  // 2026-05-17 · Backstage audition by current user also blocks fresh
+  // creation. Before this guard, a user who submitted the same repo
+  // twice ended up with duplicate backstage rows (audit_count=0 zombies
+  // from interrupted runs piling up alongside the real one). Treat any
+  // owned backstage row as "already_yours" so SubmitForm redirects to
+  // the existing row instead of inserting a new one. If multiple
+  // duplicates exist (legacy data before this guard), we send the user
+  // to the most recently created one — they can clean up the rest via
+  // the Remove button on /backstage.
+  const ownBackstage = exact.filter(r => r.status === 'backstage' && r.creator_id === userId && userId)
+  if (ownBackstage.length > 0) {
+    // `exact` came back ordered by created_at asc (see select above);
+    // the last entry is the freshest.
+    const newest = ownBackstage[ownBackstage.length - 1]
+    return { kind: 'already_yours', projectId: newest.id }
+  }
+
   // Active audition by someone else → block (the league assumes one creator per repo).
   const otherActive = exact.find(r => r.status === 'active' && r.creator_id && r.creator_id !== userId)
   if (otherActive) return { kind: 'taken_by_other', creatorId: otherActive.creator_id }
