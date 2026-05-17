@@ -32,7 +32,11 @@ interface TicketBalance {
 
 const QUANTITY_PRESETS = [1, 3, 5, 10] as const
 
-export function TicketWalletCard({ memberId }: { memberId: string }) {
+// `embedded` (2026-05-17) · strips the outer card-navy wrapper + the
+// "// AUDITION TICKETS" eyebrow so the wallet can render INSIDE a
+// parent card (CreatorBox on /me) without nested-box visual noise.
+// Same data + handlers + Buy/Gift modals — only the chrome differs.
+export function TicketWalletCard({ memberId, embedded = false }: { memberId: string; embedded?: boolean }) {
   const [balance,  setBalance]  = useState<TicketBalance | null>(null)
   const [founder,  setFounder]  = useState<FounderStatus | null>(null)
   const [busy,     setBusy]     = useState(false)
@@ -107,16 +111,34 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
   // first then paid, so additional buys just stack.
   const canBuy = true
 
+  const Wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+    embedded ? (
+      <div>{children}</div>
+    ) : (
+      <div className="card-navy p-5 mb-6" style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}>
+        {children}
+      </div>
+    )
+
   return (
-    <div className="card-navy p-5 mb-6" style={{ borderRadius: '2px', borderLeft: '3px solid var(--gold-500)' }}>
+    <Wrapper>
       <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
         <div>
-          <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
-            // AUDITION TICKETS
-          </div>
-          <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Spend one to put a backstage product on stage
-          </div>
+          {!embedded && (
+            <>
+              <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+                // AUDITION TICKETS
+              </div>
+              <div className="font-mono text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Spend one to put a backstage product on stage
+              </div>
+            </>
+          )}
+          {embedded && (
+            <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              Spend one to put a backstage product on stage
+            </div>
+          )}
         </div>
 
         {/* Ticket count badge — big, easy to read */}
@@ -252,7 +274,7 @@ export function TicketWalletCard({ memberId }: { memberId: string }) {
         />,
         document.body,
       )}
-    </div>
+    </Wrapper>
   )
 }
 

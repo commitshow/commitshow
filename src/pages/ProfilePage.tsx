@@ -261,75 +261,26 @@ export function ProfilePage() {
 
           {/* Verified-by chip strip · spans full row below identity. */}
           <VerifiedIdentities />
-
-          {/* ── Three-axis standings · full-width vertical stack ── */}
-          <div className="mt-6">
-            <div className="font-mono text-xs tracking-widest mb-3" style={{ color: 'var(--gold-500)' }}>// YOUR STANDINGS</div>
-            <div className="space-y-2">
-                <StandingRow
-                  label="Creator Grade"
-                  value={grade}
-                  color={gradeColor}
-                  hint={`Career tier · based on Encore products (score ≥ 84). ${stats?.graduated_count ?? 0} Encore / ${applications.length} total.`}
-                />
-                <StandingRow
-                  label="Scout Tier"
-                  value={tier}
-                  color={TIER_COLOR[tier]}
-                  hint={`Voting activity · ${member?.activity_points ?? 0} AP earned. ${stats?.total_votes_cast ?? 0} forecasts cast.`}
-                />
-                <StandingRow
-                  label="Monthly votes left"
-                  value={stats ? `${stats.monthly_votes_remaining} / ${stats.monthly_vote_cap}` : '— / —'}
-                  color="var(--cream)"
-                  hint="Your Scout tier determines how many Forecasts you can cast each month."
-                />
-
-                {/* ── Audition tickets · separate balance (free + paid) ── */}
-                {user?.id && (
-                  <div className="pt-2">
-                    <TicketWalletCard memberId={user.id} />
-                  </div>
-                )}
-
-                {/* Early Spotter share · only when the most recent correct
-                    Forecast points at a product that earned Encore. Slot fills:
-                    project_name + grade + days_before + scout tier +
-                    cumulative correct count. Hidden when no hit yet. */}
-                {earlyHit && (
-                  <div style={{ marginTop: 12, padding: 12, background: 'rgba(240,192,64,0.06)', border: '1px solid rgba(240,192,64,0.25)', borderRadius: '3px' }}>
-                    <div className="font-mono text-[10px] mb-1" style={{ color: 'var(--gold-500)', letterSpacing: 2 }}>EARLY SPOTTER · HIT #{earlyHit.hit_count}</div>
-                    <div className="text-xs mb-2" style={{ color: 'rgba(248,245,238,0.85)' }}>
-                      Called <strong>{earlyHit.project_name}</strong> · earned Encore · {earlyHit.days_before} days early.
-                    </div>
-                    <ShareUserTemplateButton
-                      templateId="early_spotter"
-                      slots={{
-                        scout_handle:   member?.x_handle || member?.display_name || 'me',
-                        project_name:   earlyHit.project_name,
-                        days_before:    earlyHit.days_before,
-                        grade:          earlyHit.grade,
-                        scout_tier:     tier,
-                        hit_count:      earlyHit.hit_count,
-                        scout_id:       user.id,
-                      }}
-                      url={`https://commit.show/projects/${earlyHit.project_slug ?? earlyHit.project_id}`}
-                      variant="gold"
-                      label="Share Early Spotter"
-                    />
-                  </div>
-                )}
-            </div>
-          </div>
         </header>
 
-        {/* ── Your Stack editor ── */}
-        <YourStackSection />
+        {/* ── 2026-05-17 /me restructure (CEO 피드백) ──
+            Old order put "// YOUR STANDINGS" + GraduationExplainer ABOVE
+            "MY PRODUCTS" · standings + Encore explainer competed with the
+            user's actual portfolio for top-of-page real estate. Reordered
+            to put the user's *work* first, identity context after, and
+            the Encore meta-page at the very bottom in compact form.
 
-        {/* ── Graduation explainer ── */}
-        <GraduationExplainer currentGrade={grade} graduatedCount={stats?.graduated_count ?? 0} />
+            New top-down:
+              1. Header (avatar / name / verified)
+              2. BackstageSection   — actionable iteration work
+              3. MY PRODUCTS        — primary portfolio surface
+              4. YOUR STACK         — derived from products · sits next to them
+              5. Creator + Scout    — identity context · 2-col 박스
+              6. MY MD LIBRARY      — secondary portfolio surface
+              7. ENCORE explainer   — meta · bottom, collapsed by default
+        */}
 
-        {/* ── BACKSTAGE · audited but not yet on the league ── */}
+        {/* ── BACKSTAGE · top-priority actionable work ── */}
         {user?.id && <BackstageSection memberId={user.id} />}
 
         {/* ── My Products · summary card · full grid moved to /me/products ── */}
@@ -436,6 +387,38 @@ export function ProfilePage() {
           )}
         </div>
 
+        {/* ── YOUR STACK · sits next to products (was a standalone
+            section · CEO 피드백 2026-05-17 · stack is derived from
+            project tech_layers, so it belongs in the products context
+            not as a top-level peer). ── */}
+        <YourStackSection />
+
+        {/* ── Identity row · Creator + Scout boxes side-by-side
+            (single column on mobile). Each box bundles its grade +
+            counterpart resources into ONE card so the page reads as
+            "two roles" instead of "three loose StandingRows + a
+            standalone wallet card". ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+          <CreatorBox
+            grade={grade}
+            gradeColor={gradeColor}
+            graduatedCount={stats?.graduated_count ?? 0}
+            productsCount={applications.length}
+            memberId={user.id}
+          />
+          <ScoutBox
+            tier={tier}
+            tierColor={TIER_COLOR[tier]}
+            activityPoints={member?.activity_points ?? 0}
+            totalVotesCast={stats?.total_votes_cast ?? 0}
+            monthlyVotesRemaining={stats?.monthly_votes_remaining ?? null}
+            monthlyVoteCap={stats?.monthly_vote_cap ?? null}
+            earlyHit={earlyHit}
+            memberId={user.id}
+            memberHandle={member?.x_handle || member?.display_name || 'me'}
+          />
+        </div>
+
         {/* ── My MD Library ── */}
         <div>
           <div className="flex items-baseline justify-between mb-3">
@@ -463,6 +446,14 @@ export function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* ── ENCORE explainer · pushed to the bottom in compact form.
+            Was previously above MY PRODUCTS · meta info shouldn't lead
+            on a personal page. Still collapsed by default; user opens
+            it only when they care about the career-tier framework. ── */}
+        <div className="mt-10">
+          <GraduationExplainer currentGrade={grade} graduatedCount={stats?.graduated_count ?? 0} />
+        </div>
       </div>
     </section>
   )
@@ -485,6 +476,178 @@ function StandingRow({ label, value, color, hint }: { label: string; value: stri
         <span className="font-display font-bold text-base tabular-nums" style={{ color }}>{value}</span>
       </div>
       <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>{hint}</div>
+    </div>
+  )
+}
+
+// ── Identity boxes (2026-05-17 /me restructure) ───────────────
+// CEO 피드백: "크리에이터 박스 안에 오디션 티켓 정보와 그레이드 모두
+// 포함하는 한 개 박스 + 스카우터 박스 안에 예측 투표 남은 수와 그레이드를
+// 하나로 묶은 두 개의 박스". Previously the same data was scattered
+// across 3 StandingRow + 1 standalone TicketWalletCard. Now: 2 cards,
+// each owns one of the two roles, two-column on sm+ (stacks on mobile).
+
+interface EarlyHit {
+  hit_count:     number
+  project_name:  string
+  project_id:    string
+  project_slug:  string | null
+  days_before:   number
+  // Stays `string` (not GraduationGrade) because the upstream useState
+  // shape in ProfilePage uses string · DB column is free-form.
+  grade:         string
+}
+
+function CreatorBox({
+  grade, gradeColor, graduatedCount, productsCount, memberId,
+}: {
+  grade:          string
+  gradeColor:     string
+  graduatedCount: number
+  productsCount:  number
+  memberId:       string
+}) {
+  return (
+    <div className="card-navy p-5 flex flex-col gap-4" style={{
+      borderRadius:  '2px',
+      borderLeft:    '3px solid var(--gold-500)',
+      background:    'rgba(240,192,64,0.025)',
+    }}>
+      <div className="font-mono text-xs tracking-widest" style={{ color: 'var(--gold-500)' }}>
+        // CREATOR
+      </div>
+
+      <div>
+        <div className="font-mono text-[10px] tracking-widest uppercase mb-1.5" style={{ color: 'var(--text-label)' }}>
+          GRADE
+        </div>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <span className="font-display font-black text-3xl leading-none" style={{ color: gradeColor }}>{grade}</span>
+          <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            {graduatedCount} Encore · {productsCount} total
+          </span>
+        </div>
+        <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
+          Career tier · advances when a product crosses the Encore line (score ≥ 84).
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 1, background: 'rgba(248,245,238,0.08)' }} />
+
+      {/* Audition tickets · embedded so the box renders as one card,
+          not nested chrome. */}
+      <div>
+        <div className="font-mono text-[10px] tracking-widest uppercase mb-2" style={{ color: 'var(--text-label)' }}>
+          AUDITION TICKETS
+        </div>
+        <TicketWalletCard memberId={memberId} embedded />
+      </div>
+    </div>
+  )
+}
+
+function ScoutBox({
+  tier, tierColor, activityPoints, totalVotesCast,
+  monthlyVotesRemaining, monthlyVoteCap, earlyHit, memberId, memberHandle,
+}: {
+  tier:                  ScoutTier
+  tierColor:             string
+  activityPoints:        number
+  totalVotesCast:        number
+  monthlyVotesRemaining: number | null
+  monthlyVoteCap:        number | null
+  earlyHit:              EarlyHit | null
+  memberId:              string
+  memberHandle:          string
+}) {
+  const votesPct = monthlyVotesRemaining != null && monthlyVoteCap && monthlyVoteCap > 0
+    ? Math.max(0, Math.min(100, Math.round((monthlyVotesRemaining / monthlyVoteCap) * 100)))
+    : null
+
+  return (
+    <div className="card-navy p-5 flex flex-col gap-4" style={{
+      borderRadius:  '2px',
+      borderLeft:    '3px solid #00D4AA',
+      background:    'rgba(0,212,170,0.025)',
+    }}>
+      <div className="font-mono text-xs tracking-widest" style={{ color: '#00D4AA' }}>
+        // SCOUT
+      </div>
+
+      <div>
+        <div className="font-mono text-[10px] tracking-widest uppercase mb-1.5" style={{ color: 'var(--text-label)' }}>
+          TIER
+        </div>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <span className="font-display font-black text-3xl leading-none" style={{ color: tierColor }}>{tier}</span>
+          <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            {activityPoints} AP · {totalVotesCast} forecasts cast
+          </span>
+        </div>
+        <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
+          Forecaster tier · advances with activity points + correct forecasts on graduating projects.
+        </div>
+      </div>
+
+      <div style={{ height: 1, background: 'rgba(248,245,238,0.08)' }} />
+
+      {/* Monthly votes left · progress bar + ratio */}
+      <div>
+        <div className="font-mono text-[10px] tracking-widest uppercase mb-2 flex items-baseline justify-between gap-2" style={{ color: 'var(--text-label)' }}>
+          <span>MONTHLY VOTES LEFT</span>
+          <span className="font-display font-bold text-base tabular-nums" style={{ color: 'var(--cream)', letterSpacing: 0 }}>
+            {monthlyVotesRemaining != null && monthlyVoteCap != null ? `${monthlyVotesRemaining} / ${monthlyVoteCap}` : '— / —'}
+          </span>
+        </div>
+        {votesPct != null && (
+          <div style={{
+            height: 6,
+            background: 'rgba(255,255,255,0.06)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              width:      `${votesPct}%`,
+              height:     '100%',
+              background: '#00D4AA',
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+        )}
+        <div className="font-mono text-[10px] mt-2" style={{ color: 'var(--text-muted)', lineHeight: 1.55 }}>
+          Resets monthly · tier sets the cap.
+        </div>
+      </div>
+
+      {earlyHit && (
+        <>
+          <div style={{ height: 1, background: 'rgba(248,245,238,0.08)' }} />
+          <div style={{ padding: 12, background: 'rgba(240,192,64,0.08)', border: '1px solid rgba(240,192,64,0.3)', borderRadius: '2px' }}>
+            <div className="font-mono text-[10px] mb-1" style={{ color: 'var(--gold-500)', letterSpacing: 2 }}>
+              EARLY SPOTTER · HIT #{earlyHit.hit_count}
+            </div>
+            <div className="text-xs mb-2" style={{ color: 'rgba(248,245,238,0.85)' }}>
+              Called <strong>{earlyHit.project_name}</strong> · earned Encore · {earlyHit.days_before} days early.
+            </div>
+            <ShareUserTemplateButton
+              templateId="early_spotter"
+              slots={{
+                scout_handle:   memberHandle,
+                project_name:   earlyHit.project_name,
+                days_before:    earlyHit.days_before,
+                grade:          earlyHit.grade,
+                scout_tier:     tier,
+                hit_count:      earlyHit.hit_count,
+                scout_id:       memberId,
+              }}
+              url={`https://commit.show/projects/${earlyHit.project_slug ?? earlyHit.project_id}`}
+              variant="gold"
+              label="Share Early Spotter"
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
