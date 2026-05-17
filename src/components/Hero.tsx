@@ -206,7 +206,7 @@ export function Hero(_props: HeroProps) {
               {buckets.onStage > 0 && (
                 <button
                   type="button"
-                  onClick={() => navigate('/me')}
+                  onClick={() => navigate('/me/products')}
                   className="px-2 py-1 transition-colors"
                   style={{ background: 'rgba(0,212,170,0.08)', color: '#00D4AA', border: '1px solid rgba(0,212,170,0.25)', borderRadius: '2px', cursor: 'pointer' }}
                 >
@@ -216,7 +216,7 @@ export function Hero(_props: HeroProps) {
               {buckets.encore > 0 && (
                 <button
                   type="button"
-                  onClick={() => navigate('/me')}
+                  onClick={() => navigate('/me/products')}
                   className="px-2 py-1 transition-colors"
                   style={{ background: 'rgba(240,192,64,0.10)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.35)', borderRadius: '2px', cursor: 'pointer' }}
                 >
@@ -273,11 +273,17 @@ function pickHeroPrimaryCta(buckets: MemberStageBuckets | null): { label: string
       to:    '/backstage',
     }
   }
+  // 2026-05-17 · onStage / encore land on /me/products (the portfolio
+  // grid) rather than /me (the profile header + standings + library).
+  // /me is "everything about me · account context"; /me/products is
+  // "the products themselves" — for a creator whose next action is
+  // "look at my projects", the grid is the right surface. /me would
+  // bury the products under an account header.
   if (buckets.onStage > 0) {
-    return { label: 'Your stage standings →', to: '/me' }
+    return { label: 'Your stage standings →', to: '/me/products' }
   }
   if (buckets.encore > 0) {
-    return { label: 'Your Encore archive →', to: '/me' }
+    return { label: 'Your Encore archive →', to: '/me/products' }
   }
   return { label: 'Analyze your MVP →', to: '/submit' }
 }

@@ -186,12 +186,12 @@ export function LadderPage() {
                   </NavLink>
                 )}
                 {buckets.onStage > 0 && (
-                  <NavLink to="/me" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(0,212,170,0.08)', color: '#00D4AA', border: '1px solid rgba(0,212,170,0.25)', borderRadius: '2px' }}>
+                  <NavLink to="/me/products" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(0,212,170,0.08)', color: '#00D4AA', border: '1px solid rgba(0,212,170,0.25)', borderRadius: '2px' }}>
                     {buckets.onStage} ON STAGE
                   </NavLink>
                 )}
                 {buckets.encore > 0 && (
-                  <NavLink to="/me" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(240,192,64,0.10)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.35)', borderRadius: '2px' }}>
+                  <NavLink to="/me/products" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(240,192,64,0.10)', color: 'var(--gold-500)', border: '1px solid rgba(240,192,64,0.35)', borderRadius: '2px' }}>
                     {buckets.encore} ENCORE
                   </NavLink>
                 )}
@@ -596,7 +596,7 @@ function pickProductsHeader(user: { id: string } | null | undefined, buckets: Me
       title:    'Your projects are on the stage',
       sub:      'Watch where they sit in the ranking · re-audit any one to push the score up · audition another to enter a fresh category.',
       ctaLabel: 'YOUR STANDINGS →',
-      ctaTo:    '/me',
+      ctaTo:    '/me/products',
     }
   }
   if (buckets.encore > 0) {
