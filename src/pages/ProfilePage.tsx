@@ -378,7 +378,7 @@ export function ProfilePage() {
                   onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.4)')}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)')}
                 >
-                  <div className="relative" style={{ aspectRatio: '16 / 9', background: 'var(--navy-800)' }}>
+                  <div className="relative" style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)' }}>
                     {p.thumbnail_url ? (
                       <img
                         src={p.thumbnail_url}
@@ -426,7 +426,7 @@ export function ProfilePage() {
                     borderRadius:   '2px',
                     textDecoration: 'none',
                     color:          'var(--gold-500)',
-                    aspectRatio:    '16 / 9',
+                    aspectRatio:    '1200 / 630',
                   }}
                 >
                   +{applications.length - 6} more →
@@ -831,13 +831,13 @@ export function ApplicationRow({ project: p, onDeleted }: { project: Project; on
       className="card-navy overflow-hidden transition-colors group relative flex flex-col sm:flex-row"
       style={{ borderRadius: '2px' }}
     >
-      {/* Full-width image at every breakpoint — mobile gets 16:9 hero,
-          sm+ gets a 160px square sitting next to the content column.
-          Single-column grid on /me/products means the card has the
-          full max-w-5xl to work with (~960px on desktop) so the
-          thumbnail can be bigger AND the content area still has 700+
-          px to breathe. Replaces the prior 96×96 thumbnail that
-          looked anemic on a wide row. */}
+      {/* OG-ratio thumbnail (1200×630 · 1.905:1) at every breakpoint
+          so the same screenshot creators upload for og:image renders
+          here without crop distortion. Mobile = full-width hero, sm+
+          = 280px wide rectangle sitting next to the content. 2026-
+          05-17 · was 16:9 (mobile) / 1:1 square (sm+) which cropped
+          OG images and looked wrong; the user explicitly asked for
+          OG ratio. */}
       <div
         role="button" tabIndex={0}
         onClick={openDetail}
@@ -845,16 +845,16 @@ export function ApplicationRow({ project: p, onDeleted }: { project: Project; on
         className="cursor-pointer flex-shrink-0 relative"
         style={{ background: 'var(--navy-800)' }}
       >
-        <div className="sm:hidden w-full" style={{ aspectRatio: '16 / 9' }}>
+        <div className="sm:hidden w-full" style={{ aspectRatio: '1200 / 630' }}>
           {p.thumbnail_url ? (
             <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full block" style={{ objectFit: 'cover' }} />
           ) : (
             <div className="w-full h-full flex items-center justify-center font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>NO IMAGE</div>
           )}
         </div>
-        <div className="hidden sm:block" style={{ width: '160px', height: '160px' }}>
+        <div className="hidden sm:block" style={{ width: '280px', aspectRatio: '1200 / 630' }}>
           {p.thumbnail_url ? (
-            <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
+            <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full block" style={{ objectFit: 'cover' }} />
           ) : (
             <div className="w-full h-full flex items-center justify-center font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>NO IMG</div>
           )}
