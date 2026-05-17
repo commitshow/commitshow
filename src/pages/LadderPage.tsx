@@ -181,7 +181,7 @@ export function LadderPage() {
             {buckets && (buckets.backstage > 0 || buckets.onStage > 0 || buckets.encore > 0) && (
               <div className="mt-4 flex gap-2 flex-wrap font-mono text-[10px] tracking-widest">
                 {buckets.backstage > 0 && (
-                  <NavLink to="/me" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(248,245,238,0.06)', color: 'var(--cream)', border: '1px solid rgba(248,245,238,0.18)', borderRadius: '2px' }}>
+                  <NavLink to="/backstage" className="px-2 py-1 transition-colors no-underline" style={{ background: 'rgba(248,245,238,0.06)', color: 'var(--cream)', border: '1px solid rgba(248,245,238,0.18)', borderRadius: '2px' }}>
                     {buckets.backstage} BACKSTAGE
                   </NavLink>
                 )}
@@ -587,7 +587,7 @@ function pickProductsHeader(user: { id: string } | null | undefined, buckets: Me
       title:    n === 1 ? 'You have 1 audition in backstage' : `You have ${n} auditions in backstage`,
       sub:      'Iterate, re-audit, polish — then put them on stage when they\'re ready. The full ladder below is everyone else who already did.',
       ctaLabel: `CONTINUE BACKSTAGE (${n}) →`,
-      ctaTo:    '/me',
+      ctaTo:    '/backstage',
     }
   }
   if (buckets.onStage > 0) {

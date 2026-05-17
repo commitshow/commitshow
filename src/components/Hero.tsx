@@ -196,7 +196,7 @@ export function Hero(_props: HeroProps) {
               {buckets.backstage > 0 && (
                 <button
                   type="button"
-                  onClick={() => navigate('/me')}
+                  onClick={() => navigate('/backstage')}
                   className="px-2 py-1 transition-colors"
                   style={{ background: 'rgba(248,245,238,0.06)', color: 'var(--cream)', border: '1px solid rgba(248,245,238,0.18)', borderRadius: '2px', cursor: 'pointer' }}
                 >
@@ -270,7 +270,7 @@ function pickHeroPrimaryCta(buckets: MemberStageBuckets | null): { label: string
     const n = buckets.backstage
     return {
       label: `Continue in Backstage (${n}) →`,
-      to:    '/me',
+      to:    '/backstage',
     }
   }
   if (buckets.onStage > 0) {

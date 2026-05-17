@@ -1,21 +1,91 @@
-// Backstage — the brand for commit.show's prompt-extraction analysis (Phase 2
-// of the Build Brief). Public marketing/onboarding page that explains why
-// Backstage data is special: 4 of its 6 sections (failure_log, decision_
-// archaeology, ai_delegation_map, next_blocker) are captured nowhere else
-// in the industry. Positioned as an *earned status*, not a chore.
+// Backstage — dual-mode page (2026-05-17).
 //
-// Sister pages: /rulebook (judging logic) · /scouts (forecaster tier) ·
-// future /failures (Failure Log gallery sourced from Backstage data).
+//   · Logged-in members with backstage rows  →  "Your backstage" view.
+//     BackstageSection renders inline as the primary content · the
+//     audit→fix→re-audit→audition loop has its own dedicated home
+//     instead of being a sub-section on /me. Hero CTA, /products
+//     header CTA, YOUR JOURNEY chip all route here.
+//
+//   · Logged-in members with zero backstage  →  marketing + soft CTA
+//     "Audition any project · the result lands backstage where you can
+//     iterate before going public."
+//
+//   · Anonymous visitors  →  marketing page (original copy) explaining
+//     the Phase-2-brief value prop and the audit-then-audition split.
+//
+// Note: "Backstage" carries two related-but-distinct meanings on the
+// site — (1) the stage in the journey (status='backstage' = auditing
+// in private before audition), and (2) the prompt-extraction layer of
+// the Phase 2 brief (failure_log, decisions, delegation_map,
+// next_blocker). Both are part of "the work done before the public
+// audition", which is why they share the page. The dual-mode resolves
+// to (1) when there's actual work to manage and (2) when the user is
+// here to learn what Backstage means.
 
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
+import { BackstageSection } from '../components/BackstageSection'
+import { fetchMemberStageBuckets, type MemberStageBuckets } from '../lib/projectQueries'
 
 export function BackstagePage() {
+  const { user } = useAuth()
+  const [buckets, setBuckets] = useState<MemberStageBuckets | null>(null)
+
+  useEffect(() => {
+    if (!user?.id) { setBuckets(null); return }
+    let alive = true
+    fetchMemberStageBuckets(user.id).then(b => { if (alive) setBuckets(b) })
+    return () => { alive = false }
+  }, [user?.id])
+
+  const hasBackstage = !!(buckets && buckets.backstage > 0)
+
   return (
     <section className="relative z-10 pt-20 pb-20 px-4 md:px-6 min-h-screen">
+      {/* Member-mode primary content · "Your backstage" management view
+          when there are rows to manage. The BackstageSection component
+          owns ticket balance, polish gate, audition CTA, coach panel,
+          all the audit→fix→audition surface area. We give it the full
+          page (max-w-4xl) so the cards aren't cramped. The marketing
+          copy still renders below as secondary context. */}
+      {user && hasBackstage && (
+        <div className="max-w-4xl mx-auto mb-16">
+          <header className="mb-6">
+            <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
+              // YOUR BACKSTAGE · {buckets!.backstage} {buckets!.backstage === 1 ? 'AUDITION' : 'AUDITIONS'}
+            </div>
+            <h1 className="font-display font-black text-3xl md:text-4xl mb-3" style={{ color: 'var(--cream)' }}>
+              {buckets!.backstage === 1 ? 'Your audition is iterating' : `${buckets!.backstage} auditions are iterating`}
+            </h1>
+            <p className="font-light text-base max-w-2xl" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+              Re-audit, polish, and audition when you&rsquo;re ready. Backstage rows are
+              author-private until you put them on stage.
+            </p>
+          </header>
+          <BackstageSection memberId={user.id} />
+        </div>
+      )}
+
       <div className="max-w-3xl mx-auto">
+        {/* Zero-backstage logged-in members see a soft CTA up top before
+            the marketing copy so they know how to populate this space. */}
+        {user && !hasBackstage && (
+          <div className="mb-10 px-4 py-3 font-mono text-[12px]" style={{
+            background: 'rgba(248,245,238,0.04)',
+            border: '1px solid rgba(248,245,238,0.12)',
+            borderRadius: '2px',
+            color: 'var(--text-primary)',
+          }}>
+            <span style={{ color: 'var(--text-muted)' }}>YOU HAVE 0 IN BACKSTAGE · </span>
+            <Link to="/submit" style={{ color: 'var(--gold-500)' }}>Audition any project →</Link>
+            <span style={{ color: 'var(--text-muted)' }}> · the result lands here so you can iterate before going public.</span>
+          </div>
+        )}
+
         <header className="mb-12">
           <div className="font-mono text-xs tracking-widest mb-2" style={{ color: 'var(--gold-500)' }}>
-            // BACKSTAGE
+            {user && hasBackstage ? '// HOW BACKSTAGE WORKS' : '// BACKSTAGE'}
           </div>
           <h1 className="font-display font-black text-3xl md:text-4xl mb-3" style={{ color: 'var(--cream)' }}>
             Document what no one else captures
