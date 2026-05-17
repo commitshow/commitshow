@@ -818,64 +818,105 @@ export function ApplicationRow({ project: p, onDeleted }: { project: Project; on
 
   return (
     <div
-      className="card-navy overflow-hidden transition-colors group flex relative"
+      className="card-navy overflow-hidden transition-colors group relative flex flex-col sm:flex-row"
       style={{ borderRadius: '2px' }}
     >
+      {/* 2026-05-17 v2 mobile rewrite · the previous "image left 96px"
+          variant left only ~110px of content on 320px viewports, so
+          the description was effectively invisible and the stage +
+          score row needed to wrap. Now: mobile = image FULL-WIDTH 16:9
+          on top, content stacked below with breathing room; sm+ keeps
+          the original 96px side-image layout (info-dense on desktop,
+          legible on phone). */}
       <div
         role="button" tabIndex={0}
         onClick={openDetail}
         onKeyDown={e => { if (e.key === 'Enter') openDetail() }}
-        className="cursor-pointer"
-        style={{ width: '96px', height: '96px', background: 'var(--navy-800)', flexShrink: 0 }}
+        className="cursor-pointer flex-shrink-0 relative"
+        style={{
+          background: 'var(--navy-800)',
+        }}
       >
-        {p.thumbnail_url ? (
-          <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>NO IMG</div>
-        )}
+        <div className="sm:hidden w-full" style={{ aspectRatio: '16 / 9' }}>
+          {p.thumbnail_url ? (
+            <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full block" style={{ objectFit: 'cover' }} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>NO IMAGE</div>
+          )}
+        </div>
+        <div className="hidden sm:block" style={{ width: '96px', height: '96px' }}>
+          {p.thumbnail_url ? (
+            <img src={p.thumbnail_url} alt="" loading="lazy" decoding="async" className="w-full h-full" style={{ objectFit: 'cover' }} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>NO IMG</div>
+          )}
+        </div>
       </div>
-      <div className="p-3 pr-10 flex-1 min-w-0 flex flex-col justify-between gap-2">
-        {/* pr-10 reserves space on the right for the absolute-positioned
-            delete button (top-right overlay · 28×28 with 8px right
-            offset = ~36px reserved). 2026-05-17 mobile fix · the
-            previous flex-wrap-reverse layout still let the trash
-            button slip off-screen on ultra-narrow cards because the
-            badge + score group claimed all the row width. Anchoring
-            the action to top-right of the card guarantees it shows
-            regardless of how cramped the content column gets. */}
+      {/* Content padding · mobile gets plain p-3 because the trash
+          overlay sits on the (full-width) thumbnail above, not on
+          this column. sm+ keeps p-3 on three sides + a 36px right
+          reserve so text doesn't slide under the top-right trash
+          button. pr-9 (=36px) matches the button's 30px width + 6px
+          breathing room · was sm:pr-12 (48px) which made desktop
+          cards look noticeably shrunken (CEO 피드백 2026-05-17). */}
+      <div className="p-3 sm:pr-9 flex-1 min-w-0 flex flex-col justify-between gap-2">
         <div role="button" tabIndex={0} onClick={openDetail} onKeyDown={e => { if (e.key === 'Enter') openDetail() }} className="cursor-pointer min-w-0">
-          <div className="font-display font-bold text-sm truncate" style={{ color: 'var(--cream)' }}>{p.project_name}</div>
-          <div className="font-mono text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{p.description}</div>
+          <div className="font-display font-bold text-base sm:text-sm leading-tight" style={{ color: 'var(--cream)' }}>{p.project_name}</div>
+          {p.description && (
+            <div
+              className="font-mono text-[11px] sm:text-[10px] mt-1"
+              style={{
+                color: 'var(--text-secondary)',
+                lineHeight: 1.45,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
+              {p.description}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <StageBadge project={p} size="xs" iconless />
           <span className="font-mono text-xs tabular-nums font-medium" style={{ color: scoreColor }}>
             {p.score_total}/100
           </span>
+          {p.live_url && (
+            <span className="font-mono text-[10px] truncate" style={{ color: 'var(--text-muted)', maxWidth: '60%' }}>
+              {(() => { try { return new URL(p.live_url).hostname.replace(/^www\./, '') } catch { return p.live_url } })()}
+            </span>
+          )}
         </div>
         {error && !confirmOpen && (
           <div className="font-mono text-[10px] mt-1" style={{ color: '#F87171' }}>{error}</div>
         )}
       </div>
+      {/* Trash · anchored to card top-right · always visible regardless
+          of card width. On mobile it sits in the top-right corner of
+          the full-width thumbnail (navy backdrop + blur keeps it
+          legible). On sm+ it sits in the corner of the card next to
+          the content column (sm:pr-12 reserves the strip). */}
       <button
         onClick={(e) => { e.stopPropagation(); setError(''); setConfirmOpen(true) }}
         title="Delete this product"
         aria-label="Delete this product"
         className="absolute top-2 right-2 flex items-center justify-center transition-colors z-10"
         style={{
-          width:        28,
-          height:       28,
-          background:   'rgba(6,12,26,0.65)',
-          color:        'var(--text-muted)',
-          border:       '1px solid rgba(255,255,255,0.10)',
+          width:        30,
+          height:       30,
+          background:   'rgba(6,12,26,0.75)',
+          color:        'var(--cream)',
+          border:       '1px solid rgba(255,255,255,0.18)',
           borderRadius: '2px',
           cursor:       'pointer',
-          backdropFilter: 'blur(4px)',
+          backdropFilter: 'blur(6px)',
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = 'var(--scarlet)'; e.currentTarget.style.borderColor = 'rgba(200,16,46,0.5)'; e.currentTarget.style.background = 'rgba(200,16,46,0.18)' }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)'; e.currentTarget.style.background = 'rgba(6,12,26,0.65)' }}
+        onMouseEnter={e => { e.currentTarget.style.color = 'var(--scarlet)'; e.currentTarget.style.borderColor = 'rgba(200,16,46,0.6)'; e.currentTarget.style.background = 'rgba(200,16,46,0.22)' }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'var(--cream)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'; e.currentTarget.style.background = 'rgba(6,12,26,0.75)' }}
       >
-        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 6h18" />
           <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
