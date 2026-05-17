@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
+import { BackstageCurtainArt } from './BackstageCurtainArt'
 import type { CreatorIdentity } from '../lib/projectQueries'
 import { resolveCreatorName } from '../lib/creatorName'
 import { useViewer } from '../lib/useViewer'
@@ -242,42 +243,14 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
   )
 }
 
-// Shared curtain placeholder for BACKSTAGE cards without a thumbnail.
-// Single visual identity across the lane · creator can override by
-// uploading their own thumbnail. Pure SVG so it scales to any
-// container without an asset round-trip · stays on-brand (gold +
-// cream + navy) and reinforces the stage metaphor.
+// BACKSTAGE thumbnail placeholder · wraps the shared
+// BackstageCurtainArt SVG so every backstage surface shows the same
+// theater curtain treatment when no thumbnail is uploaded. See
+// BackstageCurtainArt.tsx for the visual.
 function BackstageCurtainPlaceholder() {
   return (
-    <div
-      className="w-full h-full flex flex-col items-center justify-center"
-      style={{
-        background: 'linear-gradient(135deg, #0F2040 0%, #060C1A 60%, #0F2040 100%)',
-      }}
-    >
-      <svg
-        width={56}
-        height={56}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        style={{ color: 'rgba(240,192,64,0.55)' }}
-      >
-        <path d="M4 4h16" />
-        <path d="M6 4v16c0-3 1.5-5 3-7-1.5 2-3 4-3 7" />
-        <path d="M18 4v16c0-3-1.5-5-3-7 1.5 2 3 4 3 7" />
-        <path d="M12 4v16" />
-      </svg>
-      <div
-        className="font-mono text-[10px] mt-3 tracking-widest"
-        style={{ color: 'rgba(248,245,238,0.5)' }}
-      >
-        BEHIND THE CURTAIN
-      </div>
+    <div className="w-full h-full">
+      <BackstageCurtainArt />
     </div>
   )
 }

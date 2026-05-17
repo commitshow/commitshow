@@ -41,6 +41,7 @@ import { ForecastModal } from '../components/ForecastModal'
 import { ApplaudButton } from '../components/ApplaudButton'
 import { StageBadge } from '../components/StageBadge'
 import { BackstagePolishGate } from '../components/BackstagePolishGate'
+import { BackstageCurtainArt } from '../components/BackstageCurtainArt'
 import { deleteProject } from '../lib/projectQueries'
 import { EditProjectModal } from '../components/EditProjectModal'
 import { ProjectActionFooter } from '../components/ProjectActionFooter'
@@ -1634,27 +1635,19 @@ function BackstageCurtainPage({ project }: { project: Project }) {
         </Link>
 
         <div className="card-navy overflow-hidden" style={{ borderRadius: '2px' }}>
-          {/* Hero image · falls back to the same curtain placeholder
-              the lane card uses · single visual identity for
-              un-thumbnailed backstage projects. */}
+          {/* Hero image · falls back to the shared BackstageCurtainArt
+              full-bleed theater curtain SVG (gold valance + tassels +
+              pleats + spotlight + caption · same component the lane
+              card uses). Creator can override by uploading a
+              thumbnail. */}
           <div className="relative" style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)' }}>
             {project.thumbnail_url ? (
               <img src={project.thumbnail_url} alt="" loading="lazy" className="w-full h-full block" style={{ objectFit: 'cover' }} />
             ) : (
-              <div
-                className="w-full h-full flex flex-col items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #0F2040 0%, #060C1A 60%, #0F2040 100%)' }}
-              >
-                <svg width={64} height={64} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: 'rgba(240,192,64,0.55)' }}>
-                  <path d="M4 4h16" />
-                  <path d="M6 4v16c0-3 1.5-5 3-7-1.5 2-3 4-3 7" />
-                  <path d="M18 4v16c0-3-1.5-5-3-7 1.5 2 3 4 3 7" />
-                  <path d="M12 4v16" />
-                </svg>
-                <div className="font-mono text-[11px] mt-3 tracking-widest" style={{ color: 'rgba(248,245,238,0.5)' }}>
-                  BEHIND THE CURTAIN
-                </div>
-              </div>
+              <BackstageCurtainArt
+                caption="BEHIND THE CURTAIN"
+                subCaption="audition opens the card"
+              />
             )}
           </div>
 
