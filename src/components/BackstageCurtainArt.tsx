@@ -31,23 +31,28 @@ export function BackstageCurtainArt({
       style={{ width: '100%', height: '100%', display: 'block' }}
     >
       <defs>
-        {/* Stage backdrop · deep navy that gets darker toward the gap
-            so the caption reads as lit from a hidden source. */}
+        {/* Stage backdrop · deep plum-burgundy that gets darker toward
+            the centre so the caption reads as lit from a hidden source.
+            2026-05-18 (CEO 피드백) · was navy, swapped to burgundy
+            for the classic theater-curtain palette (crimson velvet with
+            gold trim). */}
         <radialGradient id="bsc-stage" cx="50%" cy="50%" r="55%">
-          <stop offset="0%"  stopColor="#0F2040" />
-          <stop offset="65%" stopColor="#070D1C" />
-          <stop offset="100%" stopColor="#03060F" />
+          <stop offset="0%"  stopColor="#2A0F22" />
+          <stop offset="65%" stopColor="#150511" />
+          <stop offset="100%" stopColor="#08020A" />
         </radialGradient>
-        {/* Curtain pleat · light spine + dark sides reads as fabric. */}
+        {/* Curtain pleat · deep burgundy/aubergine velvet · darker
+            palette (2026-05-18 CEO 피드백 · 커튼 좀 더 어둡게). Spine
+            still light enough to read as a 3D fold. */}
         <linearGradient id="bsc-pleat" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%"   stopColor="#0F2040" />
-          <stop offset="50%"  stopColor="#1B2F58" />
-          <stop offset="100%" stopColor="#0F2040" />
+          <stop offset="0%"   stopColor="#1A0613" />
+          <stop offset="50%"  stopColor="#3D1226" />
+          <stop offset="100%" stopColor="#1A0613" />
         </linearGradient>
-        {/* Soft halo behind the caption · subtle warm glow. */}
+        {/* Soft halo behind the caption · warm gold glow on burgundy. */}
         <radialGradient id="bsc-spot" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#F0C040" stopOpacity="0.20" />
-          <stop offset="60%"  stopColor="#F0C040" stopOpacity="0.05" />
+          <stop offset="0%"   stopColor="#F0C040" stopOpacity="0.22" />
+          <stop offset="60%"  stopColor="#F0C040" stopOpacity="0.06" />
           <stop offset="100%" stopColor="#F0C040" stopOpacity="0" />
         </radialGradient>
       </defs>
@@ -70,11 +75,12 @@ export function BackstageCurtainArt({
             opacity={0.94}
           />
         ))}
-        {/* Inner edge rim · gold where the curtain meets the open gap. */}
+        {/* Inner edge rim · gold where the curtain meets the open gap.
+            Slightly dimmed to match the darker pleat palette. */}
         <path
           d="M 580 0 L 588 0 L 596 632 Q 580 642 558 632 L 562 0 Z"
           fill="#F0C040"
-          opacity={0.28}
+          opacity={0.22}
         />
       </g>
 
@@ -92,23 +98,25 @@ export function BackstageCurtainArt({
         <path
           d="M 612 0 L 638 0 L 642 632 Q 620 642 604 632 L 608 0 Z"
           fill="#F0C040"
-          opacity={0.28}
+          opacity={0.22}
         />
       </g>
 
-      {/* Caption · slim gap is narrow so we keep type tight and
-          stacked. Uses cream + DM Mono with widely-spaced tracking
-          to feel like a marquee letter card. */}
-      <g transform="translate(600, 305)">
+      {/* Caption · enlarged (2026-05-18 CEO 피드백 · text was too small
+          to read on cards in the lane). Uses cream + DM Mono with
+          wide tracking · marquee letter-card feel. Sub-caption now
+          large enough to read at thumbnail scale too. */}
+      <g transform="translate(600, 300)">
         <text
           textAnchor="middle"
           x="0"
           y="0"
           fontFamily="DM Mono, monospace"
-          fontSize="22"
-          letterSpacing="6"
+          fontSize="44"
+          fontWeight="600"
+          letterSpacing="10"
           fill="#F8F5EE"
-          opacity="0.94"
+          opacity="0.96"
         >
           {caption}
         </text>
@@ -116,12 +124,12 @@ export function BackstageCurtainArt({
           <text
             textAnchor="middle"
             x="0"
-            y="32"
+            y="56"
             fontFamily="DM Mono, monospace"
-            fontSize="12"
-            letterSpacing="3"
+            fontSize="22"
+            letterSpacing="4"
             fill="#F8F5EE"
-            opacity="0.50"
+            opacity="0.65"
           >
             {subCaption}
           </text>
