@@ -312,75 +312,36 @@ export function ProfilePage() {
               </NavLink>
             </div>
           )}
+          {/* 2026-05-17 · MY PRODUCTS summary now uses the same
+              wide-row ApplicationRow as /me/products. CEO 피드백 ·
+              the old 6-thumbnail grid (grid-cols-2 sm:3 md:4 lg:6)
+              gave tiny cards with name+score only and read as
+              inconsistent next to the full-width rows below. Single
+              column of up to 6 rows + "+N more →" link to the full
+              portfolio · same row shape across both pages. */}
           {!loading && applications.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            <div className="flex flex-col gap-3">
               {applications.slice(0, 6).map(p => (
-                <Link
+                <ApplicationRow
                   key={p.id}
-                  to={`/projects/${p.id}`}
-                  className="block transition-all"
-                  style={{
-                    background:     'rgba(255,255,255,0.02)',
-                    border:         '1px solid rgba(255,255,255,0.06)',
-                    borderRadius:   '2px',
-                    textDecoration: 'none',
-                    overflow:       'hidden',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.4)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)')}
-                >
-                  <div className="relative" style={{ aspectRatio: '1200 / 630', background: 'var(--navy-800)' }}>
-                    {p.thumbnail_url ? (
-                      <img
-                        src={p.thumbnail_url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="absolute inset-0 w-full h-full"
-                        style={{ objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
-                        no preview
-                      </div>
-                    )}
-                    {p.score_total != null && (
-                      <span className="absolute top-1 right-1 px-1.5 py-0.5 font-mono text-[10px] tabular-nums" style={{
-                        background: 'rgba(6,12,26,0.85)',
-                        color:      p.score_total >= 85 ? 'var(--gold-500)' : 'var(--cream)',
-                        borderRadius: '2px',
-                      }}>
-                        {p.score_total}
-                      </span>
-                    )}
-                    {/* StageBadge bottom-left · matches FeaturedLaneCard
-                        + ProjectDetail. Skipped on retry (already shown
-                        as separate ROOKIE CIRCLE pill elsewhere). */}
-                    <div className="absolute bottom-1 left-1">
-                      <StageBadge project={p} size="xs" iconless />
-                    </div>
-                  </div>
-                  <div className="px-2 py-1.5">
-                    <div className="font-mono text-[11px] truncate" style={{ color: 'var(--cream)' }}>
-                      {p.project_name}
-                    </div>
-                  </div>
-                </Link>
+                  project={p}
+                  onDeleted={() => setApplications(prev => prev.filter(x => x.id !== p.id))}
+                />
               ))}
               {applications.length > 6 && (
                 <Link
                   to="/me/products"
-                  className="flex items-center justify-center font-mono text-xs"
+                  className="card-navy flex items-center justify-center font-mono text-xs py-4 transition-colors"
                   style={{
-                    background:     'rgba(240,192,64,0.05)',
                     border:         '1px dashed rgba(240,192,64,0.3)',
                     borderRadius:   '2px',
                     textDecoration: 'none',
                     color:          'var(--gold-500)',
-                    aspectRatio:    '1200 / 630',
                   }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.6)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(240,192,64,0.3)')}
                 >
-                  +{applications.length - 6} more →
+                  +{applications.length - 6} more · open full portfolio →
                 </Link>
               )}
             </div>
@@ -441,7 +402,12 @@ export function ProfilePage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            // 2026-05-17 · single-column at every breakpoint to match
+            // the MY PRODUCTS row width on /me/products. The old
+            // md:grid-cols-2 cramped library rows into ~450px on PC
+            // while products lived at the full max-w-5xl · two grid
+            // widths on the same page read as inconsistent.
+            <div className="flex flex-col gap-3">
               {library.map(item => <LibraryRow key={item.id} item={item} />)}
             </div>
           )}
