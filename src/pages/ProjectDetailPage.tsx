@@ -705,36 +705,70 @@ export function ProjectDetailPage() {
                   {project.project_name}
                 </h1>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {creator && (
+                  {/* Curtain treatment · §1-A ⑥. BACKSTAGE rows hide
+                      the author byline + grade chip from non-owners so
+                      the project reads as anonymous work-in-progress
+                      until the creator auditions onto ON STAGE. Owners
+                      always see their own byline so they don't get
+                      disoriented by their own incognito card. */}
+                  {project.status === 'backstage' && !isOwner ? (
                     <div className="flex items-center gap-2">
                       <div
-                        className="flex items-center justify-center font-mono text-xs font-bold overflow-hidden"
+                        aria-hidden="true"
+                        className="flex items-center justify-center font-mono text-xs overflow-hidden"
                         style={{
                           width: '24px', height: '24px',
-                          background: creator.avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
-                          color: 'var(--navy-900)',
-                          border: '1px solid rgba(240,192,64,0.3)',
+                          background: 'rgba(248,245,238,0.08)',
+                          color: 'rgba(248,245,238,0.45)',
+                          border: '1px solid rgba(248,245,238,0.18)',
                           borderRadius: '2px',
                         }}
                       >
-                        {creator.avatar_url ? (
-                          <img src={creator.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
-                        ) : (
-                          resolveCreatorInitial({ display_name: creator.display_name, creator_name: project.creator_name })
-                        )}
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 4h16" />
+                          <path d="M6 4v16c0-3 1.5-5 3-7" />
+                          <path d="M18 4v16c0-3-1.5-5-3-7" />
+                          <path d="M12 4v16" />
+                        </svg>
                       </div>
-                      <div className="font-mono text-xs" style={{ color: 'var(--cream)' }}>
-                        by <strong>{resolveCreatorName({ display_name: creator.display_name, creator_name: project.creator_name })}</strong>
+                      <div className="font-mono text-xs italic" style={{ color: 'var(--text-muted)' }}>
+                        behind the curtain · author not revealed until audition
                       </div>
                     </div>
+                  ) : (
+                    <>
+                      {creator && (
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="flex items-center justify-center font-mono text-xs font-bold overflow-hidden"
+                            style={{
+                              width: '24px', height: '24px',
+                              background: creator.avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
+                              color: 'var(--navy-900)',
+                              border: '1px solid rgba(240,192,64,0.3)',
+                              borderRadius: '2px',
+                            }}
+                          >
+                            {creator.avatar_url ? (
+                              <img src={creator.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                            ) : (
+                              resolveCreatorInitial({ display_name: creator.display_name, creator_name: project.creator_name })
+                            )}
+                          </div>
+                          <div className="font-mono text-xs" style={{ color: 'var(--cream)' }}>
+                            by <strong>{resolveCreatorName({ display_name: creator.display_name, creator_name: project.creator_name })}</strong>
+                          </div>
+                        </div>
+                      )}
+                      <span
+                        className="font-mono text-[11px]"
+                        title="Creator career grade — based on cumulative Encores (§8)."
+                        style={{ color: 'var(--gold-500)' }}
+                      >
+                        · {project.creator_grade}
+                      </span>
+                    </>
                   )}
-                  <span
-                    className="font-mono text-[11px]"
-                    title="Creator career grade — based on cumulative Encores (§8)."
-                    style={{ color: 'var(--gold-500)' }}
-                  >
-                    · {project.creator_grade}
-                  </span>
                 </div>
 
                 {/* Scanned-scope · transparency for monorepo audits.

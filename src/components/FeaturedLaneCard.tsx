@@ -37,6 +37,15 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
   const navigate = useNavigate()
   const tone = TONE_COLOR[accent.tone]
   const gradeColor = GRADE_COLORS[p.creator_grade] || '#9CA3AF'
+  // §1-A ⑥ curtain metaphor · BACKSTAGE projects are "behind the
+  // curtain", iterating before they put their name on the work. We hide
+  // the author identity on backstage cards (no avatar, no name, no
+  // grade chip overlaid on the image) so the lane reads as anonymous
+  // work-in-progress, not a creator leaderboard. Reduces social pressure
+  // for creators who want to be visible as a project but not yet as a
+  // person; the audition action is the explicit "now I'll sign it"
+  // moment that flips them onto ON STAGE with full byline.
+  const isBackstage = accent.tone === 'backstage'
   // §1-A ⑥ list-surface band gate · creator-self on their OWN lane card
   // still sees band (same as visitor view) so they sanity-check framing
   // without incognito. Encore + admin + paid Patron still reveal here.
@@ -100,19 +109,22 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
           </span>
         )}
 
-        {/* Grade chip — top left */}
-        <span
-          className="absolute top-2 left-2 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5"
-          style={{
-            background: 'rgba(6,12,26,0.65)',
-            color: gradeColor,
-            border: `1px solid ${gradeColor}44`,
-            borderRadius: '2px',
-            backdropFilter: 'blur(6px)',
-          }}
-        >
-          {p.creator_grade}
-        </span>
+        {/* Grade chip — top left · suppressed on BACKSTAGE for the
+            anonymous curtain treatment (see isBackstage note above). */}
+        {!isBackstage && (
+          <span
+            className="absolute top-2 left-2 font-mono text-[10px] tracking-widest uppercase px-2 py-0.5"
+            style={{
+              background: 'rgba(6,12,26,0.65)',
+              color: gradeColor,
+              border: `1px solid ${gradeColor}44`,
+              borderRadius: '2px',
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            {p.creator_grade}
+          </span>
+        )}
       </div>
 
       {/* Title + score region — its own clean band below the image */}
@@ -140,28 +152,60 @@ export function FeaturedLaneCard({ project: p, accent, hideScore, creator }: Fea
         </span>
       </div>
 
-      {/* Creator region — own band at the bottom with subtle separator */}
+      {/* Creator region — own band at the bottom with subtle separator.
+          BACKSTAGE swaps the avatar + name for an anonymous "behind the
+          curtain" treatment so the lane reads as work-in-progress, not
+          a creator leaderboard. accent.leftBadge (e.g. "3 audits") still
+          renders so iteration commitment is visible without the byline. */}
       <div
         className="px-3 py-2.5 flex items-center gap-2"
         style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
       >
-        <div
-          className="flex items-center justify-center font-mono text-[10px] font-bold overflow-hidden flex-shrink-0"
-          style={{
-            width: 20, height: 20,
-            background: creator?.avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
-            color: 'var(--navy-900)',
-            border: '1px solid rgba(240,192,64,0.3)',
-            borderRadius: '2px',
-          }}
-        >
-          {creator?.avatar_url
-            ? <img src={creator.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
-            : creatorInitial}
-        </div>
-        <span className="font-mono text-[11px] truncate flex-1" style={{ color: 'var(--text-primary)' }}>
-          {creatorName}
-        </span>
+        {isBackstage ? (
+          <>
+            <div
+              aria-hidden="true"
+              className="flex items-center justify-center flex-shrink-0"
+              style={{
+                width: 20, height: 20,
+                background: 'rgba(248,245,238,0.08)',
+                color: 'rgba(248,245,238,0.45)',
+                border: '1px solid rgba(248,245,238,0.18)',
+                borderRadius: '2px',
+              }}
+            >
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16" />
+                <path d="M6 4v16c0-3 1.5-5 3-7" />
+                <path d="M18 4v16c0-3-1.5-5-3-7" />
+                <path d="M12 4v16" />
+              </svg>
+            </div>
+            <span className="font-mono text-[11px] truncate flex-1" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              behind the curtain
+            </span>
+          </>
+        ) : (
+          <>
+            <div
+              className="flex items-center justify-center font-mono text-[10px] font-bold overflow-hidden flex-shrink-0"
+              style={{
+                width: 20, height: 20,
+                background: creator?.avatar_url ? 'var(--navy-800)' : 'var(--gold-500)',
+                color: 'var(--navy-900)',
+                border: '1px solid rgba(240,192,64,0.3)',
+                borderRadius: '2px',
+              }}
+            >
+              {creator?.avatar_url
+                ? <img src={creator.avatar_url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+                : creatorInitial}
+            </div>
+            <span className="font-mono text-[11px] truncate flex-1" style={{ color: 'var(--text-primary)' }}>
+              {creatorName}
+            </span>
+          </>
+        )}
         {accent.leftBadge && (
           <span className="font-mono text-[10px] flex-shrink-0" style={{ color: tone }}>
             {accent.leftBadge}
