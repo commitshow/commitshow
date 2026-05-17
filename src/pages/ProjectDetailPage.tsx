@@ -1577,12 +1577,51 @@ export function ProjectDetailPage() {
 
 // Backstage non-owner curtain page · 2026-05-18 · CEO 피드백 · once
 // /products started listing all backstage rows publicly, clicking
-// through couldn't reveal the author or any project details. This is
-// the minimum-info card a non-owner sees: title + thumbnail (or
-// curtain placeholder) + StageBadge + a single sentence telling them
-// the rest is sealed until audition. No description, no audit
-// report, no comments, no forecast/applaud UI.
+// through couldn't reveal the author or any project details. This
+// is the minimum-info card a non-owner sees: title + thumbnail (or
+// curtain placeholder) + StageBadge + a single sentence + a few
+// safe teaser signals (audit count, category, tech stack chips,
+// strength AXIS labels) so viewers have a reason to come back when
+// it auditions. NO description, NO audit report, NO comments, NO
+// forecast/applaud UI, NO bullet content (bullets can leak
+// project-identifying details · axis labels are safe).
 function BackstageCurtainPage({ project }: { project: Project }) {
+  const [strengthAxes, setStrengthAxes] = useState<string[]>([])
+
+  // Fetch only the AXIS labels of the project's strengths (e.g.
+  // "Security · UX · Code") · the bullet text itself often names
+  // specific files / line counts / framework versions that would
+  // re-identify the project, so it stays curtained. Just the axis
+  // tells the viewer "something is solid over there" without
+  // unmasking what. Best-effort · UI tolerates an empty list.
+  useEffect(() => {
+    let alive = true
+    supabase
+      .from('analysis_snapshots')
+      .select('rich_analysis')
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive || !data) return
+        const strengths = (data.rich_analysis as { scout_brief?: { strengths?: unknown } } | null)?.scout_brief?.strengths
+        if (!Array.isArray(strengths)) return
+        const axes = Array.from(new Set(
+          strengths.slice(0, 4).map(s => {
+            if (s && typeof s === 'object' && 'axis' in s) return String((s as { axis?: unknown }).axis ?? '')
+            return ''
+          }).filter(Boolean),
+        )).slice(0, 3)
+        setStrengthAxes(axes)
+      })
+    return () => { alive = false }
+  }, [project.id])
+
+  const techLayers = Array.isArray(project.tech_layers) ? project.tech_layers.slice(0, 5) : []
+  const categoryLabel = formatCategoryLabel(project.detected_category ?? project.business_category)
+  const auditCount    = project.audit_count ?? 0
+
   return (
     <section className="relative z-10 pt-20 pb-16 px-4 md:px-6 lg:px-8 min-h-screen">
       <div className="max-w-3xl mx-auto">
@@ -1626,12 +1665,44 @@ function BackstageCurtainPage({ project }: { project: Project }) {
             <h1 className="font-display font-black text-2xl md:text-3xl leading-tight mb-3" style={{ color: 'var(--cream)' }}>
               {project.project_name || 'Untitled audition'}
             </h1>
-            <p className="font-light text-sm md:text-base" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            <p className="font-light text-sm md:text-base mb-5" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
               This audition is behind the curtain. The creator hasn't put it on stage yet, so the
-              audit report, the score, and the author are kept private. Once they audition, the full
-              card opens up to the room.
+              audit report, the score, and the author are kept private. Here's what we can share
+              without unmasking the project.
             </p>
-            <p className="font-mono text-[11px] mt-4" style={{ color: 'var(--text-muted)' }}>
+
+            {/* ── Safe teaser strip · non-identifying signals only ──
+                Axis labels (not bullet text) · category · tech chips ·
+                iteration count. Gives a curtain-respecting taste of
+                what's behind the curtain without revealing creator
+                or audit specifics. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {strengthAxes.length > 0 && (
+                <TeaserChip
+                  label="Audit found strengths on"
+                  tone="#00D4AA"
+                >
+                  {strengthAxes.join(' · ')}
+                </TeaserChip>
+              )}
+              {categoryLabel && (
+                <TeaserChip label="Category" tone="var(--gold-500)">
+                  {categoryLabel}
+                </TeaserChip>
+              )}
+              {techLayers.length > 0 && (
+                <TeaserChip label="Stack" tone="var(--cream)">
+                  {techLayers.join(' · ')}
+                </TeaserChip>
+              )}
+              {auditCount > 0 && (
+                <TeaserChip label="Iteration" tone="var(--cream)">
+                  {auditCount} audit cycle{auditCount === 1 ? '' : 's'} run
+                </TeaserChip>
+              )}
+            </div>
+
+            <p className="font-mono text-[11px] mt-5" style={{ color: 'var(--text-muted)' }}>
               Browse other vibe coders' work →{' '}
               <Link to="/products" style={{ color: 'var(--gold-500)' }}>/products</Link>
             </p>
@@ -1640,6 +1711,50 @@ function BackstageCurtainPage({ project }: { project: Project }) {
       </div>
     </section>
   )
+}
+
+// Tiny presentational chip for the curtain page's teaser grid. Plain
+// label-on-top / value-below card · gold/teal/cream tone for accent
+// matches the rest of the stage palette.
+function TeaserChip({ label, tone, children }: { label: string; tone: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="px-3 py-2.5"
+      style={{
+        background:    'rgba(255,255,255,0.02)',
+        border:        '1px solid rgba(255,255,255,0.06)',
+        borderRadius:  '2px',
+      }}
+    >
+      <div className="font-mono text-[10px] tracking-widest uppercase mb-1" style={{ color: 'var(--text-label)' }}>
+        {label}
+      </div>
+      <div className="font-mono text-[12px]" style={{ color: tone, lineHeight: 1.5 }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Human-readable category label · maps the internal enum slugs
+// (e.g. "niche_saas") to a "Niche SaaS" presentation. Unknown
+// values pass through with a fallback transform. Returns null when
+// no category is set so the chip hides cleanly.
+function formatCategoryLabel(cat: string | null | undefined): string | null {
+  if (!cat) return null
+  const MAP: Record<string, string> = {
+    productivity_personal: 'Productivity · Personal',
+    niche_saas:            'Niche SaaS',
+    creator_media:         'Creator · Media',
+    dev_tools:             'Developer Tools',
+    ai_agents_chat:        'AI Agents · Chat',
+    consumer_lifestyle:    'Consumer · Lifestyle',
+    games_playful:         'Games · Playful',
+    other:                 'Other',
+  }
+  if (MAP[cat]) return MAP[cat]
+  // Unknown enum: title-case the slug for a passable fallback.
+  return cat.split('_').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')
 }
 
 function ActivityList({ title, emptyLabel, accent, children }: {
