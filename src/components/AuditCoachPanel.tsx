@@ -300,17 +300,61 @@ export function AuditCoachPanel({
             inviting the user to share an actual climb story, not a
             fresh empty post. previousBand is set the moment the user
             kicks off a re-audit (parent state) — using it as the
-            'has iterated at least once' signal. */}
-        {previousBand && (
-          <a
-            href={`/community/open-mic/new?title=${encodeURIComponent(`${displayScore(project)} after re-audit · ${project.project_name}`)}&tldr=${encodeURIComponent("What I fixed this cycle and what the audit found next.")}&tags=vibe-life,ship-log`}
-            className="inline-flex items-center gap-1.5 mt-3 font-mono text-[11px] tracking-wide"
-            style={{ color: '#00D4AA', textDecoration: 'none' }}
-          >
-            <span>Share your climb on Open Mic</span>
-            <span aria-hidden="true">→</span>
-          </a>
-        )}
+            'has iterated at least once' signal.
+            2026-05-18 · body template added · CEO 피드백 · the link
+            was only seeding title+tldr+tags, leaving the body
+            textarea empty. Now seeds a draft markdown body with
+            the score delta, a "what I fixed" prompt, and the top
+            concerns from the current snapshot — user just edits
+            the prompt and hits publish instead of writing from
+            scratch. */}
+        {previousBand && (() => {
+          const score = displayScore(project)
+          const projectName = project.project_name || 'this build'
+          const title = `${score} after re-audit · ${projectName}`
+          const tldr  = 'What I fixed this cycle and what the audit found next.'
+          // Top concerns from the current snapshot · max 3, plain
+          // strings so the markdown body stays readable.
+          const rawWeak = (snapshotRich as { scout_brief?: { weaknesses?: unknown } } | null)?.scout_brief?.weaknesses
+          const weaknesses: string[] = Array.isArray(rawWeak)
+            ? rawWeak.slice(0, 3).map(w => {
+                if (typeof w === 'string') return w
+                if (w && typeof w === 'object' && 'bullet' in w && typeof (w as { bullet: unknown }).bullet === 'string') {
+                  return (w as { bullet: string }).bullet
+                }
+                return ''
+              }).filter(Boolean)
+            : []
+          const concernsBlock = weaknesses.length > 0
+            ? weaknesses.map(w => `- ${w}`).join('\n')
+            : '- (audit found nothing new to fix · ship time)'
+          const body = [
+            `## ${previousBand} → ${currentBand} · ${score}/100`,
+            '',
+            '### What I fixed this cycle',
+            '- ',
+            '- ',
+            '',
+            '### What the audit flagged next',
+            concernsBlock,
+            '',
+            '### Next move',
+            '- ',
+            '',
+            `— ${projectName} on commit.show`,
+          ].join('\n')
+          const url = `/community/open-mic/new?title=${encodeURIComponent(title)}&tldr=${encodeURIComponent(tldr)}&body=${encodeURIComponent(body)}&tags=vibe-life,ship-log`
+          return (
+            <a
+              href={url}
+              className="inline-flex items-center gap-1.5 mt-3 font-mono text-[11px] tracking-wide"
+              style={{ color: '#00D4AA', textDecoration: 'none' }}
+            >
+              <span>Share your climb on Open Mic</span>
+              <span aria-hidden="true">→</span>
+            </a>
+          )
+        })()}
       </div>
 
       {/* Auto-audition prompt · only when band actually climbed up.
