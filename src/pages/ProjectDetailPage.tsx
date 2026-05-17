@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Project } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
@@ -147,6 +147,11 @@ export function ProjectDetailPage() {
   const [seasonProgress, setSeasonProgress] = useState<SeasonProgress | null>(null)
   const [creator, setCreator] = useState<CreatorIdentity | null>(null)
   const [activeSection, setActiveSection] = useState<string>('overview')
+  // 2026-05-17 · once-per-mount guard so the backstage-owner Coach
+  // auto-scroll fires exactly once after the snapshot loads. Without
+  // it the effect would re-trigger on every snapshot update (re-audit
+  // success · weekly refresh · etc) and steal scroll mid-interaction.
+  const coachAutoScrolledRef = useRef(false)
   // 2026-05-17 · owner-only management hub state. Polish gate expands
   // inline when Coach reports the card isn't ready (no description /
   // no thumbnail) so the user never leaves the page. Remove zone uses
@@ -379,6 +384,28 @@ export function ProjectDetailPage() {
     void recordProjectView(project.id)
   }, [project?.id, project?.creator_id, user?.id])
 
+  // ── Backstage-owner Coach surface · 2026-05-17 ──
+  // When a backstage owner lands on /projects/<id> (typically via the
+  // OPEN button on /backstage), the page should focus the coaching
+  // surface — not the visitor Overview. We auto-scroll to the Coach
+  // panel and flip the section indicator to 'analysis' once the
+  // snapshot resolves (latestSnapRaw guards against the empty-state
+  // flash). Once-per-mount via a ref so a re-audit success refetch
+  // doesn't yank scroll mid-session.
+  useEffect(() => {
+    if (!project || !latestSnapRaw) return
+    if (project.status !== 'backstage') return
+    const isOwn = !!(user && user.id === project.creator_id)
+    if (!isOwn) return
+    if (coachAutoScrolledRef.current) return
+    coachAutoScrolledRef.current = true
+    setActiveSection('analysis')
+    // Slight delay so the panel has painted before we scroll to it.
+    window.setTimeout(() => {
+      document.getElementById('audit-coach-panel')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }, 120)
+  }, [project, latestSnapRaw, user])
+
   // Scroll-spy · highlight the section nav chip that matches the viewport
   useEffect(() => {
     if (loading) return
@@ -546,6 +573,10 @@ export function ProjectDetailPage() {
           // returns []. Once the snapshot select lands (~200ms after
           // project load) the gate flips true and the real Coach panel
           // mounts cleanly without the empty-state flash.
+          //
+          // id="audit-coach-panel" so the auto-scroll effect below
+          // can target it on backstage-owner mount.
+          <div id="audit-coach-panel">
           <AuditCoachPanel
             project={project}
             snapshotRich={latestSnapRaw.rich}
@@ -572,6 +603,7 @@ export function ProjectDetailPage() {
               if (refreshed) setProject(refreshed)
             }}
           />
+          </div>
         )}
 
         {/* Inline polish gate · expanded by Coach's onPolishNeeded
