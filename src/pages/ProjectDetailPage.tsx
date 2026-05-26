@@ -1427,13 +1427,22 @@ export function ProjectDetailPage() {
             {/* AI Coder 7 Frames · signature framework — sits between
                 score timeline and full Analysis card so beginners see the
                 most actionable failure-mode summary first.
-                2026-05-23 · CEO 피드백 cross-check · URL fast lane never
-                sees source code, so every source-pattern frame (CORS
-                permissive · observability libs · webhook idempotency ·
-                hardcoded URLs etc.) defaults to PASS/FAIL on empty
-                evidence — misleading. Gate the panel to lanes that
-                actually scanned the repo. */}
-            {vibeConcerns && currentLane !== 'url_fast_lane' && (
+                2026-05-23 · CEO 피드백 cross-check · source-pattern frames
+                (CORS permissive · observability libs · webhook idempotency
+                · hardcoded URLs etc.) emit PASS/FAIL on empty evidence,
+                which is wrong when the source was never scanned. Two
+                cases the panel must skip:
+                  · URL fast lane — repo never attempted
+                  · fallback scan — github fetch failed (rate-limited /
+                    private / 404), evidence-arrays are empty by
+                    accident not by cleanliness
+                Runtime-detectable signals (security_headers · ACAO ·
+                meta tags) live on the snapshot's rich_analysis and are
+                surfaced elsewhere — those stay visible regardless. */}
+            {vibeConcerns
+              && currentLane !== 'url_fast_lane'
+              && !(scannedScope ?? '').toLowerCase().startsWith('fallback')
+              && (
               <div className="mb-8">
                 <VibeConcernsPanel vibeConcerns={vibeConcerns} />
               </div>

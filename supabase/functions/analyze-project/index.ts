@@ -2304,6 +2304,12 @@ interface SecurityHeaders {
   has_permissions_policy: boolean   // Permissions-Policy
   filled:                 number    // 0-6
   of:                     number    // 6
+  // 2026-05-23 · CEO 피드백 (deliber.ai cross-check) · runtime CORS
+  // check so URL fast lane / partial audits flag wide-open ACAO even
+  // when the source-scan CORS frame can't see the `cors()` config.
+  // null = header absent · '*' = wide open · explicit origin = scoped.
+  acao_value:             string | null
+  acao_wildcard:          boolean
 }
 async function inspectSecurityHeaders(url: string): Promise<SecurityHeaders> {
   const blank: SecurityHeaders = {
@@ -2311,6 +2317,7 @@ async function inspectSecurityHeaders(url: string): Promise<SecurityHeaders> {
     has_csp: false, has_hsts: false, has_frame_protection: false,
     has_content_type_opt: false, has_referrer_policy: false, has_permissions_policy: false,
     filled: 0, of: 6,
+    acao_value: null, acao_wildcard: false,
   }
   try {
     const ctrl = new AbortController()
@@ -2339,7 +2346,12 @@ async function inspectSecurityHeaders(url: string): Promise<SecurityHeaders> {
       has_permissions_policy: permPol,
     }
     const filled = Object.values(flags).filter(Boolean).length
-    return { fetched: true, ...flags, filled, of: 6 }
+    const acao_raw = (h.get('access-control-allow-origin') ?? '').trim()
+    return {
+      fetched: true, ...flags, filled, of: 6,
+      acao_value:    acao_raw.length > 0 ? acao_raw.slice(0, 200) : null,
+      acao_wildcard: acao_raw === '*',
+    }
   } catch {
     return blank
   }
