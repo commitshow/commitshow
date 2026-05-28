@@ -278,19 +278,21 @@ function RadialAuditVisual() {
   })
 
   // Axis labels float just outside the ring at cardinal-ish angles.
-  // Sample labels — illustrative not exhaustive (the engine measures
-  // ~14 frames, four shown for context).
+  // Copy rewritten 2026-05-29 from engineering jargon (LIGHTHOUSE / ROUTES
+  // / SECURITY / TESTS · CI) to vibe-coder pain points — what they
+  // actually forget to ship. Concrete enough that someone reads them
+  // and thinks "oh yeah, my .env / og:image / mobile broke".
   const labelOffsetR = outerR + 38
   const labels: Array<{ text: string; angleDeg: number; anchor: 'start' | 'middle' | 'end' }> = [
-    { text: 'LIGHTHOUSE', angleDeg: -90, anchor: 'middle' },
-    { text: 'ROUTES',     angleDeg:   0, anchor: 'start'  },
-    { text: 'SECURITY',   angleDeg:  90, anchor: 'middle' },
-    { text: 'TESTS · CI', angleDeg: 180, anchor: 'end'    },
+    { text: 'MOBILE SPEED',  angleDeg: -90, anchor: 'middle' },
+    { text: 'BROKEN LINKS',  angleDeg:   0, anchor: 'start'  },
+    { text: 'SOCIAL CARDS',  angleDeg:  90, anchor: 'middle' },
+    { text: 'SECRET LEAKS',  angleDeg: 180, anchor: 'end'    },
   ]
 
   return (
     <svg
-      viewBox="0 0 800 720"
+      viewBox="0 0 800 780"
       width="100%"
       role="img"
       aria-label="Radial gauge illustration: 14 production-readiness frames audited"
@@ -330,9 +332,9 @@ function RadialAuditVisual() {
         fontFamily="DM Mono, monospace"
         fontSize={12}
         fill="var(--gold-500)"
-        letterSpacing="6"
+        letterSpacing="4"
       >
-        AUDIT
+        ANALYZE &amp; COACH
       </text>
 
       {/* axis labels around the ring */}
@@ -356,9 +358,11 @@ function RadialAuditVisual() {
         )
       })}
 
-      {/* bottom caption · ties the abstract gauge back to plain language */}
+      {/* bottom caption · ties the abstract gauge back to plain language.
+          Pushed further down (y=735) per design feedback so it breathes
+          away from the axis labels and reads as a separate beat. */}
       <text
-        x={cx} y={650} textAnchor="middle"
+        x={cx} y={735} textAnchor="middle"
         fontFamily="DM Mono, monospace"
         fontSize={11}
         fill="rgba(248,245,238,0.55)"
