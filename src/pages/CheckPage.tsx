@@ -346,7 +346,7 @@ function RadialAuditVisual() {
           site so the bubble reads as part of the brand surface, not a
           comic-strip overlay. */}
       <rect
-        x={cx - 175} y={100}
+        x={cx - 175} y={150}
         width={350} height={48}
         rx={8}
         fill="var(--navy-800)"
@@ -354,7 +354,7 @@ function RadialAuditVisual() {
         strokeWidth={1}
       />
       <polygon
-        points={`${cx - 10},148 ${cx + 10},148 ${cx},168`}
+        points={`${cx - 10},198 ${cx + 10},198 ${cx},218`}
         fill="var(--navy-800)"
         stroke="rgba(240,192,64,0.35)"
         strokeWidth={1}
@@ -363,12 +363,12 @@ function RadialAuditVisual() {
           cover-strip in the same navy-800 fill, no stroke, sitting on
           top of both shapes' bottom borders along the tail's mouth. */}
       <rect
-        x={cx - 9} y={147.5}
+        x={cx - 9} y={197.5}
         width={18} height={2}
         fill="var(--navy-800)"
       />
       <text
-        x={cx} y={124}
+        x={cx} y={174}
         textAnchor="middle"
         dominantBaseline="middle"
         fontFamily="DM Mono, monospace"
