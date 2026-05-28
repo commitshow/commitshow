@@ -311,31 +311,29 @@ function RadialAuditVisual() {
         />
       ))}
 
-      {/* inner subtle disc · pulls the center text out of the wedge ring */}
+      {/* inner backdrop disc · ensures any transparency in csm.png falls
+          on a known dark surface rather than mixing with the wedges. */}
       <circle cx={cx} cy={cy} r={innerR - 12} fill="rgba(6,12,26,0.6)" stroke="rgba(240,192,64,0.10)" strokeWidth={1} />
 
-      {/* center label · runtime promise. "60s" big in Playfair · "AUDIT"
-          small under it in DM Mono · short and abstract enough that it
-          doesn't read as a fake sample score. */}
-      <text
-        x={cx} y={cy + 6} textAnchor="middle"
-        fontFamily="Playfair Display, Georgia, serif"
-        fontWeight={900}
-        fontSize={108}
-        fill="var(--cream)"
-        letterSpacing="-2"
-      >
-        60s
-      </text>
-      <text
-        x={cx} y={cy + 44} textAnchor="middle"
-        fontFamily="DM Mono, monospace"
-        fontSize={12}
-        fill="var(--gold-500)"
-        letterSpacing="4"
-      >
-        ANALYZE &amp; COACH
-      </text>
+      {/* center image · csm.png clipped to the inner disc · 2026-05-29.
+          Replaces the previous "60s / ANALYZE & COACH" typographic
+          center per CEO request. preserveAspectRatio=xMidYMid slice
+          mirrors CSS object-fit:cover so a non-square source (1536×1024)
+          fills the circle from the center, cropping the long edges. */}
+      <defs>
+        <clipPath id="check-center-clip">
+          <circle cx={cx} cy={cy} r={innerR - 12} />
+        </clipPath>
+      </defs>
+      <image
+        href="/csm.png"
+        x={cx - (innerR - 12)}
+        y={cy - (innerR - 12)}
+        width={(innerR - 12) * 2}
+        height={(innerR - 12) * 2}
+        clipPath="url(#check-center-clip)"
+        preserveAspectRatio="xMidYMid slice"
+      />
 
       {/* axis labels around the ring */}
       {labels.map(({ text, angleDeg, anchor }, i) => {
