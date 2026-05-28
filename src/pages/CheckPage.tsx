@@ -312,28 +312,60 @@ function RadialAuditVisual() {
       ))}
 
       {/* inner backdrop disc · ensures any transparency in csm.png falls
-          on a known dark surface rather than mixing with the wedges. */}
-      <circle cx={cx} cy={cy} r={innerR - 12} fill="rgba(6,12,26,0.6)" stroke="rgba(240,192,64,0.10)" strokeWidth={1} />
+          on a known dark surface rather than mixing with the wedges.
+          Mascot bumped +20% per CEO (2026-05-29) — radius derived once
+          from MASCOT_R so backdrop / clipPath / image stay in sync. */}
+      {(() => {
+        const MASCOT_R = Math.round((innerR - 12) * 1.2) // 199
+        return (
+          <>
+            <circle cx={cx} cy={cy} r={MASCOT_R} fill="rgba(6,12,26,0.6)" stroke="rgba(240,192,64,0.10)" strokeWidth={1} />
 
-      {/* center image · csm.png clipped to the inner disc · 2026-05-29.
-          Replaces the previous "60s / ANALYZE & COACH" typographic
-          center per CEO request. preserveAspectRatio=xMidYMid slice
-          mirrors CSS object-fit:cover so a non-square source (1536×1024)
-          fills the circle from the center, cropping the long edges. */}
-      <defs>
-        <clipPath id="check-center-clip">
-          <circle cx={cx} cy={cy} r={innerR - 12} />
-        </clipPath>
-      </defs>
-      <image
-        href="/csm.png"
-        x={cx - (innerR - 12)}
-        y={cy - (innerR - 12)}
-        width={(innerR - 12) * 2}
-        height={(innerR - 12) * 2}
-        clipPath="url(#check-center-clip)"
-        preserveAspectRatio="xMidYMid slice"
+            <defs>
+              <clipPath id="check-center-clip">
+                <circle cx={cx} cy={cy} r={MASCOT_R} />
+              </clipPath>
+            </defs>
+            <image
+              href="/csm.png"
+              x={cx - MASCOT_R}
+              y={cy - MASCOT_R}
+              width={MASCOT_R * 2}
+              height={MASCOT_R * 2}
+              clipPath="url(#check-center-clip)"
+              preserveAspectRatio="xMidYMid slice"
+            />
+          </>
+        )
+      })()}
+
+      {/* Speech bubble · cream pill above the mascot · 2026-05-29.
+          Sits in the top dead zone between viewBox top and the
+          MOBILE SPEED axis label, with a downward tail pointing at
+          the mascot below. Text wrapped in JSX expression so the
+          apostrophe in "I'll" isn't flagged by react/no-unescaped-
+          entities. */}
+      <rect
+        x={cx - 175} y={4}
+        width={350} height={48}
+        rx={8}
+        fill="var(--cream)"
       />
+      <polygon
+        points={`${cx - 10},52 ${cx + 10},52 ${cx},68`}
+        fill="var(--cream)"
+      />
+      <text
+        x={cx} y={28}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontFamily="DM Mono, monospace"
+        fontSize={15}
+        fontWeight={500}
+        fill="var(--navy-950)"
+      >
+        {"I'll go through it carefully!"}
+      </text>
 
       {/* axis labels around the ring */}
       {labels.map(({ text, angleDeg, anchor }, i) => {
