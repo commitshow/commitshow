@@ -339,24 +339,23 @@ function RadialAuditVisual() {
         )
       })()}
 
-      {/* Speech bubble · cream pill above the mascot · 2026-05-29.
-          Sits in the top dead zone between viewBox top and the
-          MOBILE SPEED axis label, with a downward tail pointing at
-          the mascot below. Text wrapped in JSX expression so the
-          apostrophe in "I'll" isn't flagged by react/no-unescaped-
-          entities. */}
+      {/* Speech bubble · cream pill hovering just above the mascot's
+          head with a short tail tipping into it (2026-05-29 v2 — moved
+          down from the top dead zone per CEO; ring overlap is fine).
+          Text wrapped in a JSX expression so the apostrophe in "I'll"
+          stays clean past react/no-unescaped-entities. */}
       <rect
-        x={cx - 175} y={4}
+        x={cx - 175} y={100}
         width={350} height={48}
         rx={8}
         fill="var(--cream)"
       />
       <polygon
-        points={`${cx - 10},52 ${cx + 10},52 ${cx},68`}
+        points={`${cx - 10},148 ${cx + 10},148 ${cx},168`}
         fill="var(--cream)"
       />
       <text
-        x={cx} y={28}
+        x={cx} y={124}
         textAnchor="middle"
         dominantBaseline="middle"
         fontFamily="DM Mono, monospace"
