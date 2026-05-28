@@ -622,7 +622,7 @@ export function HeroUrlHook({
                 alt=""
                 aria-hidden="true"
                 className="absolute pointer-events-none select-none"
-                style={{ width: 64, height: 'auto', top: -36, left: -12, zIndex: 1 }}
+                style={{ width: 64, height: 'auto', top: -36, left: 12, zIndex: 1 }}
               />
             )}
             <input
