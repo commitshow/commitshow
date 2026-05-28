@@ -347,14 +347,14 @@ function RadialAuditVisual() {
           comic-strip overlay. */}
       <rect
         x={cx - 175} y={165}
-        width={350} height={48}
+        width={350} height={62}
         rx={8}
         fill="var(--navy-800)"
         stroke="rgba(240,192,64,0.35)"
         strokeWidth={1}
       />
       <polygon
-        points={`${cx - 10},213 ${cx + 10},213 ${cx},233`}
+        points={`${cx - 7},227 ${cx + 7},227 ${cx},241`}
         fill="var(--navy-800)"
         stroke="rgba(240,192,64,0.35)"
         strokeWidth={1}
@@ -363,12 +363,12 @@ function RadialAuditVisual() {
           cover-strip in the same navy-800 fill, no stroke, sitting on
           top of both shapes' bottom borders along the tail's mouth. */}
       <rect
-        x={cx - 9} y={212.5}
-        width={18} height={2}
+        x={cx - 6} y={226.5}
+        width={12} height={2}
         fill="var(--navy-800)"
       />
       <text
-        x={cx} y={189}
+        x={cx} y={196}
         textAnchor="middle"
         dominantBaseline="middle"
         fontFamily="DM Mono, monospace"
