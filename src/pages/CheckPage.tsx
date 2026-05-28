@@ -32,14 +32,19 @@ type AuditMode = 'site' | 'repo'
 // so the toggle is a UX affordance for the user's mental model — the
 // backend doesn't care which mode they picked. We still tailor the
 // helper line so the user knows what each lane actually measures.
-const MODE_COPY: Record<AuditMode, { placeholder: string; helper: string }> = {
+// Lead with the offer in cream (95%) so "Free · ~60 seconds" is the
+// first thing the eye lands on after the form, then the lane-specific
+// measure list trails in text-secondary (55%).
+const FREE_LEAD = <span style={{ color: 'var(--cream)' }}>Free · ~60 seconds</span>
+
+const MODE_COPY: Record<AuditMode, { placeholder: string; helper: React.ReactNode }> = {
   site: {
     placeholder: 'https://your-app.com',
-    helper: 'Free · ~60 seconds · checks Lighthouse, security headers, broken routes, and live URL health.',
+    helper: <>{FREE_LEAD} · checks Lighthouse, security headers, broken routes, and live URL health.</>,
   },
   repo: {
     placeholder: 'github.com/owner/repo',
-    helper: 'Free · ~60 seconds · reads README, tests, CI, license, observability signals, code health.',
+    helper: <>{FREE_LEAD} · reads README, tests, CI, license, observability signals, code health.</>,
   },
 }
 

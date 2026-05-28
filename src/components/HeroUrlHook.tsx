@@ -612,7 +612,13 @@ export function HeroUrlHook({
           // meta beneath the form without disappearing.
           <p className="mt-4 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
             {helperText ?? (
-              <>Free · ~60 seconds · checks Lighthouse, security headers, broken routes, and live URL health.</>
+              // "Free · ~60 seconds" promoted to cream so the offer lands
+              // first, the rest sits in text-secondary as the trailing
+              // detail. Matches CheckPage's helper styling.
+              <>
+                <span style={{ color: 'var(--cream)' }}>Free · ~60 seconds</span>
+                {' '}· checks Lighthouse, security headers, broken routes, and live URL health.
+              </>
             )}
           </p>
         )}
