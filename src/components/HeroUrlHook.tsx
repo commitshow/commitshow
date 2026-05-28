@@ -200,12 +200,26 @@ const REASSURE_CYCLE_MS = 14_000
  *   page (CheckPage) owns the headline + framing copy. Form + result UX
  *   is identical to landing-page usage so we have a single audit-site-
  *   preview integration to maintain.
+ *
+ * Optional placeholder / helperText / inputId let the host override the
+ * defaults — used by CheckPage to expand the placeholder to "site URL or
+ * GitHub repo" (audit-site-preview already auto-forwards github URLs to
+ * the walk-on path) and to give the input a stable id so a CTA link on
+ * the page can `focus()` it without a router redirect.
  */
 interface HeroUrlHookProps {
-  chromeless?: boolean
+  chromeless?:  boolean
+  placeholder?: string
+  helperText?:  React.ReactNode
+  inputId?:     string
 }
 
-export function HeroUrlHook({ chromeless = false }: HeroUrlHookProps = {}) {
+export function HeroUrlHook({
+  chromeless = false,
+  placeholder = 'https://yoursite.com',
+  helperText,
+  inputId,
+}: HeroUrlHookProps = {}) {
   const [url,    setUrl]    = useState('')
   const [phase,  setPhase]  = useState<Phase>('idle')
   const [error,  setError]  = useState<string | null>(null)
@@ -540,13 +554,14 @@ export function HeroUrlHook({ chromeless = false }: HeroUrlHookProps = {}) {
         {phase === 'idle' && (
           <form onSubmit={startAudit} className="flex flex-col sm:flex-row gap-3 max-w-2xl">
             <input
+              id={inputId}
               type="text"
               inputMode="url"
               autoComplete="url"
               spellCheck={false}
               value={url}
               onChange={e => { setUrl(e.target.value); if (error) setError(null) }}
-              placeholder="https://yoursite.com"
+              placeholder={placeholder}
               className="flex-1 px-4 py-3.5 font-mono text-sm"
               style={{
                 background: 'rgba(6,12,26,0.7)',
@@ -589,10 +604,12 @@ export function HeroUrlHook({ chromeless = false }: HeroUrlHookProps = {}) {
           // push past it") led with what we can't see — self-deprecating
           // tone is wrong for the ad-LP first impression. New copy leads
           // with what we DO measure across the surface so the wait feels
-          // valuable, then offers the repo path as an upgrade rather
-          // than as remediation for a perceived gap.
+          // valuable. Host pages can override via `helperText` prop —
+          // CheckPage uses that to mention site-OR-repo auto-detection.
           <p className="mt-4 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
-            Free · ~60 seconds · checks Lighthouse, security headers, broken routes, and live URL health.
+            {helperText ?? (
+              <>Free · ~60 seconds · checks Lighthouse, security headers, broken routes, and live URL health.</>
+            )}
           </p>
         )}
 

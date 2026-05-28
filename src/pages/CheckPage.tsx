@@ -20,7 +20,24 @@
 import { Link } from 'react-router-dom'
 import { HeroUrlHook } from '../components/HeroUrlHook'
 
+// Stable id assigned to the audit input so the "got a repo?" CTA below
+// can focus + scroll to it without a router redirect to /submit (which
+// gates on signup). audit-site-preview auto-forwards github URLs to the
+// anonymous walk-on path, so a single input handles both lanes.
+const URL_INPUT_ID = 'check-audit-input'
+
 export function CheckPage() {
+  // Focus + smoothly scroll to the audit input. Used by the secondary
+  // CTA which previously sent users to /submit (auth-gated · breaks
+  // the "free first, login later" flow the ad LP promises).
+  const focusAuditInput = () => {
+    const input = document.getElementById(URL_INPUT_ID)
+    if (!input) return
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Defer focus past the scroll so iOS doesn't pop the keyboard
+    // mid-scroll and leave the page jumping.
+    setTimeout(() => (input as HTMLInputElement).focus(), 320)
+  }
   return (
     <main
       className="relative min-h-screen flex flex-col"
@@ -73,31 +90,46 @@ export function CheckPage() {
 
       {/* ── Audit entry · chromeless HeroUrlHook = form + state machine +
           result card from the landing page, with its own section bg/
-          eyebrow/h2/sub copy suppressed. Sole audit surface on the LP. */}
-      <HeroUrlHook chromeless />
+          eyebrow/h2/sub copy suppressed. Sole audit surface on the LP.
+          Placeholder + helper expanded to advertise that the same box
+          accepts a GitHub repo URL — audit-site-preview auto-forwards
+          to the anonymous walk-on path. No signup required to see a
+          result either way. */}
+      <HeroUrlHook
+        chromeless
+        inputId={URL_INPUT_ID}
+        placeholder="https://your-app.com  ·  or  github.com/owner/repo"
+        helperText={<>Free · ~60 seconds · paste a site URL <em style={{ color: 'var(--gold-500)', fontStyle: 'normal' }}>or a GitHub repo</em> · we auto-detect.</>}
+      />
 
-      {/* ── Secondary path · repo audit.
-          Kept as a small link rather than a second equal-weight input
-          to protect single-CTA conversion. Copy reframed 2026-05-28 from
-          "USE THAT INSTEAD" (which implied URL-paste was deficient) to
-          "DEEPER AUDIT" (positive upgrade · also a natural self-select
-          target for mobile/library/CLI builders whose surface isn't a
-          standard web URL). Routes to /submit · full repo lane. */}
+      {/* ── Secondary path · repo audit · 2026-05-28 redesigned.
+          PREVIOUSLY: <Link to="/submit"> · which gated the repo lane on
+          signup and broke the LP promise ("run a basic audit first,
+          then login"). User feedback 2026-05-28 confirmed.
+          NOW: a button that focuses the URL input above. Since audit-
+          site-preview auto-detects + forwards github URLs to the
+          anonymous walk-on path, the same input handles both lanes
+          without a redirect. Signup CTA lives on the result card,
+          AFTER trust is built by a real score landing. */}
       <section className="relative z-10 px-6 md:px-10 lg:px-16 mt-6 mb-12">
         <div className="max-w-3xl mx-auto">
-          <Link
-            to="/submit"
-            // 2026-05-28 · default color promoted from text-muted → gold so
-            // the secondary path actually catches mobile/library/CLI
-            // builders' eyes. Previous muted tone made it read like fine
-            // print. Hover stays brighter for the same press-affordance.
+          <button
+            type="button"
+            onClick={focusAuditInput}
             className="inline-flex items-center gap-2 font-mono text-xs tracking-widest transition-colors"
-            style={{ color: 'var(--gold-500)', textDecoration: 'none' }}
+            style={{
+              color: 'var(--gold-500)',
+              textDecoration: 'none',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+            }}
             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--gold-400)')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--gold-500)')}
           >
-            AUDITION YOUR REPO FOR A DEEPER AUDIT →
-          </Link>
+            BUILT AN APP, LIBRARY, OR CLI? PASTE THE GITHUB REPO ABOVE →
+          </button>
         </div>
       </section>
 
