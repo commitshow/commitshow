@@ -87,9 +87,10 @@ export function FeaturedLanes() {
         tone="#00D4AA"
         loading={climbers.loading}
         empty="No movers yet — be the first to push score upward."
+        layout="grid"
         footerCta={{
-          label: 'Audition your project →',
-          to:    '/submit',
+          label: 'View the full ladder →',
+          to:    '/products?view=cards',
         }}
       >
         {climbers.rows.map(p => (
@@ -131,9 +132,17 @@ interface LaneFooterCta {
   to:    string
 }
 
-function Lane({ label, hint, tone, loading, empty, children, footerCta }: {
+function Lane({ label, hint, tone, loading, empty, children, footerCta, layout = 'carousel' }: {
   label: string; hint: string; tone: string; loading: boolean; empty: string;
   children: React.ReactNode; footerCta?: LaneFooterCta;
+  /**
+   * 2026-05-30 · ON STAGE asked to read as a magazine grid (full
+   * visibility, no horizontal scroll). 'grid' renders the children in
+   * a 1/2/3-col responsive grid and hides the carousel arrows.
+   * 'carousel' (default) keeps the original horizontal scroller for
+   * BACKSTAGE + ENCORE.
+   */
+  layout?: 'carousel' | 'grid';
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const count = (Array.isArray(children) ? children : [children]).filter(Boolean).length
@@ -145,7 +154,7 @@ function Lane({ label, hint, tone, loading, empty, children, footerCta }: {
     el.scrollBy({ left: dir * cardsPerStride * (CARD_WIDTH_PX + 12), behavior: 'smooth' })
   }
 
-  const canScroll = !loading && count > 1
+  const canScroll = layout === 'carousel' && !loading && count > 1
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -191,6 +200,15 @@ function Lane({ label, hint, tone, loading, empty, children, footerCta }: {
           borderRadius: '2px',
         }}>
           {empty}
+        </div>
+      ) : layout === 'grid' ? (
+        /* Magazine grid · ON STAGE · responsive 1/2/3-col, no horizontal
+           scroll. Cards render at their natural width so the image
+           areas stay legible on small screens too. */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(Array.isArray(children) ? children : [children]).filter(Boolean).map((child, i) => (
+            <div key={i}>{child}</div>
+          ))}
         </div>
       ) : (
         <div
