@@ -191,7 +191,7 @@ export function Nav() {
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--gold-400)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'var(--gold-500)')}
           >
-            Audition
+            Analyze
           </button>
 
           {user && <NotificationBell recipientId={user.id} />}
@@ -460,7 +460,9 @@ export function Nav() {
               </NavLink>
             ))}
 
-            {/* Audition CTA — full width on mobile so it's easy to tap */}
+            {/* Primary CTA — full width on mobile so it's easy to tap.
+                Copy unified to 'Analyze' across Nav (2026-05-30) so the
+                header verb matches Hero.tsx + /check + every entry CTA. */}
             <button
               onClick={handleApply}
               className="mt-6 w-full py-4 font-mono text-sm font-medium tracking-wide"
@@ -472,7 +474,7 @@ export function Nav() {
                 cursor: 'pointer',
               }}
             >
-              Audition your product →
+              Analyze your product →
             </button>
 
             {/* Auth area · mobile */}
