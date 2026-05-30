@@ -14,6 +14,7 @@
 // Real audits." pitch better than the old top-score-only pool.
 
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase, PUBLIC_PROJECT_COLUMNS, type Project } from '../lib/supabase'
 import { fetchCreatorsByIds, fetchApplaudCounts, type CreatorIdentity } from '../lib/projectQueries'
 import { ProjectCardEditorial } from './ProjectCardEditorial'
@@ -82,6 +83,21 @@ export function AuditShowcase() {
               applaudCount={applauds[p.id] ?? 0}
             />
           ))}
+        </div>
+
+        {/* Footer CTA · bottom-right, mirrors the FeaturedLanes lane footer
+            treatment (mono uppercase, gold). Hands the visitor off to the
+            full ladder for the rest of the ranked projects. */}
+        <div className="mt-8 flex justify-end">
+          <Link
+            to="/products"
+            className="font-mono text-xs tracking-widest transition-colors"
+            style={{ color: 'var(--gold-500)', textDecoration: 'none', opacity: 0.8 }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '0.8')}
+          >
+            ALL PRODUCTS →
+          </Link>
         </div>
       </div>
     </section>
