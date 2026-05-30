@@ -67,7 +67,7 @@ export function AuditShowcase() {
           // RECENT AUDITS · ON COMMIT.SHOW
         </div>
         <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight" style={{ color: 'var(--cream)' }}>
-          Real members. Real audits.
+          Products growing right now
         </h2>
         <p className="font-light max-w-2xl mb-12" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
           Every card below is a member who shipped on commit.show — product +

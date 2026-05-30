@@ -299,7 +299,11 @@ export function AnalysisResultCard({
   }
 
   // Fallback render: panel evaluation unavailable → minimal score card only.
-  if (!r || (!r.tldr && !r.headline && r.axis_scores.length === 0)) {
+  // 2026-05-30 · seed snapshots + some real walk-on rows omit
+  // rich.axis_scores entirely. Coalesce to [] so the .length check
+  // can't throw, otherwise the whole detail page bombs out of render.
+  const axisScores = r?.axis_scores ?? []
+  if (!r || (!r.tldr && !r.headline && axisScores.length === 0)) {
     // §1-A ⑥ band gate · fallback hero also flips to band chip when the
     // viewer isn't allowed to see the digit. Same band tone palette as
     // the rest of the system so the visual remains consistent.
@@ -485,7 +489,7 @@ export function AnalysisResultCard({
             // SCORES BY AXIS <span style={{ color: 'rgba(248,245,238,0.3)' }}>(gray = previous, color = current)</span>
           </div>
           <div>
-            {r.axis_scores.map((a, i) => <AxisBar key={i} a={a} />)}
+            {(r.axis_scores ?? []).map((a, i) => <AxisBar key={i} a={a} />)}
           </div>
         </div>
       )}
