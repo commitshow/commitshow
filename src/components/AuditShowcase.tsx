@@ -68,7 +68,7 @@ export function AuditShowcase() {
         <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl mb-4 leading-tight" style={{ color: 'var(--cream)' }}>
           Real members. Real audits.
         </h2>
-        <p className="font-light max-w-2xl mb-12" style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.55 }}>
+        <p className="font-light max-w-2xl mb-12" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
           Every card below is a member who shipped on commit.show — product +
           Build Brief audited end-to-end. Click through to the report.
         </p>
