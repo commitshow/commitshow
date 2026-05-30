@@ -185,13 +185,23 @@ export async function fetchBackstageReady(): Promise<Project[]> {
 }
 
 // 2) Climbing — projects whose latest snapshot has a positive score delta.
-// We join in two steps: latest snapshot per project then filter positive delta.
+// 2026-05-30 · status filter pushed up into the snapshot query via an
+//   `!inner` PostgREST join. The old shape pulled the newest 60 snapshots
+//   irrespective of status, then status-filtered the next page — so when
+//   walk-on / URL-audit traffic dominated the recent history, active
+//   project snapshots got pushed out of the LANE_LIMIT*2 window before
+//   we ever saw them. Filtering at the snapshot fetch keeps active rows
+//   in scope regardless of how much preview traffic landed in between.
 export async function fetchClimbing(): Promise<Array<Project & { delta: number }>> {
-  // Pull recent snapshots with positive delta, newest first.
+  // Pull recent snapshots with positive delta, newest first, but ONLY
+  // those whose project is currently active. PostgREST embeds the join
+  // and the !inner modifier turns it into an INNER JOIN with the filter
+  // applied at the database level.
   const { data: snaps } = await supabase
     .from('analysis_snapshots')
-    .select('project_id, score_total_delta, created_at')
+    .select('project_id, score_total_delta, created_at, projects!inner(status)')
     .gt('score_total_delta', 0)
+    .eq('projects.status', 'active')
     .order('created_at', { ascending: false })
     .limit(60)
 
@@ -199,7 +209,7 @@ export async function fetchClimbing(): Promise<Array<Project & { delta: number }
 
   // Dedup to latest snapshot per project.
   const bestByProject = new Map<string, { delta: number }>()
-  for (const s of snaps) {
+  for (const s of snaps as unknown as Array<{ project_id: string; score_total_delta: number | null }>) {
     if (!bestByProject.has(s.project_id)) {
       bestByProject.set(s.project_id, { delta: s.score_total_delta ?? 0 })
     }
