@@ -311,72 +311,31 @@ function RadialAuditVisual() {
         />
       ))}
 
-      {/* inner backdrop disc · ensures any transparency in csm.png falls
-          on a known dark surface rather than mixing with the wedges.
-          Mascot bumped +20% per CEO (2026-05-29) — radius derived once
-          from MASCOT_R so backdrop / clipPath / image stay in sync. */}
-      {(() => {
-        const MASCOT_R = Math.round((innerR - 12) * 1.2) // 199
-        return (
-          <>
-            <circle cx={cx} cy={cy} r={MASCOT_R} fill="rgba(6,12,26,0.6)" stroke="rgba(240,192,64,0.10)" strokeWidth={1} />
+      {/* inner subtle disc · pulls the center text out of the wedge ring */}
+      <circle cx={cx} cy={cy} r={innerR - 12} fill="rgba(6,12,26,0.6)" stroke="rgba(240,192,64,0.10)" strokeWidth={1} />
 
-            <defs>
-              <clipPath id="check-center-clip">
-                <circle cx={cx} cy={cy} r={MASCOT_R} />
-              </clipPath>
-            </defs>
-            <image
-              href="/csm.png"
-              x={cx - MASCOT_R}
-              y={cy - MASCOT_R}
-              width={MASCOT_R * 2}
-              height={MASCOT_R * 2}
-              clipPath="url(#check-center-clip)"
-              preserveAspectRatio="xMidYMid slice"
-            />
-          </>
-        )
-      })()}
-
-      {/* Speech bubble · navy pill with cream text, gold hairline border
-          (2026-05-29 v3 — earlier cream fill was too white against our
-          dark page bg). Sits just above the mascot's head, tail dips
-          into the crown. Same card-navy pattern as the rest of the
-          site so the bubble reads as part of the brand surface, not a
-          comic-strip overlay. */}
-      <rect
-        x={cx - 175} y={165}
-        width={350} height={62}
-        rx={8}
-        fill="var(--navy-800)"
-        stroke="rgba(240,192,64,0.35)"
-        strokeWidth={1}
-      />
-      <polygon
-        points={`${cx - 7},227 ${cx + 7},227 ${cx},241`}
-        fill="var(--navy-800)"
-        stroke="rgba(240,192,64,0.35)"
-        strokeWidth={1}
-      />
-      {/* Hide the seam where the tail meets the rect — short horizontal
-          cover-strip in the same navy-800 fill, no stroke, sitting on
-          top of both shapes' bottom borders along the tail's mouth. */}
-      <rect
-        x={cx - 6} y={226.5}
-        width={12} height={2}
-        fill="var(--navy-800)"
-      />
+      {/* center label · runtime promise. "60s" big in Playfair · "ANALYZE
+          & COACH" small under it in DM Mono · short and abstract enough
+          that it doesn't read as a fake sample score. (2026-05-30 ·
+          mascot + speech bubble reverted per CEO; text center restored.) */}
       <text
-        x={cx} y={196}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontFamily="DM Mono, monospace"
-        fontSize={15}
-        fontWeight={500}
+        x={cx} y={cy + 6} textAnchor="middle"
+        fontFamily="Playfair Display, Georgia, serif"
+        fontWeight={900}
+        fontSize={108}
         fill="var(--cream)"
+        letterSpacing="-2"
       >
-        {"I'll go through it carefully!"}
+        60s
+      </text>
+      <text
+        x={cx} y={cy + 44} textAnchor="middle"
+        fontFamily="DM Mono, monospace"
+        fontSize={12}
+        fill="var(--gold-500)"
+        letterSpacing="4"
+      >
+        ANALYZE &amp; COACH
       </text>
 
       {/* axis labels around the ring */}

@@ -136,22 +136,7 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
     >
       <div
         onClick={e => e.stopPropagation()}
-        className="w-full max-w-md flex flex-col items-center"
-      >
-        {/* Mascot · csm_face.png · floats above the modal with its bottom
-            edge touching the top of the box (2026-05-29). Flex-column
-            stack keeps the modal + mascot vertically centered together
-            on small viewports instead of having the head clipped by
-            absolute positioning above max-h-92vh. */}
-        <img
-          src="/csm_face.png"
-          alt=""
-          aria-hidden="true"
-          className="block pointer-events-none select-none"
-          style={{ width: 112, height: 'auto', marginBottom: 0 }}
-        />
-      <div
-        className="card-navy w-full p-8 max-h-[92vh] overflow-y-auto relative"
+        className="card-navy w-full max-w-md p-8 max-h-[92vh] overflow-y-auto relative"
         style={{ borderRadius: '2px', borderColor: 'rgba(240,192,64,0.25)' }}
       >
         {/* Close × — always visible, always works even if OAuth is busy */}
@@ -370,7 +355,6 @@ export function AuthModal({ open, onClose, initialMode = 'signin' }: AuthModalPr
           </button>
         </div>
         </>}
-      </div>
       </div>
     </div>,
     document.body,

@@ -608,23 +608,7 @@ export function HeroUrlHook({
         )}
 
         {phase === 'idle' && (
-          <form onSubmit={startAudit} className="flex flex-col sm:flex-row gap-3 max-w-2xl relative">
-            {/* Mascot · 64px csm_face.png perched on the top-left corner
-                of the URL input (2026-05-29 · LandingPage only). Skipped
-                in chromeless mode so the ad-LP /check stays clean — the
-                landing-page section already had the headline and sub-
-                copy giving the input emotional weight; the mascot adds
-                personality without competing. pointer-events:none keeps
-                the input/button click targets intact behind it. */}
-            {!chromeless && (
-              <img
-                src="/csm_face.png"
-                alt=""
-                aria-hidden="true"
-                className="absolute pointer-events-none select-none"
-                style={{ width: 64, height: 'auto', top: -36, left: 12, zIndex: 1 }}
-              />
-            )}
+          <form onSubmit={startAudit} className="flex flex-col sm:flex-row gap-3 max-w-2xl">
             <input
               id={inputId}
               type="text"
