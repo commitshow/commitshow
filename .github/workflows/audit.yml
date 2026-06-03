@@ -5,6 +5,7 @@
 #
 # We intentionally don't gate merges on the score (no fail-below)
 # until the rubric stabilizes — the comment is informational for now.
+# The action is published at github.com/commitshow/audit-action.
 
 name: audit
 
