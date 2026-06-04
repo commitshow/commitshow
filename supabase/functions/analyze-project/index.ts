@@ -272,8 +272,8 @@ interface GitHubInfo {
       rls_gaps:            { tables: number; policies: number; writable_table_signals: number; gap_estimate: number; tables_uncovered?: string[]; has_rls_intent: boolean }
       secret_exposure:     { client_violations: Array<{ file: string; pattern: string; reason?: string }>; total: number }
       db_indexes:          { fk_columns_seen: number; indexes_seen: number; gap_estimate: number; unindexed_samples?: Array<{ file: string; column: string; references?: string }> }
-      observability:       { libs: string[]; detected: boolean; checked_subpackages?: number }
-      rate_limit:          { lib_detected: string | null; middleware_detected: boolean; has_api_routes: boolean; needs_attention: boolean }
+      observability:       { libs: string[]; detected: boolean; applicable: boolean; detection_confidence: 'low' | 'normal'; checked_subpackages?: number }
+      rate_limit:          { lib_detected: string | null; middleware_detected: boolean; has_api_routes: boolean; applicable: boolean; detection_confidence: 'low' | 'normal'; needs_attention: boolean }
       prompt_injection:    { uses_ai_sdk: boolean; ai_evidence_files?: string[]; raw_input_to_prompt_files: string[]; sanitization_detected?: boolean; suspicious: boolean }
       // Extension frames (8-11) · added 2026-04-30 · AI-template-copy footguns
       hardcoded_urls:      { samples: Array<{ file: string; pattern: string }>; total: number }
@@ -591,8 +591,8 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
         rls_gaps:            { tables: 0, policies: 0, writable_table_signals: 0, gap_estimate: 0, has_rls_intent: false },
         secret_exposure:     { client_violations: [], total: 0 },
         db_indexes:          { fk_columns_seen: 0, indexes_seen: 0, gap_estimate: 0 },
-        observability:       { libs: [], detected: false },
-        rate_limit:          { lib_detected: null, middleware_detected: false, has_api_routes: false, needs_attention: false },
+        observability:       { libs: [], detected: false, applicable: false, detection_confidence: 'normal' },
+        rate_limit:          { lib_detected: null, middleware_detected: false, has_api_routes: false, applicable: false, detection_confidence: 'normal', needs_attention: false },
         prompt_injection:    { uses_ai_sdk: false, raw_input_to_prompt_files: [], suspicious: false },
         hardcoded_urls:      { samples: [], total: 0 },
         mock_data:           { samples: [], total: 0 },
@@ -1459,7 +1459,16 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
     /^supabase\/functions\//.test(p)
   )
   const rate_limit_lib_effective = rate_limit_lib ?? rate_limit_lib_in_subpkg
-  const rate_limit_needs_attention = has_api_routes && !rate_limit_lib_effective && !rate_limit_middleware_detected
+  // P0-1(a) · form_factor gate. Rate limiting is an app/server concern. A UI
+  // component library, CLI, scaffold, skill or native app must NOT be flagged
+  // for DoS/bill-shock just because a docs-site `api/` route exists with no
+  // rate-limit lib detected (shadcn-ui/ui false negative). Only app/unknown
+  // server forms are applicable — and even then needs_attention means
+  // "not detected in source", not proof of absence (edge/infra/custom rate
+  // limiting is invisible to a static scan · cal.com false negative).
+  const rate_limit_is_server_form = form_factor === 'app' || form_factor === 'unknown'
+  const rate_limit_applicable = rate_limit_is_server_form && has_api_routes
+  const rate_limit_needs_attention = rate_limit_applicable && !rate_limit_lib_effective && !rate_limit_middleware_detected
 
   // 7. PROMPT INJECTION · improved detection
   // Detect AI usage three ways:
@@ -1872,6 +1881,15 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
   const looks_like_spa = form_factor === 'app' && has_api_routes  // proxy for "would benefit from version detection"
   const vm_gap = !vm_lockfile || (looks_like_spa && !vm_build_artifact && !vm_client_check)
 
+  // P0-1(a) option-2 · maturity-aware confidence. A repo with strong community
+  // / release / CI maturity almost certainly routes rate limiting + error
+  // tracking through edge/infra layers a static source scan cannot see. For
+  // those, an absence-based signal (rate_limit needs_attention, observability
+  // detected=false) is LOW confidence — surface as a "verify" note, never a
+  // lead alarm (cal.com / supabase / shadcn would otherwise read as a false
+  // DoS / "production blind").
+  const mature_repo = contributors_count >= 50 || (releases_count >= 5 && has_ci_config)
+
   // Aggregate vibe_concerns object — surfaced both to Claude evidence pack
   // and persisted in github_signals for UI rendering. Each category now
   // ships an `evidence_files` array so the UI can show specific paths.
@@ -1904,12 +1922,20 @@ async function inspectGitHub(url: string | null, explicitWorkspace: string | nul
     observability: {
       libs: observability_libs_full,
       detected: observability_libs_full.length > 0,
+      // P0-1(a) · error-tracking / structured-logging libs are an app/server
+      // concern. For a library/cli/scaffold/skill/native app, detected=false is
+      // NOT a defect (no production service runs). Only app/unknown forms make
+      // absence a soft "not detected" signal — never a definitive "blind".
+      applicable: form_factor === 'app' || form_factor === 'unknown',
+      detection_confidence: (observability_libs_full.length === 0 && (form_factor === 'app' || form_factor === 'unknown') && mature_repo) ? 'low' : 'normal',
       checked_subpackages: subPackageJsons.length,
     },
     rate_limit: {
       lib_detected: rate_limit_lib_effective,
       middleware_detected: rate_limit_middleware_detected,
       has_api_routes,
+      applicable: rate_limit_applicable,
+      detection_confidence: (rate_limit_needs_attention && mature_repo) ? 'low' : 'normal',
       needs_attention: rate_limit_needs_attention,
     },
     prompt_injection: {
@@ -3817,9 +3843,18 @@ failure modes that ~70% of AI-assisted projects ship without:
   4. db_indexes           — FK columns vs CREATE INDEX count. gap_estimate
      > 0 means likely query-perf cliff at scale.
   5. observability        — sentry / datadog / pino / winston / otel libs
-     in package.json. detected=false = production blind.
-  6. rate_limit           — needs_attention=true means project has API
-     routes but no rate-limit lib or middleware → DoS / bill shock.
+     in package.json. Only meaningful when applicable=true (app/unknown
+     form). detected=false then means "no error-tracking lib detected in
+     source" — NOT proof of absence (self-hosted / infra logging is invisible
+     to a static scan). Frame as "not detected — recommend verifying", never
+     "production blind". applicable=false (library/cli/scaffold/skill/native)
+     → DO NOT raise: error tracking is irrelevant to that product shape.
+  6. rate_limit           — only meaningful when applicable=true (app/unknown
+     form WITH real API routes). needs_attention=true then means no rate-limit
+     lib or middleware was DETECTED in source — NOT that none exists (edge /
+     infra / custom limiting is invisible to a static scan). Frame as "not
+     detected — verify", never a definitive "DoS / bill shock".
+     applicable=false → DO NOT raise.
   7. prompt_injection     — uses_ai_sdk=true + raw_input_to_prompt_files
      non-empty = user input flowing unsanitized into a model prompt.
   8. hardcoded_urls       — localhost:port leaks in shipped code. Will 404
@@ -3842,8 +3877,13 @@ failure modes that ~70% of AI-assisted projects ship without:
      retry or double-clicked Pay button can spawn duplicate sessions →
      duplicate charges. .gap=true when call_sites > idempotent_call_sites.
 
-When a vibe_concerns flag is set, weaknesses[] MUST surface it before
-generic concerns. Use exact phrasing the user can act on:
+When a POSITIVE-EVIDENCE vibe_concerns flag is set (a concrete defect was
+located in specific files — see the evidence / sample arrays), weaknesses[]
+MUST surface it before generic concerns. Absence-based signals (observability
+detected=false, rate_limit needs_attention — i.e. "we did not find X") are NOT
+confirmed defects: never state them as fact, frame as "not detected — verify",
+and never let them displace a positive-evidence finding.
+Use exact phrasing the user can act on:
   Good: "Stripe webhook handler at api/webhook/stripe.ts — no idempotency
          key check (85% of vibe-coded projects miss this)."
   Good: "5 FK columns across migrations · only 1 CREATE INDEX — query perf
@@ -3861,7 +3901,9 @@ Scouts forecast on these projects but most don't have Platinum clearance to read
 
 Ordering matters:
 - Order by IMPORTANCE for scouting, most decision-moving first. Position 1 = the bullet a Scout would want to see before any other.
-- ANY vibe_concerns flag (gap=true / suspicious=true / needs_attention=true / total>0 / detected=false) takes precedence over generic concerns for weakness positions 1-3.
+- POSITIVE-EVIDENCE vibe_concerns flags — a defect located in specific files (gap=true with handler/sample files, suspicious=true with sample files, total>0 with samples, client_violations>0) — take precedence over generic concerns for weakness positions 1-3.
+- ABSENCE-BASED signals (observability detected=false, rate_limit needs_attention) are "not detected in source", NOT confirmed defects: only when applicable=true, include at most ONE, never in position 1, and always phrased "not detected — verify". If you cannot positively confirm the absence, omit it.
+- detection_confidence='low' on an absence-based signal (a mature repo — strong stars / contributors / CI / releases) means infra-level guards almost certainly exist but are invisible to a static scan. These MUST NOT appear in weakness positions 1-3 at all — omit them, or place a single hedged "not detected — verify" note in position 4-5 only. Asserting the absence as a lead concern on a mature project is a false negative (cal.com has rate limiting; we just can't see it from source).
 - For weaknesses, items 4 and 5 are the deepest/most sensitive issues — only Platinum Scouts will see them. Put surface-level issues first (positions 1-3) and structural/hidden issues last (positions 4-5).
 
 Format per bullet:
