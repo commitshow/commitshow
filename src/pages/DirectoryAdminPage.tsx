@@ -11,12 +11,14 @@ import { LegitShell, type Listing } from './legit'
 const FN_URL = `${SUPABASE_URL}/functions/v1/ingest-directory`
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-const SOURCES: { key: string; label: string }[] = [
-  { key: 'mcp', label: 'GitHub + npm · MCP' },
-  { key: 'hn', label: 'Hacker News · Show HN' },
-  { key: 'skills', label: 'GitHub · Skills' },
-  { key: 'SideProject vibecoding SaaS indiehackers startups', label: 'Reddit · builder subs' },
-  { key: 'ChatGPTCoding cursor ClaudeAI LocalLLaMA', label: 'Reddit · AI-coding subs' },
+// Presets. `hint` surfaces the actual keywords/subreddits each one queries so
+// the admin can see exactly what a button pulls (and edit it in the field below).
+const SOURCES: { key: string; label: string; hint: string }[] = [
+  { key: 'mcp', label: 'MCP servers', hint: 'GitHub "mcp server" · npm "mcp"' },
+  { key: 'skills', label: 'Claude Skills', hint: 'GitHub "claude skill"' },
+  { key: 'hn', label: 'Show HN', hint: 'Hacker News · recent Show HN' },
+  { key: 'SideProject vibecoding SaaS indiehackers startups', label: 'Builder subs', hint: 'r/SideProject r/vibecoding r/SaaS r/indiehackers r/startups' },
+  { key: 'ChatGPTCoding cursor ClaudeAI LocalLLaMA', label: 'AI-coding subs', hint: 'r/ChatGPTCoding r/cursor r/ClaudeAI r/LocalLLaMA' },
 ]
 
 export function DirectoryAdminPage() {
@@ -127,8 +129,12 @@ export function DirectoryAdminPage() {
         <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#9A9080', letterSpacing: '.05em', marginBottom: 10 }}>INGEST SOURCES</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           {SOURCES.map(s => (
-            <span key={s.key} className="l-cattile" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }}
-              onClick={() => runIngest(s.key)}>{busy === s.key ? '⏳ ' : '▶ '}{s.label}</span>
+            <div key={s.key} className="l-cattile" title={`Add to field: ${s.key}`}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '9px 13px', borderRadius: 10, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }}
+              onClick={() => runIngest(s.key)}>
+              <span style={{ fontWeight: 600, fontSize: 13.5, color: '#211C15' }}>{busy === s.key ? '⏳ ' : '▶ '}{s.label}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#9A9080', lineHeight: 1.35 }}>{s.hint}</span>
+            </div>
           ))}
         </div>
         <div style={{ fontSize: 12.5, color: '#9A9080', marginBottom: 6, maxWidth: 620 }}>
