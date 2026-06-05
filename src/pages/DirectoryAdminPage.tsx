@@ -108,8 +108,11 @@ export function DirectoryAdminPage() {
               onClick={() => runIngest(s.key)}>{busy === s.key ? '⏳ ' : '▶ '}{s.label}</span>
           ))}
         </div>
+        <div style={{ fontSize: 12.5, color: '#9A9080', marginBottom: 6, maxWidth: 540 }}>
+          Custom Reddit subreddits — space-separated names, no <code>r/</code>. Each word is one subreddit (not a keyword search).
+        </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, maxWidth: 540 }}>
-          <input value={custom} onChange={e => setCustom(e.target.value)} placeholder='custom subreddits, e.g. "webdev SaaS analytics"'
+          <input value={custom} onChange={e => setCustom(e.target.value)} placeholder="e.g. SideProject indiehackers webdev"
             autoComplete="off" style={{ flex: 1, border: '1px solid #E0D8C8', borderRadius: 8, padding: '9px 12px', fontSize: 14, fontFamily: 'Inter' }} />
           <span className="l-btn ghost" style={{ opacity: busy || !custom.trim() ? 0.5 : 1, pointerEvents: busy || !custom.trim() ? 'none' : 'auto' }}
             onClick={() => runIngest(custom.trim())}>Run</span>
