@@ -10,6 +10,8 @@
 // discover → fetch landing → Haiku extract (grounded) → Sonnet compose →
 // upsert into `listings` (on_conflict slug). Mirrors the local prototype engine.
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token',
@@ -21,7 +23,24 @@ const json = (body: unknown, status = 200) =>
 const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SR_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const ADMIN_TOKEN = Deno.env.get('ADMIN_TOKEN') ?? ''
+
+// Two ways in: the shared x-admin-token (used by the main /admin console + CLI),
+// or a signed-in member whose JWT resolves to members.is_admin = true (so the
+// directory admin page needs no token paste).
+async function isAuthedAdmin(req: Request): Promise<boolean> {
+  if (ADMIN_TOKEN && req.headers.get('x-admin-token') === ADMIN_TOKEN) return true
+  const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
+  if (!jwt || jwt === ANON_KEY || !SUPABASE_URL || !SR_KEY) return false
+  try {
+    const supa = createClient(SUPABASE_URL, SR_KEY)
+    const { data, error } = await supa.auth.getUser(jwt)
+    if (error || !data.user) return false
+    const { data: m } = await supa.from('members').select('is_admin').eq('id', data.user.id).maybeSingle()
+    return !!(m && (m as { is_admin?: boolean }).is_admin)
+  } catch { return false }
+}
 
 const UA_RSS = 'legit-directory-research/0.1 (by /u/legit_research)'
 const UA_WEB = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
@@ -274,7 +293,7 @@ async function deleteListing(id: string) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-  if (!ADMIN_TOKEN || req.headers.get('x-admin-token') !== ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401)
+  if (!(await isAuthedAdmin(req))) return json({ error: 'unauthorized' }, 401)
   let payload: any = {}
   try { payload = await req.json() } catch { return json({ error: 'bad json' }, 400) }
   const action = payload.action || 'ingest'

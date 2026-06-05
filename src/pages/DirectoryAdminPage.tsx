@@ -8,7 +8,6 @@ import { supabase, SUPABASE_URL } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { LegitShell, type Listing } from './legit'
 
-const ADMIN_TOKEN_KEY = 'commitshow.admin.token'
 const FN_URL = `${SUPABASE_URL}/functions/v1/ingest-directory`
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
@@ -26,8 +25,6 @@ export function DirectoryAdminPage() {
   }
   const isAdmin = !!member?.is_admin
 
-  const [token, setToken] = useState(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
-  const [tokenInput, setTokenInput] = useState('')
   const [rows, setRows] = useState<Listing[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [out, setOut] = useState<string>('')
@@ -39,17 +36,20 @@ export function DirectoryAdminPage() {
 
   useEffect(() => { if (isAdmin) loadRows() }, [isAdmin])
 
+  // Auth = the signed-in admin's own JWT (the page is already is_admin gated),
+  // so no ADMIN_TOKEN paste is needed — the Edge Function resolves is_admin.
   const callFn = async (body: Record<string, unknown>) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const jwt = session?.access_token || ANON
     const res = await fetch(FN_URL, {
       method: 'POST',
-      headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'x-admin-token': token, 'Content-Type': 'application/json' },
+      headers: { apikey: ANON, Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     return res.json().catch(() => ({ error: `http ${res.status}` }))
   }
 
   const runIngest = async (target: string) => {
-    if (!token) { setOut('⚠ Save the ADMIN token first.'); return }
     setBusy(target); setOut(`Ingesting: ${target} …`)
     const r = await callFn({ action: 'ingest', target })
     if (r.error) setOut(`❌ ${r.error}`)
@@ -99,22 +99,6 @@ export function DirectoryAdminPage() {
         <p style={{ color: '#9A9080', fontSize: 13.5, marginBottom: 22 }}>
           Ingest from sources and curate listings. Ingest runs Claude server-side and upserts into the public directory.
         </p>
-
-        {/* token */}
-        <div style={{ background: '#fff', border: '1px solid #E9E2D4', borderRadius: 12, padding: 16, marginBottom: 22 }}>
-          <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#9A9080', letterSpacing: '.05em', marginBottom: 8 }}>ADMIN TOKEN</div>
-          {token
-            ? <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5 }}>
-                <span style={{ color: '#2E7D32' }}>✓ token saved (this browser)</span>
-                <span className="l-login" onClick={() => { localStorage.removeItem(ADMIN_TOKEN_KEY); setToken('') }}>clear</span>
-              </div>
-            : <div style={{ display: 'flex', gap: 8 }}>
-                <input value={tokenInput} onChange={e => setTokenInput(e.target.value)} placeholder="paste ADMIN_TOKEN"
-                  type="password" autoComplete="off"
-                  style={{ flex: 1, border: '1px solid #E0D8C8', borderRadius: 8, padding: '9px 12px', fontSize: 14, fontFamily: 'Inter' }} />
-                <span className="l-btn" onClick={() => { localStorage.setItem(ADMIN_TOKEN_KEY, tokenInput); setToken(tokenInput) }}>Save</span>
-              </div>}
-        </div>
 
         {/* ingest */}
         <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#9A9080', letterSpacing: '.05em', marginBottom: 10 }}>INGEST SOURCES</div>
