@@ -41,7 +41,7 @@ type AuthState = {
   signUpWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null; confirmationPending?: boolean }>
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
   signInWithOAuth: (provider: OAuthProvider) => Promise<{ error: AuthError | null }>
-  signOut: () => Promise<void>
+  signOut: (redirectTo?: string) => Promise<void>
   updateMember: (patch: Partial<Pick<Member, 'display_name' | 'avatar_url' | 'preferred_stack'>>) => Promise<{ error: string | null }>
   refreshMember: () => Promise<void>
 }
@@ -170,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         provider,
         options: { redirectTo: window.location.origin },
       }).then(r => ({ error: r.error })),
-    signOut: async () => {
+    signOut: async (redirectTo = '/') => {
       // Sign-out hardening (2026-05-17 audit) · three concerns:
       //
       //   1. Per-user client-side caches need to clear so the next user

@@ -142,7 +142,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
   const { user, member, signOut } = useAuth() as {
     user: { id?: string; email?: string } | null
     member: { display_name?: string; avatar_url?: string | null; is_admin?: boolean } | null
-    signOut: () => Promise<void>
+    signOut: (redirectTo?: string) => Promise<void>
   }
   const [cats, setCats] = useState<string[]>([])
   const openAuth = (m: AuthMode = 'signin') => { setMode(m); setOpen(true) }
@@ -175,7 +175,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
               {user
                 ? <>
                     <LegitBell recipientId={user.id || ''} />
-                    <ProfileMenu name={name} email={user.email || ''} initial={initial} avatar={member?.avatar_url || null} isAdmin={!!member?.is_admin} onSignOut={signOut} />
+                    <ProfileMenu name={name} email={user.email || ''} initial={initial} avatar={member?.avatar_url || null} isAdmin={!!member?.is_admin} onSignOut={() => signOut('/v2')} />
                   </>
                 : <>
                     <span className="l-login" onClick={() => openAuth('signin')}>Log in</span>
