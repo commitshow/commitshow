@@ -240,7 +240,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
         <LegitStyles />
         <header className="l-h">
           <div className="l-wrap l-hd">
-            <Link to="/v2" className="l-logo"><img className="l-logoowl" src="/favicon.svg" alt="" />Legit</Link>
+            <Link to="/v2" className="l-logo"><img className="l-logoowl" src="/favicon2.png" alt="" />Legit</Link>
             <div className="l-auth" style={{ marginLeft: 'auto' }}>
               {user
                 ? <>
