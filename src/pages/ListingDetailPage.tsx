@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BenchmarkChart, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, StarRating, TicketBadge, ticketTier, useLegitAuth, visuals, type Listing } from './legit'
+import { BenchmarkChart, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, ticketTier, useLegitAuth, visuals, type Listing } from './legit'
 
 export function ListingDetailPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -141,9 +141,7 @@ function Detail({ p }: { p: Listing }) {
           <RatingPanel listingId={p.id} tone={starTone} />
           <LegitVouch listingId={p.id} />
         </div>
-        <div className="l-empty">
-          <b>Written reviews are coming.</b> For now your star rating and a legit ticket are the fastest way to weigh in.
-        </div>
+        <ReviewsSection listingId={p.id} />
       </div>
 
       <ReactionBar listingId={p.id} />

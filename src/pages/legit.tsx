@@ -140,6 +140,18 @@ const CSS = `
 .l-rateset-stars{display:inline-flex;gap:3px}
 .l-starbtn{background:none;border:none;padding:0;cursor:pointer;line-height:0;display:inline-flex}.l-starbtn:hover{transform:scale(1.08)}
 .l-rateset-c{font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace}
+.l-rvwrap{margin-top:4px}
+.l-rvprompt{font-size:13.5px;color:#6E6557;background:#F4F0E8;border:1px dashed #E9E2D4;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.l-rvwrite{margin-bottom:18px}
+.l-rvta{width:100%;min-height:86px;border:1px solid #E0D8C8;border-radius:10px;padding:11px 13px;font-family:Inter,sans-serif;font-size:14px;line-height:1.5;resize:vertical;background:#fff;color:#2C261D;box-sizing:border-box}
+.l-rvactions{display:flex;gap:14px;align-items:center;margin-top:9px}
+.l-rvmine{background:#FBF6EC;border:1px solid #E7D4AC;border-radius:11px;padding:13px 15px;margin-bottom:18px}
+.l-rvmineh{display:flex;align-items:center;gap:8px;margin-bottom:6px}.l-rvyou{font-size:12px;font-weight:600;color:#97600F;font-family:'JetBrains Mono',monospace}
+.l-rvlist{display:flex;flex-direction:column;gap:20px;margin-top:6px}
+.l-rvitem{display:flex;gap:12px}
+.l-rvav{width:38px;height:38px;border-radius:50%;background:#B5791C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;flex-shrink:0;overflow:hidden;background-size:cover;background-position:center}
+.l-rvhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.l-rvname{font-weight:600;font-size:14px;color:#211C15}.l-rvmeta{font-size:11.5px;color:#9A9080;font-family:'JetBrains Mono',monospace}
+.l-rvbody{font-size:14px;color:#2C261D;line-height:1.55;margin-top:5px;white-space:pre-wrap;word-break:break-word}
 .l-reviews{border-top:1px solid #E9E2D4;padding:26px 0 0;margin-top:8px}.l-empty{font-size:13px;color:#6E6557;background:#F4F0E8;border:1px dashed #E9E2D4;border-radius:10px;padding:16px}
 .l-claimcta{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;background:#FBF6EC;border:1px solid #E7D4AC;border-radius:14px;padding:18px 22px;margin-top:36px}
 .l-claimcta-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:17px;color:#211C15}.l-claimcta-s{font-size:13px;color:#6E6557;margin-top:3px}
@@ -426,7 +438,7 @@ export function SearchIcon({ size = 17, color = '#9A9080' }: { size?: number; co
 
 // Stars carry the rating shape; their COLOR carries the legit-ticket tier
 // (tone) — so a crowd-vouched product reads "hotter" even before reviews exist.
-export function StarRating({ value = 0, count = 0, size = 18, tone = '#E0A92E' }: { value?: number; count?: number; size?: number; tone?: string }) {
+export function StarRating({ value = 0, count = 0, size = 18, tone = '#E0A92E', bare = false }: { value?: number; count?: number; size?: number; tone?: string; bare?: boolean }) {
   const stars = [0, 1, 2, 3, 4].map(i => {
     const fill = Math.max(0, Math.min(1, value - i)) // 0..1 per star
     return (
@@ -442,6 +454,7 @@ export function StarRating({ value = 0, count = 0, size = 18, tone = '#E0A92E' }
       </svg>
     )
   })
+  if (bare) return <span className="l-stars">{stars}</span>
   return (
     <div className="l-rate">
       <span className="l-stars">{stars}</span>
@@ -462,7 +475,7 @@ export function RatingPanel({ listingId, tone = '#E0A92E' }: { listingId: string
 
   useEffect(() => {
     let alive = true
-    if (myId) supabase.from('listing_ratings').select('rating').eq('listing_id', listingId).eq('member_id', myId).maybeSingle()
+    if (myId) supabase.from('listing_reviews').select('rating').eq('listing_id', listingId).eq('member_id', myId).maybeSingle()
       .then(({ data }) => { if (alive) setMine((data as { rating: number } | null)?.rating || 0) })
     return () => { alive = false }
   }, [listingId, myId])
@@ -475,8 +488,8 @@ export function RatingPanel({ listingId, tone = '#E0A92E' }: { listingId: string
     const next = r === mine ? 0 : r
     setMine(next)
     const q = next === 0
-      ? supabase.from('listing_ratings').delete().eq('listing_id', listingId).eq('member_id', myId)
-      : supabase.from('listing_ratings').upsert({ listing_id: listingId, member_id: myId, rating: next, updated_at: new Date().toISOString() }, { onConflict: 'listing_id,member_id' })
+      ? supabase.from('listing_reviews').delete().eq('listing_id', listingId).eq('member_id', myId)
+      : supabase.from('listing_reviews').upsert({ listing_id: listingId, member_id: myId, rating: next, updated_at: new Date().toISOString() }, { onConflict: 'listing_id,member_id' })
     const { error } = await q
     if (error) setMine(prev)
     else {
@@ -502,6 +515,101 @@ export function RatingPanel({ listingId, tone = '#E0A92E' }: { listingId: string
         ))}
       </span>
       {!loggedIn && <span className="l-rateset-c">sign in to rate</span>}
+    </div>
+  )
+}
+
+type ReviewRow = { id: string; member_id: string; rating: number; body: string; created_at: string; display_name: string | null; avatar_url: string | null }
+function reviewTimeAgo(iso: string): string {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000
+  if (s < 3600) return 'just now'
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  const d = Math.floor(s / 86400)
+  if (d < 30) return `${d}d ago`
+  if (d < 365) return `${Math.floor(d / 30)}mo ago`
+  return `${Math.floor(d / 365)}y ago`
+}
+
+// Written reviews. A review = the member's rating + body on the same row, so it
+// stays consistent with the quick star rating above. Requires a rating first.
+export function ReviewsSection({ listingId }: { listingId: string }) {
+  const { openAuth, loggedIn } = useLegitAuth()
+  const { user } = useAuth() as { user: { id?: string } | null }
+  const myId = user?.id || null
+  const [myRating, setMyRating] = useState(0)
+  const [myBody, setMyBody] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [list, setList] = useState<ReviewRow[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const loadList = () => supabase.from('listing_reviews_feed').select('*').eq('listing_id', listingId).order('created_at', { ascending: false })
+    .then(({ data }) => setList((data as ReviewRow[] | null) || []))
+  useEffect(() => {
+    let alive = true
+    loadList()
+    const loadMine = () => { if (!myId) return; supabase.from('listing_reviews').select('rating, body').eq('listing_id', listingId).eq('member_id', myId).maybeSingle()
+      .then(({ data }) => { if (!alive) return; const d = data as { rating: number; body: string | null } | null; setMyRating(d?.rating || 0); setMyBody(d?.body || null); setDraft(d?.body || '') }) }
+    loadMine()
+    window.addEventListener('legit:rating', loadMine)
+    return () => { alive = false; window.removeEventListener('legit:rating', loadMine) }
+  }, [listingId, myId])
+
+  const post = async () => {
+    if (!loggedIn || !myId) { openAuth('signup'); return }
+    const body = draft.trim()
+    if (!body || busy) return
+    setBusy(true)
+    const { error } = await supabase.from('listing_reviews').update({ body, updated_at: new Date().toISOString() }).eq('listing_id', listingId).eq('member_id', myId)
+    if (!error) { setMyBody(body); setEditing(false); loadList(); fireReaction({ icon: 'star', tone: '#B5791C', title: myBody ? 'Review updated' : 'Review posted', sub: 'Thanks for the detail' }) }
+    setBusy(false)
+  }
+  const removeReview = async () => {
+    if (!myId || busy) return
+    setBusy(true)
+    const { error } = await supabase.from('listing_reviews').update({ body: null, updated_at: new Date().toISOString() }).eq('listing_id', listingId).eq('member_id', myId)
+    if (!error) { setMyBody(null); setDraft(''); setEditing(false); loadList() }
+    setBusy(false)
+  }
+
+  const others = (list || []).filter(r => r.member_id !== myId)
+  return (
+    <div className="l-rvwrap">
+      {/* your write box */}
+      {!loggedIn
+        ? <div className="l-rvprompt"><span style={{ color: '#97600F', cursor: 'pointer' }} onClick={() => openAuth('signup')}>Sign in</span> to rate and review.</div>
+        : myRating === 0
+          ? <div className="l-rvprompt">Rate it above to add a written review.</div>
+          : (myBody && !editing)
+            ? <div className="l-rvmine">
+                <div className="l-rvmineh"><StarRating value={myRating} count={1} size={15} tone="#B5791C" bare /> <span className="l-rvyou">Your review</span></div>
+                <div className="l-rvbody">{myBody}</div>
+                <div className="l-rvactions"><span className="l-login" style={{ color: '#97600F' }} onClick={() => { setDraft(myBody); setEditing(true) }}>edit</span><span className="l-login" style={{ color: '#C8102E' }} onClick={removeReview}>delete</span></div>
+              </div>
+            : <div className="l-rvwrite">
+                <textarea className="l-rvta" value={draft} onChange={e => setDraft(e.target.value)} placeholder="What stood out — what works, what doesn't, who it's for?" maxLength={2000} />
+                <div className="l-rvactions">
+                  <span className="l-btn" style={{ opacity: draft.trim() && !busy ? 1 : 0.5, pointerEvents: draft.trim() && !busy ? 'auto' : 'none' }} onClick={post}>{myBody ? 'Update review' : 'Post review'}</span>
+                  {(editing || myBody) && <span className="l-login" onClick={() => { setEditing(false); setDraft(myBody || '') }}>cancel</span>}
+                </div>
+              </div>}
+
+      {/* list */}
+      {list === null
+        ? null
+        : others.length === 0 && !myBody
+          ? <div className="l-empty" style={{ marginTop: 14 }}><b>No written reviews yet.</b> Be the first to write one.</div>
+          : <div className="l-rvlist">
+              {others.map(r => (
+                <div key={r.id} className="l-rvitem">
+                  <div className="l-rvav" style={r.avatar_url ? { backgroundImage: `url(${r.avatar_url})` } : undefined}>{!r.avatar_url && (r.display_name?.[0] || '?').toUpperCase()}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="l-rvhead"><span className="l-rvname">{r.display_name || 'Member'}</span><StarRating value={r.rating} count={1} size={14} tone="#B5791C" bare /><span className="l-rvmeta">{reviewTimeAgo(r.created_at)}</span></div>
+                    <div className="l-rvbody">{r.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>}
     </div>
   )
 }
