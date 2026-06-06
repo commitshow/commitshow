@@ -116,6 +116,11 @@ const CSS = `
 .l-modalclose{position:absolute;top:10px;right:14px;background:none;border:none;font-size:25px;line-height:1;color:#9A9080;cursor:pointer}.l-modalclose:hover{color:#211C15}
 .l-modaltext{font-size:13.5px;color:#5A5347;line-height:1.55;margin:8px 0 14px}
 .l-modalhint{font-size:12px;color:#9A9080;margin-top:10px}
+.l-react{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:130;pointer-events:none}
+.l-reactcard{pointer-events:auto;background:#FFFDF8;border:1px solid #E7D4AC;border-radius:18px;padding:24px 34px;text-align:center;box-shadow:0 24px 60px rgba(60,45,20,.28);animation:l-pop .26s cubic-bezier(.2,1.3,.5,1);cursor:pointer}
+@keyframes l-pop{0%{transform:scale(.7);opacity:0}100%{transform:scale(1);opacity:1}}
+.l-reacttitle{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:18px;color:#211C15;margin-top:9px}
+.l-reactsub{font-size:13px;color:#6E6557;margin-top:3px}
 .l-rateset{display:flex;align-items:center;gap:13px;flex-wrap:wrap}
 .l-rateset-l{font-size:14px;color:#6E6557;font-weight:500}
 .l-rateset-stars{display:inline-flex;gap:3px}
@@ -222,6 +227,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
         {children}
       </div>
       <AuthModal open={open} onClose={() => setOpen(false)} initialMode={mode} />
+      <ReactionToast />
     </LegitAuthCtx.Provider>
   )
 }
@@ -458,7 +464,11 @@ export function RatingPanel({ listingId, tone = '#E0A92E' }: { listingId: string
       : supabase.from('listing_ratings').upsert({ listing_id: listingId, member_id: myId, rating: next, updated_at: new Date().toISOString() }, { onConflict: 'listing_id,member_id' })
     const { error } = await q
     if (error) setMine(prev)
-    else window.dispatchEvent(new Event('legit:rating'))
+    else {
+      window.dispatchEvent(new Event('legit:rating'))
+      if (next > 0) fireReaction({ icon: 'star', tone, title: `Rated ${next} star${next > 1 ? 's' : ''}`, sub: 'Thanks for weighing in' })
+      else fireReaction({ icon: 'star', tone: '#C9BBA0', title: 'Rating removed' })
+    }
     setBusy(false)
   }
 
@@ -522,6 +532,36 @@ export function TicketBadge({ count, size = 13 }: { count: number; size?: number
   )
 }
 
+// Centered action-reaction toast — fired after rating or throwing a ticket.
+type Reaction = { icon: 'star' | 'seal'; tone: string; title: string; sub?: string }
+function fireReaction(r: Reaction) { window.dispatchEvent(new CustomEvent('legit:reaction', { detail: r })) }
+
+function ReactionToast() {
+  const [r, setR] = useState<Reaction | null>(null)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    const h = (e: Event) => {
+      setR((e as CustomEvent<Reaction>).detail)
+      window.clearTimeout(timer.current)
+      timer.current = window.setTimeout(() => setR(null), 1700)
+    }
+    window.addEventListener('legit:reaction', h)
+    return () => { window.removeEventListener('legit:reaction', h); window.clearTimeout(timer.current) }
+  }, [])
+  if (!r) return null
+  return (
+    <div className="l-react">
+      <div className="l-reactcard" onClick={() => setR(null)}>
+        {r.icon === 'seal'
+          ? <LegitSeal size={46} color={r.tone} />
+          : <svg width="46" height="46" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.2 6.6.9-4.8 4.6 1.2 6.6L12 18.7 6 21.4l1.2-6.6L2.4 9.6l6.6-.9z" fill={r.tone} stroke={r.tone} strokeOpacity="0.5" strokeWidth="0.7" /></svg>}
+        <div className="l-reacttitle">{r.title}</div>
+        {r.sub && <div className="l-reactsub">{r.sub}</div>}
+      </div>
+    </div>
+  )
+}
+
 const TICKET_QUOTA = 12
 
 // Detail-page panel: throw / re-tag / take back a legit ticket, see the count,
@@ -571,14 +611,25 @@ export function LegitVouch({ listingId }: { listingId: string }) {
       : supabase.from('listing_tickets').insert({ listing_id: listingId, member_id: myId, specialty })
     const { error } = await q
     if (error) setMsg(/quota/i.test(error.message) ? `You've used all ${TICKET_QUOTA} legit tickets this month.` : 'Could not throw the ticket — try again.')
-    else { setSpecs(prev => { const n = { ...prev }; if (had && mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); n[specialty] = (n[specialty] || 0) + 1; return n }); if (!had) { setCount(c => c + 1); setUsed(u => u + 1) } setMine(specialty); window.dispatchEvent(new Event('legit:tickets')) }
+    else {
+      setSpecs(prev => { const n = { ...prev }; if (had && mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); n[specialty] = (n[specialty] || 0) + 1; return n })
+      if (!had) { setCount(c => c + 1); setUsed(u => u + 1) }
+      setMine(specialty); window.dispatchEvent(new Event('legit:tickets'))
+      fireReaction({ icon: 'seal', tone: ticketTier(had ? count : count + 1).tone, title: had ? 'Vouch updated' : 'Legit ticket thrown', sub: `Vouched for ${SPECIALTY_LABEL[specialty]}` })
+      setOpen(false)
+    }
     setBusy(false)
   }
   const takeBack = async () => {
     if (!myId || busy) return
     setBusy(true); setMsg('')
     const { error } = await supabase.from('listing_tickets').delete().eq('listing_id', listingId).eq('member_id', myId)
-    if (!error) { setSpecs(prev => { const n = { ...prev }; if (mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); return n }); setCount(c => Math.max(0, c - 1)); setUsed(u => Math.max(0, u - 1)); setMine(null); window.dispatchEvent(new Event('legit:tickets')) }
+    if (!error) {
+      setSpecs(prev => { const n = { ...prev }; if (mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); return n })
+      setCount(c => Math.max(0, c - 1)); setUsed(u => Math.max(0, u - 1)); setMine(null); window.dispatchEvent(new Event('legit:tickets'))
+      fireReaction({ icon: 'seal', tone: '#C9BBA0', title: 'Ticket taken back' })
+      setOpen(false)
+    }
     setBusy(false)
   }
 
