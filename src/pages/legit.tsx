@@ -36,6 +36,7 @@ const CSS = `
 .l-h{position:sticky;top:0;background:rgba(250,248,243,.92);backdrop-filter:blur(8px);border-bottom:1px solid #E9E2D4;z-index:20}
 .l-hd{display:flex;align-items:center;gap:18px;height:60px}
 .l-logo{font-family:Fraunces;font-weight:700;font-size:23px;color:#B5791C;display:flex;align-items:center}
+.lgt a.l-logo,.lgt a.l-logo:hover{color:#B5791C}
 .l-logoowl{width:30px;height:auto;margin-right:7px;flex-shrink:0}
 .l-logoshow{color:#B5791C}
 .l-dot{width:9px;height:9px;border-radius:50%;background:#B5791C;display:inline-block}
