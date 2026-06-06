@@ -109,7 +109,14 @@ const CSS = `
 .l-facts{background:#fff;border:1px solid #E9E2D4;border-radius:12px;padding:6px 16px}.l-f{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #E9E2D4;font-size:13.5px}.l-f:last-child{border-bottom:none}.l-k{color:#6E6557}.l-v{font-weight:500;text-align:right}
 .l-lab{background:#F4F0E8;border:1px solid #E9E2D4;border-radius:14px;padding:18px;font-family:'JetBrains Mono',monospace;text-align:center}.l-lh{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#97600F;font-weight:600;text-align:left}
 .l-lockt{font-family:Inter,sans-serif;font-size:14px;font-weight:600;color:#211C15;margin-top:14px}.l-locksub{font-family:Inter,sans-serif;font-size:11.5px;color:#6E6557;max-width:230px;margin:6px auto 10px}
-.l-rateset{display:flex;align-items:center;gap:13px;flex-wrap:wrap;margin-bottom:14px}
+.l-engage{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.l-vouchbtn{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:8px 15px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:700;transition:.12s;flex-shrink:0}.l-vouchbtn:hover{border-color:#E7D4AC}.l-vouchbtn.on{background:#FCF6E9}
+.l-modal{position:fixed;inset:0;background:rgba(33,28,21,.45);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.l-modalcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:16px;padding:24px;max-width:440px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
+.l-modalclose{position:absolute;top:10px;right:14px;background:none;border:none;font-size:25px;line-height:1;color:#9A9080;cursor:pointer}.l-modalclose:hover{color:#211C15}
+.l-modaltext{font-size:13.5px;color:#5A5347;line-height:1.55;margin:8px 0 14px}
+.l-modalhint{font-size:12px;color:#9A9080;margin-top:10px}
+.l-rateset{display:flex;align-items:center;gap:13px;flex-wrap:wrap}
 .l-rateset-l{font-size:14px;color:#6E6557;font-weight:500}
 .l-rateset-stars{display:inline-flex;gap:3px}
 .l-starbtn{background:none;border:none;padding:0;cursor:pointer;line-height:0;display:inline-flex}.l-starbtn:hover{transform:scale(1.08)}
@@ -519,14 +526,17 @@ const TICKET_QUOTA = 12
 
 // Detail-page panel: throw / re-tag / take back a legit ticket, see the count,
 // the tier, the crowd-vouched specialties, and your monthly quota.
-export function TicketPanel({ listingId }: { listingId: string }) {
+// Legit-ticket vouch: a tier-colored seal badge (sits at the right of the star
+// row). Clicking it opens a popup that explains the ticket, shows the count /
+// vouched-for specialties, and lets you throw / re-tag / take back.
+export function LegitVouch({ listingId }: { listingId: string }) {
   const { openAuth, loggedIn } = useLegitAuth()
   const { user } = useAuth() as { user: { id?: string } | null }
   const myId = user?.id || null
   const [count, setCount] = useState(0)
   const [specs, setSpecs] = useState<Record<string, number>>({})
   const [mine, setMine] = useState<string | null>(null)
-  const [picking, setPicking] = useState(false)
+  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -534,10 +544,8 @@ export function TicketPanel({ listingId }: { listingId: string }) {
     let alive = true
     supabase.from('listing_ticket_stats').select('ticket_count, specialties').eq('listing_id', listingId).maybeSingle()
       .then(({ data }) => { if (!alive) return; const d = data as { ticket_count: number; specialties: Record<string, number> } | null; setCount(d?.ticket_count || 0); setSpecs(d?.specialties || {}) })
-    if (myId) {
-      supabase.from('listing_tickets').select('specialty').eq('listing_id', listingId).eq('member_id', myId).maybeSingle()
-        .then(({ data }) => { if (alive) setMine((data as { specialty: string } | null)?.specialty ?? null) })
-    }
+    if (myId) supabase.from('listing_tickets').select('specialty').eq('listing_id', listingId).eq('member_id', myId).maybeSingle()
+      .then(({ data }) => { if (alive) setMine((data as { specialty: string } | null)?.specialty ?? null) })
     return () => { alive = false }
   }, [listingId, myId])
 
@@ -553,57 +561,52 @@ export function TicketPanel({ listingId }: { listingId: string }) {
       ? supabase.from('listing_tickets').update({ specialty }).eq('listing_id', listingId).eq('member_id', myId)
       : supabase.from('listing_tickets').insert({ listing_id: listingId, member_id: myId, specialty })
     const { error } = await q
-    if (error) {
-      setMsg(/quota/i.test(error.message) ? `You've used all ${TICKET_QUOTA} legit tickets this month.` : 'Could not throw the ticket — try again.')
-    } else {
-      setSpecs(prev => { const n = { ...prev }; if (had && mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); n[specialty] = (n[specialty] || 0) + 1; return n })
-      if (!had) setCount(c => c + 1)
-      setMine(specialty); setPicking(false)
-      window.dispatchEvent(new Event('legit:tickets'))   // refresh the profile-menu counter
-    }
+    if (error) setMsg(/quota/i.test(error.message) ? `You've used all ${TICKET_QUOTA} legit tickets this month.` : 'Could not throw the ticket — try again.')
+    else { setSpecs(prev => { const n = { ...prev }; if (had && mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); n[specialty] = (n[specialty] || 0) + 1; return n }); if (!had) setCount(c => c + 1); setMine(specialty); window.dispatchEvent(new Event('legit:tickets')) }
     setBusy(false)
   }
   const takeBack = async () => {
     if (!myId || busy) return
     setBusy(true); setMsg('')
     const { error } = await supabase.from('listing_tickets').delete().eq('listing_id', listingId).eq('member_id', myId)
-    if (!error) { setSpecs(prev => { const n = { ...prev }; if (mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); return n }); setCount(c => Math.max(0, c - 1)); setMine(null); setPicking(false); window.dispatchEvent(new Event('legit:tickets')) }
+    if (!error) { setSpecs(prev => { const n = { ...prev }; if (mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); return n }); setCount(c => Math.max(0, c - 1)); setMine(null); window.dispatchEvent(new Event('legit:tickets')) }
     setBusy(false)
   }
 
   return (
-    <div className="l-tk">
-      <div className="l-tkhead">
-        <LegitSeal size={20} color={tier.tone} />
-        <span className="l-tkh">Legit tickets</span>
-        {count > 0 && <span className="l-tktier" style={{ color: tier.tone }}>{count} · {tier.label}</span>}
-      </div>
-      {top.length > 0
-        ? <div className="l-tkvouch">Vouched legit for <b>{top.join(' · ')}</b></div>
-        : <div className="l-tksub">No legit tickets yet — be the first to vouch for what this nails.</div>}
-
-      {!loggedIn
-        ? <span className="l-tkthrow" onClick={() => openAuth('signup')}><LegitSeal size={15} /> Sign in to throw a legit ticket</span>
-        : <>
-            {!mine && !picking && (
-              <span className="l-tkthrow" onClick={() => setPicking(true)}><LegitSeal size={15} /> Throw a legit ticket</span>
-            )}
-            {(mine || picking) && (
-              <>
-                {!mine && <div className="l-tksub" style={{ marginBottom: 8 }}>What does this product nail?</div>}
-                <div className="l-tkchips">
-                  {SPECIALTIES.map(s => (
-                    <span key={s.key} className={`l-tkchip ${mine === s.key ? 'on' : ''}`}
-                      onClick={() => mine === s.key ? takeBack() : throwTicket(s.key)}>
-                      {mine === s.key && <LegitSeal size={13} color={tier.tone} />}{s.label}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
-            {msg && <div className="l-tkquota" style={{ color: '#C8102E' }}>{msg}</div>}
-          </>}
-    </div>
+    <>
+      <button className={`l-vouchbtn ${mine ? 'on' : ''}`} style={{ color: tier.tone, borderColor: mine ? tier.tone : undefined }} onClick={() => setOpen(true)}>
+        <LegitSeal size={15} color={tier.tone} />{count > 0 ? `${count} legit` : 'Vouch legit'}
+      </button>
+      {open && (
+        <div className="l-modal" onClick={() => setOpen(false)}>
+          <div className="l-modalcard" onClick={e => e.stopPropagation()}>
+            <button className="l-modalclose" onClick={() => setOpen(false)} aria-label="Close">×</button>
+            <div className="l-tkhead">
+              <LegitSeal size={22} color={tier.tone} />
+              <span className="l-tkh">Legit tickets</span>
+              {count > 0 && <span className="l-tktier" style={{ color: tier.tone }}>{count} · {tier.label}</span>}
+            </div>
+            <p className="l-modaltext">Your heavy vouch — one per product. Tag the one thing it nails. Light reactions are unlimited; tickets are the scarce signal that drives ranking and the tier color.</p>
+            {top.length > 0 && <div className="l-tkvouch">Vouched legit for <b>{top.join(' · ')}</b></div>}
+            {!loggedIn
+              ? <span className="l-tkthrow" onClick={() => openAuth('signup')}><LegitSeal size={15} /> Sign in to throw a legit ticket</span>
+              : <>
+                  <div className="l-tksub" style={{ marginBottom: 8 }}>What does this product nail?</div>
+                  <div className="l-tkchips">
+                    {SPECIALTIES.map(s => (
+                      <span key={s.key} className={`l-tkchip ${mine === s.key ? 'on' : ''}`} onClick={() => mine === s.key ? takeBack() : throwTicket(s.key)}>
+                        {mine === s.key && <LegitSeal size={13} color={tier.tone} />}{s.label}
+                      </span>
+                    ))}
+                  </div>
+                  {mine && <div className="l-modalhint">Tap your pick again to take the ticket back.</div>}
+                  {msg && <div className="l-tkquota" style={{ color: '#C8102E' }}>{msg}</div>}
+                </>}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
