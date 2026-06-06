@@ -4,7 +4,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { AuthModal } from '../components/AuthModal'
 import { supabase } from '../lib/supabase'
 import {
   fetchNotifications, fetchUnreadCount, markRead, markAllRead,
@@ -133,6 +132,17 @@ const CSS = `
 .l-modalclose{position:absolute;top:10px;right:14px;background:none;border:none;font-size:25px;line-height:1;color:#9A9080;cursor:pointer}.l-modalclose:hover{color:#211C15}
 .l-modaltext{font-size:13.5px;color:#5A5347;line-height:1.55;margin:8px 0 14px}
 .l-modalhint{font-size:12px;color:#9A9080;margin-top:10px}
+/* legit auth modal */
+.l-authcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:18px;padding:30px 28px 24px;max-width:380px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
+.l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#211C15;text-align:center}
+.l-authh{font-family:Fraunces,Georgia,serif;font-size:18px;color:#211C15;text-align:center;margin:5px 0 20px;font-weight:600}
+.l-oauth{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;border:1px solid #E0D8C8;border-radius:10px;padding:11px;font-size:14px;font-weight:500;color:#211C15;cursor:pointer;margin-bottom:9px;font-family:Inter,sans-serif}.l-oauth:hover{border-color:#E7D4AC;background:#FCFAF5}
+.l-author{display:flex;align-items:center;gap:12px;margin:14px 0;color:#9A9080;font-size:12px;font-family:'JetBrains Mono',monospace}.l-author::before,.l-author::after{content:'';flex:1;height:1px;background:#E9E2D4}
+.l-authin{width:100%;border:1px solid #E0D8C8;border-radius:10px;padding:11px 13px;font-size:14px;font-family:Inter,sans-serif;margin-bottom:9px;box-sizing:border-box;background:#fff;color:#2C261D}.l-authin:focus{outline:none;border-color:#C9A22E}
+.l-autherr{font-size:12.5px;color:#C8102E;margin:1px 0 9px}
+.l-authsubmit{width:100%;text-align:center;padding:11px;margin-top:3px}
+.l-authtoggle{text-align:center;font-size:13px;color:#6E6557;margin-top:16px}.l-authtoggle span{color:#97600F;cursor:pointer;font-weight:500}.l-authtoggle span:hover{text-decoration:underline}
+.l-authsent{font-size:14px;color:#2C261D;text-align:center;line-height:1.55;padding:12px 0}
 .l-react{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:130;pointer-events:none}
 .l-reactcard{pointer-events:auto;background:#FFFDF8;border:1px solid #E7D4AC;border-radius:18px;padding:24px 34px;text-align:center;box-shadow:0 24px 60px rgba(60,45,20,.28);animation:l-pop .26s cubic-bezier(.2,1.3,.5,1);cursor:pointer}
 @keyframes l-pop{0%{transform:scale(.7);opacity:0}100%{transform:scale(1);opacity:1}}
@@ -170,7 +180,7 @@ const CSS = `
 .l-nav{display:flex;align-items:center;gap:4px}
 .l-navi{font-size:14px;font-weight:500;color:#6E6557;padding:7px 11px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}.l-navi:hover{background:#F1EADE;color:#211C15}.l-navi.on{color:#211C15;background:#F1EADE}
 .l-ddwrap{position:relative}
-.l-dd{position:absolute;top:calc(100% + 8px);min-width:210px;background:#fff;border:1px solid #E9E2D4;border-radius:12px;box-shadow:0 12px 34px rgba(60,45,20,.16);padding:6px;z-index:40}
+.l-dd{position:absolute;top:calc(100% + 8px);min-width:210px;background:#fff;border:1px solid #E9E2D4;border-radius:12px;box-shadow:0 12px 34px rgba(60,45,20,.16);padding:6px;z-index:40;scrollbar-width:none;-ms-overflow-style:none}.l-dd::-webkit-scrollbar{display:none}
 .l-dd.right{right:0}.l-dd.left{left:0}
 .l-ddi{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;font-size:14px;color:#2C261D;cursor:pointer;white-space:nowrap}.l-ddi:hover{background:#F4F0E8}.l-ddi .s{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#9A9080}.l-ddi.on{background:#F6EBD4;color:#97600F;font-weight:600}
 .l-ddsep{height:1px;background:#E9E2D4;margin:6px 8px}
@@ -237,7 +247,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
         </header>
         {children}
       </div>
-      <AuthModal open={open} onClose={() => setOpen(false)} initialMode={mode} />
+      <LegitAuthModal open={open} onClose={() => setOpen(false)} initialMode={mode} />
       <ReactionToast />
     </LegitAuthCtx.Provider>
   )
@@ -276,10 +286,12 @@ export function CategoryPicker({ current = null, variant = 'crumb' }: { current?
     return () => { alive = false }
   }, [])
   const go = (c?: string) => { setOpen(false); nav(c ? `/v2?cat=${encodeURIComponent(c)}` : '/v2') }
+  // search box: keep the trigger short — "All" default, long names truncated
+  const label = current ? (variant === 'search' && current.length > 10 ? current.slice(0, 10) + '…' : current) : 'All'
   return (
     <div className="l-ddwrap" ref={ref} onClick={e => e.preventDefault()}>
-      <span className={variant === 'search' ? 'l-catpick' : 'l-crumbcat'} onClick={() => setOpen(o => !o)}>
-        {current || (variant === 'search' ? 'All categories' : 'All')} <Chevron />
+      <span className={variant === 'search' ? 'l-catpick' : 'l-crumbcat'} onClick={() => setOpen(o => !o)} title={current || 'All'}>
+        {label} <Chevron />
       </span>
       {open && (
         <div className="l-dd left" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
@@ -681,6 +693,68 @@ function ReactionToast() {
           : <svg width="46" height="46" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 6.2 6.6.9-4.8 4.6 1.2 6.6L12 18.7 6 21.4l1.2-6.6L2.4 9.6l6.6-.9z" fill={r.tone} stroke={r.tone} strokeOpacity="0.5" strokeWidth="0.7" /></svg>}
         <div className="l-reacttitle">{r.title}</div>
         {r.sub && <div className="l-reactsub">{r.sub}</div>}
+      </div>
+    </div>
+  )
+}
+
+// v2-styled auth — a legit-specific amber modal (the shared app AuthModal is
+// navy and used elsewhere). OAuth + email, sign-in/sign-up auto-toggle.
+function LegitAuthModal({ open, onClose, initialMode = 'signin' }: { open: boolean; onClose: () => void; initialMode?: AuthMode }) {
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithOAuth } = useAuth() as {
+    signInWithEmail: (e: string, p: string) => Promise<{ error: { message: string } | null }>
+    signUpWithEmail: (e: string, p: string) => Promise<{ error: { message: string } | null; confirmationPending?: boolean }>
+    signInWithGoogle: () => Promise<{ error: { message: string } | null }>
+    signInWithOAuth: (p: 'google' | 'github' | 'twitter' | 'linkedin_oidc') => Promise<{ error: { message: string } | null }>
+  }
+  const [mode, setMode] = useState<AuthMode>(initialMode)
+  const [email, setEmail] = useState('')
+  const [pw, setPw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [sent, setSent] = useState(false)
+  useEffect(() => { if (open) { setMode(initialMode); setErr(''); setSent(false) } }, [open, initialMode])
+  if (!open) return null
+
+  const submit = async () => {
+    if (busy) return
+    if (!email.trim() || !pw) { setErr('Enter your email and password.'); return }
+    setBusy(true); setErr('')
+    const r = mode === 'signin' ? await signInWithEmail(email.trim(), pw) : await signUpWithEmail(email.trim(), pw)
+    if (r.error) setErr(r.error.message)
+    else if (mode === 'signup' && (r as { confirmationPending?: boolean }).confirmationPending) setSent(true)
+    else onClose()
+    setBusy(false)
+  }
+
+  return (
+    <div className="l-modal" onClick={onClose}>
+      <div className="l-authcard" onClick={e => e.stopPropagation()}>
+        <button className="l-modalclose" onClick={onClose} aria-label="Close">×</button>
+        <div className="l-authlogo">Legit.<span className="l-logoshow">Show</span></div>
+        <div className="l-authh">{mode === 'signin' ? 'Welcome back' : 'Create your account'}</div>
+        {sent
+          ? <div className="l-authsent">Check your inbox — we sent a confirmation link to <b>{email}</b>.</div>
+          : <>
+              <button className="l-oauth" onClick={() => signInWithGoogle()}>
+                <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38z"/></svg>
+                Continue with Google
+              </button>
+              <button className="l-oauth" onClick={() => signInWithOAuth('github')}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="#211C15" aria-hidden="true"><path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.46c.53.1.72-.23.72-.5v-1.76c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.61 1.09 1.61 1.09.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.18 0-1.15.41-2.08 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.07a10 10 0 0 1 5.24 0c2-1.35 2.88-1.07 2.88-1.07.57 1.46.21 2.53.1 2.8.67.74 1.08 1.67 1.08 2.82 0 4.02-2.46 4.9-4.8 5.16.38.33.71.97.71 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/></svg>
+                Continue with GitHub
+              </button>
+              <div className="l-author"><span>or with email</span></div>
+              <input className="l-authin" type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" />
+              <input className="l-authin" type="password" placeholder="Password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} />
+              {err && <div className="l-autherr">{err}</div>}
+              <button className="l-btn l-authsubmit" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={submit}>{mode === 'signin' ? 'Sign in' : 'Create account'}</button>
+              <div className="l-authtoggle">
+                {mode === 'signin'
+                  ? <>New here? <span onClick={() => { setMode('signup'); setErr('') }}>Create an account</span></>
+                  : <>Already have an account? <span onClick={() => { setMode('signin'); setErr('') }}>Sign in</span></>}
+              </div>
+            </>}
       </div>
     </div>
   )
