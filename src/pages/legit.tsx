@@ -115,7 +115,10 @@ const CSS = `
 .l-starbtn{background:none;border:none;padding:0;cursor:pointer;line-height:0;display:inline-flex}.l-starbtn:hover{transform:scale(1.08)}
 .l-rateset-c{font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace}
 .l-reviews{border-top:1px solid #E9E2D4;padding:26px 0 0;margin-top:8px}.l-empty{font-size:13px;color:#6E6557;background:#F4F0E8;border:1px dashed #E9E2D4;border-radius:10px;padding:16px}
-.l-foot{border-top:1px solid #E9E2D4;margin-top:36px;padding:22px 0 50px;font-size:12.5px;color:#9A9080}
+.l-claimcta{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;background:#FBF6EC;border:1px solid #E7D4AC;border-radius:14px;padding:18px 22px;margin-top:36px}
+.l-claimcta-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:17px;color:#211C15}.l-claimcta-s{font-size:13px;color:#6E6557;margin-top:3px}
+.l-claimcta .l-btn{flex-shrink:0}
+.l-foot{border-top:1px solid #E9E2D4;margin-top:28px;padding:22px 0 50px;font-size:12.5px;color:#9A9080}
 .l-row{display:flex;gap:18px;align-items:flex-start;padding:20px 4px;border-bottom:1px solid #E9E2D4;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
 .l-ic{width:72px;height:72px;border-radius:14px;background:linear-gradient(135deg,#C99A2E,#A66A18);color:#fff;font-weight:700;font-size:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Fraunces;background-size:cover;background-position:center;overflow:hidden}
 .l-fav{background:#fff;border:1px solid #EDE6D8}.l-fav img{width:100%;height:100%;object-fit:cover}

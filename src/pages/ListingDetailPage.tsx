@@ -75,7 +75,6 @@ function Detail({ p }: { p: Listing }) {
         </div>
         <div className="l-heroact">
           <a className="l-btn" href={p.url} target="_blank" rel="noopener noreferrer">Visit site ↗</a>
-          <span className="l-claim" onClick={() => openAuth('signup')}>Is this yours? Claim it</span>
           <div className="l-prov">Info as of {dt} · from {p.domain}</div>
         </div>
       </div>
@@ -142,9 +141,16 @@ function Detail({ p }: { p: Listing }) {
         </div>
       </div>
 
+      <div className="l-claimcta">
+        <div>
+          <div className="l-claimcta-h">Is this your service?</div>
+          <div className="l-claimcta-s">Claim {p.name} to manage its details and respond to ratings.</div>
+        </div>
+        <span className="l-btn" onClick={() => openAuth('signup')}>Claim this listing</span>
+      </div>
+
       <div className="l-foot">
-        Structured from public information on the official site — confirm details there. Own this service?{' '}
-        <a style={{ color: '#97600F', cursor: 'pointer' }} onClick={() => openAuth('signup')}>Claim it</a> · <Link to="/terms">Terms</Link>
+        Structured from public information on the official site — confirm details there. · <Link to="/terms">Terms</Link>
       </div>
     </>
   )
