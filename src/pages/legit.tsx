@@ -35,8 +35,9 @@ const CSS = `
 .l-wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 .l-h{position:sticky;top:0;background:rgba(250,248,243,.92);backdrop-filter:blur(8px);border-bottom:1px solid #E9E2D4;z-index:20}
 .l-hd{display:flex;align-items:center;gap:18px;height:60px}
-.l-logo{font-family:Fraunces;font-weight:700;font-size:23px;color:#211C15;display:flex;align-items:center}
-.l-logoshow{color:#A39A89}
+.l-logo{font-family:Fraunces;font-weight:700;font-size:23px;color:#B5791C;display:flex;align-items:center}
+.l-logoowl{width:30px;height:auto;margin-right:7px;flex-shrink:0}
+.l-logoshow{color:#B5791C}
 .l-dot{width:9px;height:9px;border-radius:50%;background:#B5791C;display:inline-block}
 .l-catpick{display:inline-flex;align-items:center;gap:5px;font-size:14.5px;color:#6E6557;cursor:pointer;white-space:nowrap;padding-right:13px;margin-right:3px;border-right:1px solid #E0D8C8;font-weight:500}.l-catpick:hover{color:#211C15}
 .l-crumbcat{display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:#6E6557}.l-crumbcat:hover{color:#211C15;text-decoration:underline}
@@ -135,7 +136,7 @@ const CSS = `
 .l-modalhint{font-size:12px;color:#9A9080;margin-top:10px}
 /* legit auth modal */
 .l-authcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:18px;padding:30px 28px 24px;max-width:380px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
-.l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#211C15;text-align:center}
+.l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#B5791C;text-align:center}
 .l-authh{font-family:Fraunces,Georgia,serif;font-size:18px;color:#211C15;text-align:center;margin:5px 0 20px;font-weight:600}
 .l-oauth{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;border:1px solid #E0D8C8;border-radius:10px;padding:11px;font-size:14px;font-weight:500;color:#211C15;cursor:pointer;margin-bottom:9px;font-family:Inter,sans-serif}.l-oauth:hover{border-color:#E7D4AC;background:#FCFAF5}
 .l-author{display:flex;align-items:center;gap:12px;margin:14px 0;color:#9A9080;font-size:12px;font-family:'JetBrains Mono',monospace}.l-author::before,.l-author::after{content:'';flex:1;height:1px;background:#E9E2D4}
@@ -145,7 +146,7 @@ const CSS = `
 .l-authtoggle{text-align:center;font-size:13px;color:#6E6557;margin-top:16px}.l-authtoggle span{color:#97600F;cursor:pointer;font-weight:500}.l-authtoggle span:hover{text-decoration:underline}
 .l-authsent{font-size:14px;color:#2C261D;text-align:center;line-height:1.55;padding:12px 0}
 .l-authemail{text-align:center;font-size:13px;color:#97600F;cursor:pointer;margin-top:12px;font-weight:500}.l-authemail:hover{text-decoration:underline}
-.l-authowl{display:block;width:76px;height:auto;margin:2px auto 16px}
+.l-authowl{display:block;width:76px;height:auto;margin:2px auto 0}
 .l-react{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:130;pointer-events:none}
 .l-reactcard{pointer-events:auto;background:#FFFDF8;border:1px solid #E7D4AC;border-radius:18px;padding:24px 34px;text-align:center;box-shadow:0 24px 60px rgba(60,45,20,.28);animation:l-pop .26s cubic-bezier(.2,1.3,.5,1);cursor:pointer}
 @keyframes l-pop{0%{transform:scale(.7);opacity:0}100%{transform:scale(1);opacity:1}}
@@ -237,7 +238,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
         <LegitStyles />
         <header className="l-h">
           <div className="l-wrap l-hd">
-            <Link to="/v2" className="l-logo">Legit.<span className="l-logoshow">Show</span></Link>
+            <Link to="/v2" className="l-logo"><img className="l-logoowl" src="/owl_up.png" alt="" />Legit.<span className="l-logoshow">Show</span></Link>
             <div className="l-auth" style={{ marginLeft: 'auto' }}>
               {user
                 ? <>
