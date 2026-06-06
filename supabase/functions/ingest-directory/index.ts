@@ -90,9 +90,18 @@ function guessPlatform(url: string): string {
   return 'Web'
 }
 
-// App Store / Play Store pages expose only the app icon as og:image, but their
-// HTML carries the actual phone screenshots (portrait mzstatic / Google-play
-// images). A screenshot is a far better preview than the tiny icon.
+// A square icon (not a wide preview): App Store AppIcon, Chrome/Play icons,
+// VS Code marketplace, repo avatar. Mirrors the frontend isIconImage.
+function isIconUrl(u: string): boolean {
+  if (!u) return false
+  return /lh3\.googleusercontent\.com/.test(u) || /=s\d{2,4}(-|$)/.test(u)
+    || (/mzstatic\.com/.test(u) && /AppIcon/i.test(u)) || /gallerycdn\.vsassets\.io/.test(u)
+    || /avatars\.githubusercontent\.com/.test(u)
+}
+
+// App Store pages expose only the app icon as og:image; their HTML carries the
+// actual portrait phone screenshots (mzstatic). A screenshot is a far better
+// preview than the tiny icon.
 function pickStoreScreenshot(html: string): string | null {
   const shots = [...html.matchAll(/https:\/\/[a-z0-9-]+\.mzstatic\.com\/image\/thumb\/[^"'\s)]+?\/(\d+)x(\d+)(?:bb|wa)\.(?:png|jpe?g|webp)/gi)]
     .map(m => ({ u: m[0], w: +m[1], h: +m[2] }))
@@ -101,20 +110,30 @@ function pickStoreScreenshot(html: string): string | null {
   return shots[0].u.replace(/\/\d+x\d+(?:bb|wa)\./, '/600x1300bb.') // crisp, uniform size
 }
 
+// Returns { image (wide preview), icon (square) } — separated so the list shows
+// the real icon while cards/detail show the preview.
 async function extractLanding(url: string) {
   const html = await fetchText(url, UA_WEB, 9000)
   const pick = (re: RegExp) => { const m = html.match(re); return m ? m[1].trim().replace(/\s+/g, ' ') : '' }
   const title = pick(/<title[^>]*>([^<]+)<\/title>/i)
   const desc = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i)
     || pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)
-  let image = pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)
+  const abs = (u: string) => { if (u && !/^https?:\/\//.test(u)) { try { return new URL(u, url).href } catch { return '' } } return u }
+  const og = abs(pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)
     || pick(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)/i)
-    || pick(/<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']([^"']+)/i)
-  if (/apps\.apple\.com/i.test(url)) { const shot = pickStoreScreenshot(html); if (shot) image = shot }
-  if (image && !/^https?:\/\//.test(image)) { try { image = new URL(image, url).href } catch { image = '' } }
+    || pick(/<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']([^"']+)/i))
+  let image = '', icon = ''
+  if (/apps\.apple\.com/i.test(url)) {
+    icon = og                                  // og:image is the AppIcon
+    image = pickStoreScreenshot(html) || ''    // screenshot is the preview
+  } else if (isIconUrl(og)) {
+    icon = og                                  // og is itself a square icon (Chrome store etc.)
+  } else {
+    image = og                                 // wide OG preview
+  }
   const body = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
-  return { title, desc, image, body, starved: body.length < 400, price: /\$\d|\/mo\b|per month|free (tier|plan|forever)|pricing|subscription/i.test(body) }
+  return { title, desc, image, icon, body, starved: body.length < 400, price: /\$\d|\/mo\b|per month|free (tier|plan|forever)|pricing|subscription/i.test(body) }
 }
 
 async function claudeJSON(model: string, system: string, user: string, schema: unknown): Promise<any> {
@@ -224,7 +243,7 @@ async function upsertListings(rows: any[]) {
     description: (L.prose && L.prose.description) || (L.rich && L.rich.what_it_is) || null,
     who_for: (L.rich && L.rich.who_for) || [], features: (L.rich && L.rich.features) || [],
     pricing: (L.rich && L.rich.pricing) || '', how_to_use: (L.rich && L.rich.how_to_use) || '',
-    image_url: L.image || null, source: L.source || null, source_post_title: L.postTitle || null, meta: L.meta || null,
+    image_url: L.image || null, icon_url: L.icon || null, source: L.source || null, source_post_title: L.postTitle || null, meta: L.meta || null,
     has_pricing: !!L.price, js_starved: !!L.starved, enriched: !!(L.rich || L.prose),
     last_fetched_at: new Date().toISOString(),
   }))
@@ -280,19 +299,22 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
   for (const c of raw) { const key = c.slugBase || c.domain; if (NOISE(c.domain)) { noise++; continue } if (seen.has(key)) continue; seen.add(key); cands.push(c) }
   const picked = cands.slice(0, limit)
   const results = await Promise.all(picked.map(async (c, i) => {
-    let name: string, oneliner: string, platform: string, image: string, price = false, starved = false, fullBody = ''
+    let name: string, oneliner: string, platform: string, image = '', icon = '', price = false, starved = false, fullBody = ''
     if (c.prefilled) {
-      name = c.name || c.domain; oneliner = c.oneliner || c.postTitle || ''; platform = c.platform || 'Web'; image = c.image || ''
+      name = c.name || c.domain; oneliner = c.oneliner || c.postTitle || ''; platform = c.platform || 'Web'
+      icon = c.image || ''   // GitHub/npm prefilled image is the owner avatar = an icon
       if (c.url && !/github\.com|npmjs\.com/i.test(c.domain)) {
         const ex = await extractLanding(c.url)
         if (ex.image) image = ex.image
+        if (ex.icon && !icon) icon = ex.icon
         if (ex.desc && !oneliner) oneliner = ex.desc
         price = ex.price; starved = ex.starved; fullBody = ex.body
       }
     } else {
       const ex = await extractLanding(c.url)
       name = (ex.title || c.domain).split(/[\|—–\-·:]/)[0].trim().slice(0, 50) || c.domain
-      oneliner = ex.desc || c.postTitle || ''; platform = guessPlatform(c.url); image = ex.image
+      oneliner = ex.desc || c.postTitle || ''; platform = guessPlatform(c.url)
+      image = ex.image; icon = ex.icon
       price = ex.price; starved = ex.starved; fullBody = ex.body
     }
     let rich = null, prose = null
@@ -302,7 +324,7 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
         claudeCompose({ name, url: c.url, bodyText: fullBody }),
       ])
     }
-    return { slug: slugify(c.slugBase || c.domain), name, oneliner, url: c.url, domain: c.domain, platform, image, price, starved, source: c.source, postTitle: c.postTitle, meta: c.meta || '', rich, prose }
+    return { slug: slugify(c.slugBase || c.domain), name, oneliner, url: c.url, domain: c.domain, platform, image, icon, price, starved, source: c.source, postTitle: c.postTitle, meta: c.meta || '', rich, prose }
   }))
   const up = await upsertListings(results)
   const sources = [

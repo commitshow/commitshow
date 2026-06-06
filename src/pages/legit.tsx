@@ -17,7 +17,7 @@ export type Listing = {
   tagline: string | null; description: string | null
   who_for: string[] | null; features: string[] | null
   pricing: string | null; how_to_use: string | null
-  image_url: string | null; source: string | null; meta: string | null
+  image_url: string | null; icon_url: string | null; source: string | null; meta: string | null
   has_pricing: boolean; js_starved: boolean
   info_as_of: string | null; created_at: string
 }
@@ -53,16 +53,16 @@ const CSS = `
 .l-cattiles{display:flex;flex-wrap:nowrap;gap:8px;padding:24px 0 6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}.l-cattiles::-webkit-scrollbar{display:none}
 .l-cattile{font-size:13.5px;color:#6E6557;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:500;white-space:nowrap;flex:0 0 auto}.l-cattile:hover{border-color:#E7D4AC;color:#211C15}.l-cattile.on{background:#B5791C;color:#fff;border-color:#B5791C}
 .l-catwrap{position:relative}
-.l-catfade{position:absolute;top:24px;right:0;bottom:6px;width:56px;pointer-events:none;background:linear-gradient(90deg,rgba(250,248,243,0) 0%,rgba(250,248,243,.18) 60%,rgba(250,248,243,.42) 100%)}
+.l-catfade{position:absolute;top:24px;right:0;bottom:6px;width:64px;pointer-events:none;background:linear-gradient(90deg,rgba(250,248,243,0) 0%,rgba(250,248,243,0) 52%,rgba(250,248,243,.92) 100%)}
 .l-feedhead{display:flex;align-items:baseline;justify-content:space-between;padding:26px 0 2px;border-bottom:1px solid #E9E2D4;margin-bottom:2px}.l-feedhead h2{font-size:19px}.l-feedhead .c{font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace}
 .l-prehead{font-size:11.5px;font-family:'JetBrains Mono',monospace;color:#9A9080;letter-spacing:.07em;text-transform:uppercase;padding:26px 0 0}
 .l-premium{display:flex;gap:16px;padding:12px 2px 8px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;-ms-overflow-style:none}.l-premium::-webkit-scrollbar{display:none}.l-premium>a{flex:0 0 300px;scroll-snap-align:start}
 /* PC: let the featured carousel run full viewport width, first card aligned to content */
 @media(min-width:900px){.l-premium{margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);padding-left:max(24px,calc(50vw - 540px));padding-right:max(24px,calc(50vw - 540px))}.l-premium>a{flex:0 0 340px}}
 .l-card{background:#fff;border:1px solid #E9E2D4;border-radius:14px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 8px rgba(150,110,30,.04);transition:box-shadow .15s,border-color .15s,transform .15s}.l-card:hover{border-color:#E7D4AC;box-shadow:0 10px 28px rgba(150,110,30,.13);transform:translateY(-2px)}
-.l-cimg{width:100%;aspect-ratio:1200/630;background:linear-gradient(135deg,#C99A2E,#A66A18);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#fff;font-family:Fraunces;font-weight:700;font-size:46px}
+.l-cimg{position:relative;overflow:hidden;width:100%;aspect-ratio:1200/630;background:linear-gradient(135deg,#C99A2E,#A66A18);display:flex;align-items:center;justify-content:center;color:#fff;font-family:Fraunces;font-weight:700;font-size:46px}
 .l-cimg-icon{background:#fff}.l-cardicon{width:88px;height:88px;object-fit:contain;border-radius:19px;background:#fff;border:1px solid #EDE6D8}
-.l-cimgcover{width:100%;height:100%;object-fit:cover;display:block}
+.l-cimgcover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .l-cbody{padding:13px 16px 15px;display:flex;flex-direction:column;gap:4px}
 .l-cn{font-family:Fraunces;font-weight:600;font-size:18px;color:#211C15;line-height:1.15}.l-cdm{font-size:11.5px;color:#9A9080;font-family:'JetBrains Mono',monospace}
 .l-ct{font-size:13px;color:#6E6557;line-height:1.45;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -391,6 +391,15 @@ export function isIconImage(url: string | null | undefined): boolean {
   )
 }
 
+// Resolve a listing's two visuals: a square `icon` (for the small thumbnail)
+// and a wide `preview` (for cards/detail banners). icon_url is the explicit
+// app icon column; legacy rows may carry an icon-type image_url instead.
+export function visuals(p: Listing): { icon: string | null; preview: string | null } {
+  const icon = p.icon_url || (isIconImage(p.image_url) ? p.image_url : null)
+  const preview = p.image_url && !isIconImage(p.image_url) ? p.image_url : null
+  return { icon, preview }
+}
+
 // Small square tile: prefers the service's real app icon when we have one,
 // then the domain favicon, then the initial letter. A wide OG image would
 // crop and look broken at thumbnail size, so we never use it here.
@@ -412,7 +421,7 @@ export function ListingRow({ p }: { p: Listing }) {
   const oneliner = (p.tagline || p.description || '').slice(0, 180)
   return (
     <Link to={`/v2/s/${p.slug}`} className="l-row">
-      <FaviconTile name={p.name} domain={p.domain} icon={isIconImage(p.image_url) ? p.image_url : null} />
+      <FaviconTile name={p.name} domain={p.domain} icon={visuals(p).icon} />
       <div style={{ flex: 1 }}>
         <div className="l-nm">{p.name} <span className="l-dm">{p.domain}</span></div>
         <div className="l-ol">{oneliner}</div>
@@ -432,8 +441,7 @@ export function ListingRow({ p }: { p: Listing }) {
 // background) means a broken or unrenderable source (dead OG endpoint, an SVG
 // that won't paint) falls through instead of leaving a blank tile.
 function CardVisual({ p }: { p: Listing }) {
-  const icon = isIconImage(p.image_url) ? p.image_url : null
-  const preview = p.image_url && !icon ? p.image_url : null
+  const { icon, preview } = visuals(p)
   const host = (p.domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '')
   const fav = host ? `https://www.google.com/s2/favicons?domain=${host}&sz=128` : null
   const stages: { src: string; cover: boolean }[] = []

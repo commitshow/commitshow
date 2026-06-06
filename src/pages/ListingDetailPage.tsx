@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { FaviconTile, isIconImage, LegitShell, ReactionBar, StarRating, useLegitAuth, type Listing } from './legit'
+import { FaviconTile, LegitShell, ReactionBar, StarRating, useLegitAuth, visuals, type Listing } from './legit'
 
 export function ListingDetailPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -41,6 +41,7 @@ function Detail({ p }: { p: Listing }) {
   const dt = (p.info_as_of || '').slice(0, 10)
   const whoFor = p.who_for || []
   const features = p.features || []
+  const { icon: vIcon, preview: vPreview } = visuals(p)
   return (
     <>
       <div className="l-crumb">
@@ -48,7 +49,7 @@ function Detail({ p }: { p: Listing }) {
       </div>
 
       <div className="l-hero">
-        <FaviconTile name={p.name} domain={p.domain} icon={isIconImage(p.image_url) ? p.image_url : null} cls="l-ico" />
+        <FaviconTile name={p.name} domain={p.domain} icon={vIcon} cls="l-ico" />
         <div>
           <h1 style={{ fontSize: 32, lineHeight: 1.1 }}>{p.name}</h1>
           <StarRating value={0} count={0} />
@@ -68,17 +69,17 @@ function Detail({ p }: { p: Listing }) {
 
       <div className="l-cols">
         <main>
-          {p.image_url && (
-            isIconImage(p.image_url)
+          {vPreview
+            ? <div className="l-blk">
+                <img src={vPreview} alt="" style={{ width: '100%', maxHeight: 560, objectFit: 'contain', borderRadius: 12, border: '1px solid #E9E2D4', display: 'block', background: '#F4F0E8' }}
+                  onError={(e) => { const el = e.currentTarget.parentElement; if (el) el.style.display = 'none' }} />
+              </div>
+            : vIcon
               ? <div className="l-blk l-iconblk">
-                  <img className="l-iconimg" src={p.image_url} alt=""
+                  <img className="l-iconimg" src={vIcon} alt=""
                     onError={(e) => { const el = e.currentTarget.parentElement; if (el) el.style.display = 'none' }} />
                 </div>
-              : <div className="l-blk">
-                  <img src={p.image_url} alt="" style={{ width: '100%', maxHeight: 560, objectFit: 'contain', borderRadius: 12, border: '1px solid #E9E2D4', display: 'block', background: '#F4F0E8' }}
-                    onError={(e) => { const el = e.currentTarget.parentElement; if (el) el.style.display = 'none' }} />
-                </div>
-          )}
+              : null}
           <div className="l-blk"><h2>What it is</h2><p className="l-lead">{p.description || p.tagline}</p></div>
           {whoFor.length > 0 && (
             <div className="l-blk"><h2>Who it&apos;s for</h2>
