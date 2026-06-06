@@ -143,7 +143,9 @@ const CSS = `
 .l-rvwrap{margin-top:4px}
 .l-rvprompt{font-size:13.5px;color:#6E6557;background:#F4F0E8;border:1px dashed #E9E2D4;border-radius:10px;padding:14px 16px;margin-bottom:16px}
 .l-rvwrite{margin-bottom:18px}
-.l-rvta{width:100%;min-height:86px;border:1px solid #E0D8C8;border-radius:10px;padding:11px 13px;font-family:Inter,sans-serif;font-size:14px;line-height:1.5;resize:vertical;background:#fff;color:#2C261D;box-sizing:border-box}
+.l-rvtawrap{position:relative}
+.l-rvta{width:100%;min-height:96px;border:1px solid #E0D8C8;border-radius:10px;padding:11px 13px 50px;font-family:Inter,sans-serif;font-size:14px;line-height:1.5;resize:vertical;background:#fff;color:#2C261D;box-sizing:border-box}
+.l-rvpost{position:absolute;right:10px;bottom:10px}
 .l-rvactions{display:flex;gap:14px;align-items:center;margin-top:9px}
 .l-rvmine{background:#FBF6EC;border:1px solid #E7D4AC;border-radius:11px;padding:13px 15px;margin-bottom:18px}
 .l-rvmineh{display:flex;align-items:center;gap:8px;margin-bottom:6px}.l-rvyou{font-size:12px;font-weight:600;color:#97600F;font-family:'JetBrains Mono',monospace}
@@ -566,6 +568,7 @@ export function ReviewsSection({ listingId }: { listingId: string }) {
   }
   const removeReview = async () => {
     if (!myId || busy) return
+    if (!confirm('Delete your review? Your star rating stays.')) return
     setBusy(true)
     const { error } = await supabase.from('listing_reviews').update({ body: null, updated_at: new Date().toISOString() }).eq('listing_id', listingId).eq('member_id', myId)
     if (!error) { setMyBody(null); setDraft(''); setEditing(false); loadList() }
@@ -587,11 +590,11 @@ export function ReviewsSection({ listingId }: { listingId: string }) {
                 <div className="l-rvactions"><span className="l-login" style={{ color: '#97600F' }} onClick={() => { setDraft(myBody); setEditing(true) }}>edit</span><span className="l-login" style={{ color: '#C8102E' }} onClick={removeReview}>delete</span></div>
               </div>
             : <div className="l-rvwrite">
-                <textarea className="l-rvta" value={draft} onChange={e => setDraft(e.target.value)} placeholder="What stood out — what works, what doesn't, who it's for?" maxLength={2000} />
-                <div className="l-rvactions">
-                  <span className="l-btn" style={{ opacity: draft.trim() && !busy ? 1 : 0.5, pointerEvents: draft.trim() && !busy ? 'auto' : 'none' }} onClick={post}>{myBody ? 'Update review' : 'Post review'}</span>
-                  {(editing || myBody) && <span className="l-login" onClick={() => { setEditing(false); setDraft(myBody || '') }}>cancel</span>}
+                <div className="l-rvtawrap">
+                  <textarea className="l-rvta" value={draft} onChange={e => setDraft(e.target.value)} placeholder="What stood out — what works, what doesn't, who it's for?" maxLength={2000} />
+                  <span className="l-btn l-rvpost" style={{ opacity: draft.trim() && !busy ? 1 : 0.5, pointerEvents: draft.trim() && !busy ? 'auto' : 'none' }} onClick={post}>{myBody ? 'Update' : 'Post review'}</span>
                 </div>
+                {(editing || myBody) && <div className="l-rvactions"><span className="l-login" onClick={() => { setEditing(false); setDraft(myBody || '') }}>cancel</span></div>}
               </div>}
 
       {/* list */}

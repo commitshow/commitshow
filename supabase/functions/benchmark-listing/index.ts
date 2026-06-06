@@ -21,6 +21,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SR_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const ADMIN_TOKEN = Deno.env.get('ADMIN_TOKEN') ?? ''
+const PAGESPEED_KEY = Deno.env.get('PAGESPEED_API_KEY') ?? ''
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
 const SR = { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` }
 
@@ -55,6 +56,20 @@ async function probeOk(url: string) {
 }
 async function getJSON(url: string) { try { const r = await fetch(url, { headers: { 'user-agent': 'legit-benchmark/0.1' } }); return r.ok ? await r.json() : null } catch { return null } }
 
+// Real Lighthouse via PageSpeed Insights → the Quality axis. Needs PAGESPEED_API_KEY.
+async function pageSpeed(url: string): Promise<{ perf: number; a11y: number; bp: number } | null> {
+  if (!PAGESPEED_KEY) return null
+  const api = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile&category=performance&category=accessibility&category=best-practices&key=${PAGESPEED_KEY}`
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), 40000)
+  try {
+    const r = await fetch(api, { signal: c.signal }); const j = await r.json()
+    const cat = j?.lighthouseResult?.categories; if (!cat) return null
+    const perf = cat.performance?.score
+    if (perf == null) return null
+    return { perf, a11y: cat.accessibility?.score ?? 0, bp: cat['best-practices']?.score ?? 0 }
+  } catch { return null } finally { clearTimeout(t) }
+}
+
 async function scoreWeb(url: string) {
   let origin = url; try { origin = new URL(url).origin } catch { /* keep */ }
   const f = await fetchFull(origin + '/')
@@ -74,13 +89,21 @@ async function scoreWeb(url: string) {
   const contact = about || /mailto:|\/contact/i.test(html)
   const lmDays = days(h('last-modified'))
 
-  let quality = 0
-  if (viewport) quality += 25
-  if (f.ok) quality += f.ms < 1500 ? 25 : f.ms < 3000 ? 15 : 5
-  if (favicon) quality += 15
-  if (ogImage) quality += 15
-  if (desc) quality += 10
-  if (f.status === 200) quality += 10
+  // Quality = real Lighthouse (perf 50% · a11y 25% · best-practices 25%) when a
+  // PageSpeed key is set; else a lenient presence-based fallback.
+  const lh = await pageSpeed(origin + '/')
+  let quality: number
+  if (lh) {
+    quality = clamp((lh.perf * 0.5 + lh.a11y * 0.25 + lh.bp * 0.25) * 100)
+  } else {
+    quality = 0
+    if (viewport) quality += 25
+    if (f.ok) quality += f.ms < 1500 ? 25 : f.ms < 3000 ? 15 : 5
+    if (favicon) quality += 15
+    if (ogImage) quality += 15
+    if (desc) quality += 10
+    if (f.status === 200) quality += 10
+  }
   let trust = 0
   if (https) trust += 20
   if (h('strict-transport-security')) trust += 16
@@ -102,7 +125,7 @@ async function scoreWeb(url: string) {
   if (contact) transparency += 20
 
   return { quality: clamp(quality), trust: clamp(trust), activity: clamp(activity), transparency: clamp(transparency),
-    signals: { status: f.status, ms: f.ms, https, hsts: !!h('strict-transport-security'), csp: !!csp, privacy: priv, terms } }
+    signals: { status: f.status, ms: f.ms, https, csp: !!csp, privacy: priv, lighthouse: lh ? { perf: Math.round(lh.perf * 100), a11y: Math.round(lh.a11y * 100), bp: Math.round(lh.bp * 100) } : null } }
 }
 
 async function scoreAppStore(url: string) {
