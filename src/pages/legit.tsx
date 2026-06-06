@@ -661,7 +661,7 @@ export function LegitVouch({ listingId }: { listingId: string }) {
                     ))}
                   </div>
                   {mine && <div className="l-modalhint">Tap your pick again to take the ticket back.</div>}
-                  <div className="l-tkquota">{Math.max(0, TICKET_QUOTA - used)} of {TICKET_QUOTA} legit tickets left this month</div>
+                  <div className="l-tkquota" style={{ color: '#B5791C' }}>{Math.max(0, TICKET_QUOTA - used)} of {TICKET_QUOTA} legit tickets left this month</div>
                   {msg && <div className="l-tkquota" style={{ color: '#C8102E' }}>{msg}</div>}
                 </>}
           </div>
