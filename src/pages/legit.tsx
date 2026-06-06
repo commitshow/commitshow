@@ -54,7 +54,7 @@ const CSS = `
 .l-herobig{padding:60px 0 38px;text-align:center;border-bottom:1px solid #E9E2D4;background:linear-gradient(180deg,#FBF8F1 0%,#FAF8F3 100%)}
 .l-herobig h1{font-size:clamp(34px,5vw,52px);line-height:1.05;max-width:800px;margin:0 auto}
 .l-herobig .sub{font-size:18px;color:#6E6557;max-width:640px;margin:18px auto 28px;line-height:1.5}
-.l-owl{display:block;width:108px;height:auto;margin:6px auto -6px;position:relative;z-index:1}
+.l-owl{display:block;width:108px;height:auto;margin:6px auto 0;position:relative;z-index:1}
 .l-bigsearch{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E0D8C8;border-radius:12px;padding:14px 18px;box-shadow:0 2px 16px rgba(150,110,30,.07)}
 .l-bigsearch input{border:none;outline:none;flex:1;font-size:16px;background:transparent;color:#2C261D;font-family:Inter,sans-serif}
 .lgt input:focus,.lgt input:focus-visible{outline:none!important;box-shadow:none!important}
