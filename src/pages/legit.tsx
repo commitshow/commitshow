@@ -36,8 +36,11 @@ const CSS = `
 .l-wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 .l-h{position:sticky;top:0;background:rgba(250,248,243,.92);backdrop-filter:blur(8px);border-bottom:1px solid #E9E2D4;z-index:20}
 .l-hd{display:flex;align-items:center;gap:18px;height:60px}
-.l-logo{font-family:Fraunces;font-weight:700;font-size:23px;color:#211C15;display:flex;align-items:center;gap:8px}
+.l-logo{font-family:Fraunces;font-weight:700;font-size:23px;color:#211C15;display:flex;align-items:center}
+.l-logoshow{color:#fff}
 .l-dot{width:9px;height:9px;border-radius:50%;background:#B5791C;display:inline-block}
+.l-catpick{display:inline-flex;align-items:center;gap:5px;font-size:14.5px;color:#6E6557;cursor:pointer;white-space:nowrap;padding-right:13px;margin-right:3px;border-right:1px solid #E0D8C8;font-weight:500}.l-catpick:hover{color:#211C15}
+.l-crumbcat{display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:#6E6557}.l-crumbcat:hover{color:#211C15;text-decoration:underline}
 .l-search{flex:1;max-width:380px;background:#fff;border:1px solid #E9E2D4;border-radius:8px;padding:8px 12px;color:#9A9080;font-size:14px;cursor:text;display:flex;align-items:center;gap:8px}
 .l-auth{margin-left:auto;display:flex;align-items:center;gap:14px}.l-login{font-size:14px;font-weight:500;color:#6E6557;cursor:pointer}
 .l-btn{background:#B5791C;color:#fff;font-weight:600;font-size:14px;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;display:inline-block}.l-btn:hover{background:#97600F}
@@ -169,7 +172,7 @@ const CSS = `
 .l-ddwrap{position:relative}
 .l-dd{position:absolute;top:calc(100% + 8px);min-width:210px;background:#fff;border:1px solid #E9E2D4;border-radius:12px;box-shadow:0 12px 34px rgba(60,45,20,.16);padding:6px;z-index:40}
 .l-dd.right{right:0}.l-dd.left{left:0}
-.l-ddi{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;font-size:14px;color:#2C261D;cursor:pointer;white-space:nowrap}.l-ddi:hover{background:#F4F0E8}.l-ddi .s{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#9A9080}
+.l-ddi{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;font-size:14px;color:#2C261D;cursor:pointer;white-space:nowrap}.l-ddi:hover{background:#F4F0E8}.l-ddi .s{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#9A9080}.l-ddi.on{background:#F6EBD4;color:#97600F;font-weight:600}
 .l-ddsep{height:1px;background:#E9E2D4;margin:6px 8px}
 .l-ddhead{padding:11px 11px 7px}.l-ddname{font-weight:600;font-size:14.5px;color:#211C15}.l-ddmail{font-size:12px;color:#9A9080;margin-top:1px;overflow:hidden;text-overflow:ellipsis}
 .l-ddtk{padding:9px 11px}.l-ddtk-h{display:flex;align-items:center;gap:7px;font-size:13.5px;color:#2C261D;font-weight:500}.l-ddtk-s{display:block;font-size:12px;color:#9A9080;font-family:'JetBrains Mono',monospace;margin-top:4px;margin-left:21px}
@@ -211,21 +214,9 @@ export function LegitShell({ children }: { children: ReactNode }) {
     member: { display_name?: string; avatar_url?: string | null; is_admin?: boolean } | null
     signOut: (redirectTo?: string) => Promise<void>
   }
-  const [cats, setCats] = useState<string[]>([])
   const openAuth = (m: AuthMode = 'signin') => { setMode(m); setOpen(true) }
   const name = member?.display_name || user?.email?.split('@')[0] || 'You'
   const initial = name.trim()[0]?.toUpperCase() || '?'
-
-  useEffect(() => {
-    let alive = true
-    supabase.from('listings').select('category').not('category', 'is', null).then(({ data }) => {
-      if (!alive) return
-      const m = new Map<string, number>()
-      for (const r of (data as { category: string }[] | null) || []) m.set(r.category, (m.get(r.category) || 0) + 1)
-      setCats([...m.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c).slice(0, 12))
-    })
-    return () => { alive = false }
-  }, [])
 
   return (
     <LegitAuthCtx.Provider value={{ openAuth, loggedIn: !!user }}>
@@ -233,11 +224,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
         <LegitStyles />
         <header className="l-h">
           <div className="l-wrap l-hd">
-            <Link to="/v2" className="l-logo"><span className="l-dot" />legit</Link>
-            <nav className="l-nav">
-              <Link to="/v2" className="l-navi">Browse</Link>
-              <CategoriesMenu cats={cats} />
-            </nav>
+            <Link to="/v2" className="l-logo">Legit.<span className="l-logoshow">Show</span></Link>
             <div className="l-auth" style={{ marginLeft: 'auto' }}>
               {user
                 ? <>
@@ -274,19 +261,34 @@ function Chevron() {
   return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
 }
 
-function CategoriesMenu({ cats }: { cats: string[] }) {
+// Reusable category dropdown — used in the hero search box and the detail
+// breadcrumb. Fetches distinct categories and navigates to /v2?cat=…
+export function CategoryPicker({ current = null, variant = 'crumb' }: { current?: string | null; variant?: 'search' | 'crumb' }) {
+  const [cats, setCats] = useState<string[]>([])
   const [open, setOpen] = useState(false)
   const nav = useNavigate()
   const ref = useClickAway(() => setOpen(false))
+  useEffect(() => {
+    let alive = true
+    supabase.from('listings').select('category').not('category', 'is', null).then(({ data }) => {
+      if (!alive) return
+      const m = new Map<string, number>()
+      for (const r of (data as { category: string }[] | null) || []) m.set(r.category, (m.get(r.category) || 0) + 1)
+      setCats([...m.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c).slice(0, 30))
+    })
+    return () => { alive = false }
+  }, [])
   const go = (c?: string) => { setOpen(false); nav(c ? `/v2?cat=${encodeURIComponent(c)}` : '/v2') }
   return (
-    <div className="l-ddwrap" ref={ref}>
-      <span className={`l-navi ${open ? 'on' : ''}`} onClick={() => setOpen(o => !o)}>Categories <Chevron /></span>
+    <div className="l-ddwrap" ref={ref} onClick={e => e.preventDefault()}>
+      <span className={variant === 'search' ? 'l-catpick' : 'l-crumbcat'} onClick={() => setOpen(o => !o)}>
+        {current || (variant === 'search' ? 'All categories' : 'All')} <Chevron />
+      </span>
       {open && (
-        <div className="l-dd left">
-          <div className="l-ddi" onClick={() => go()}>All categories</div>
+        <div className="l-dd left" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div className={`l-ddi ${!current ? 'on' : ''}`} onClick={() => go()}>All categories</div>
           {cats.length > 0 && <div className="l-ddsep" />}
-          {cats.map(c => <div key={c} className="l-ddi" onClick={() => go(c)}>{c}</div>)}
+          {cats.map(c => <div key={c} className={`l-ddi ${c === current ? 'on' : ''}`} onClick={() => go(c)}>{c}</div>)}
         </div>
       )}
     </div>

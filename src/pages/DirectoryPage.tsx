@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LegitShell, ListingRow, PremiumCard, SearchIcon, type Listing } from './legit'
+import { CategoryPicker, LegitShell, ListingRow, PremiumCard, type Listing } from './legit'
 
 type Stats = { uses_count: number; positive_count: number; negative_count: number }
 
@@ -113,7 +113,7 @@ export function DirectoryPage() {
           <h1>Every launched service, tested</h1>
           <div className="sub">What each one does, who it&apos;s for, and how it holds up.</div>
           <div className="l-bigsearch">
-            <SearchIcon size={18} color="#6E6557" />
+            <CategoryPicker variant="search" current={cat} />
             <input
               id="l-hero-search"
               value={q}

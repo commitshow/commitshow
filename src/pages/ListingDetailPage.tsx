@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BenchmarkChart, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, ticketTier, useLegitAuth, visuals, type Listing } from './legit'
+import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, ticketTier, useLegitAuth, visuals, type Listing } from './legit'
 
 export function ListingDetailPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -57,8 +57,10 @@ function Detail({ p }: { p: Listing }) {
   const starTone = ticketTier(ticketCount).tone
   return (
     <>
-      <div className="l-crumb">
-        <Link to="/v2">Home</Link> › {p.category || p.platform || 'Service'} › {p.name}
+      <div className="l-crumb" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <Link to="/v2">Home</Link> ›
+        {p.category ? <CategoryPicker variant="crumb" current={p.category} /> : <span>{p.platform || 'Service'}</span>}
+        › {p.name}
       </div>
 
       <div className="l-hero">
