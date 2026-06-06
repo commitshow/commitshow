@@ -6,8 +6,8 @@ import { LegitShell, ListingRow, PremiumCard, SearchIcon, type Listing } from '.
 type Stats = { uses_count: number; positive_count: number; negative_count: number }
 
 // Default ranking signal = completeness (quality of the structured listing)
-// + lifetime reaction/usage signal. No time window — all-time totals.
-function rankScore(r: Listing, s?: Stats): number {
+// + lifetime reaction/usage signal + legit-ticket vouches (heaviest). All-time.
+function rankScore(r: Listing, s?: Stats, tickets = 0): number {
   let c = 0
   if (r.image_url) c += 3
   if (r.category) c += 2
@@ -18,12 +18,13 @@ function rankScore(r: Listing, s?: Stats): number {
   if (r.pricing) c += 1
   if (r.how_to_use) c += 1
   const rx = s ? s.uses_count * 3 + s.positive_count * 2 - s.negative_count : 0
-  return c + rx
+  return c + rx + tickets * 4
 }
 
 export function DirectoryPage() {
   const [rows, setRows] = useState<Listing[] | null>(null)
   const [stats, setStats] = useState<Map<string, Stats>>(new Map())
+  const [tickets, setTickets] = useState<Map<string, number>>(new Map())
   const [params, setParams] = useSearchParams()
   const [q, setQ] = useState('')
   const cat = params.get('cat')
@@ -50,6 +51,15 @@ export function DirectoryPage() {
         for (const s of data as ({ listing_id: string } & Stats)[]) m.set(s.listing_id, s)
         setStats(m)
       })
+    supabase
+      .from('listing_ticket_stats')
+      .select('listing_id, ticket_count')
+      .then(({ data }) => {
+        if (!alive || !data) return
+        const m = new Map<string, number>()
+        for (const t of data as { listing_id: string; ticket_count: number }[]) m.set(t.listing_id, t.ticket_count)
+        setTickets(m)
+      })
     return () => { alive = false }
   }, [])
 
@@ -71,16 +81,16 @@ export function DirectoryPage() {
       }
       return true
     })
-    // Default order = quality/completeness + lifetime reaction signal, desc.
+    // Default order = quality/completeness + reactions + legit tickets, desc.
     // Stable sort keeps created_at desc as the tiebreak (rows arrive newest-first).
-    return [...out].sort((a, b) => rankScore(b, stats.get(b.id)) - rankScore(a, stats.get(a.id)))
-  }, [rows, q, cat, stats])
+    return [...out].sort((a, b) => rankScore(b, stats.get(b.id), tickets.get(b.id)) - rankScore(a, stats.get(a.id), tickets.get(a.id)))
+  }, [rows, q, cat, stats, tickets])
 
   const featured = useMemo(() =>
     (rows || []).filter(r => r.image_url)
-      .sort((a, b) => rankScore(b, stats.get(b.id)) - rankScore(a, stats.get(a.id)))
+      .sort((a, b) => rankScore(b, stats.get(b.id), tickets.get(b.id)) - rankScore(a, stats.get(a.id), tickets.get(a.id)))
       .slice(0, 10),
-    [rows, stats])
+    [rows, stats, tickets])
 
   // right-edge fade on the category row — shown only while there's more to
   // scroll, hidden once scrolled to the end.
@@ -123,7 +133,7 @@ export function DirectoryPage() {
         {!q && !cat && featured.length > 0 && (
           <>
             <div className="l-prehead">Featured</div>
-            <div className="l-premium">{featured.map(p => <PremiumCard key={p.id} p={p} />)}</div>
+            <div className="l-premium">{featured.map(p => <PremiumCard key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}</div>
           </>
         )}
         {cats.length > 0 && (
@@ -145,7 +155,7 @@ export function DirectoryPage() {
 
         {rows === null && <div className="l-empty">Loading…</div>}
         {rows && filtered.length === 0 && <div className="l-empty">No services match — try a different search or category.</div>}
-        {filtered.map(p => <ListingRow key={p.id} p={p} />)}
+        {filtered.map(p => <ListingRow key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}
 
         <div className="l-foot">
           legit tests and structures publicly available information on launched services. Listings reflect

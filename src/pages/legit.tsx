@@ -76,6 +76,18 @@ const CSS = `
 .l-rxt{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:13.5px;font-weight:500;color:#2C261D;transition:.12s;user-select:none}.l-rxt:hover{border-color:#E7D4AC}
 .l-rxt.on{background:#F6EBD4;border-color:#E7D4AC;color:#97600F}.l-rxt.warn.on{background:#FBEFD9}
 .l-rxt .c{font-family:'JetBrains Mono',monospace;font-size:12px;color:#B5A88C}.l-rxt.on .c{color:#B5791C}
+/* legit tickets */
+.l-ticket{display:inline-flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;white-space:nowrap}
+.l-tk{border-top:1px solid #E9E2D4;padding:24px 0 0;margin-top:8px}
+.l-tkhead{display:flex;align-items:center;gap:9px;margin-bottom:5px;flex-wrap:wrap}
+.l-tkh{font-size:20px;font-family:Fraunces,Georgia,serif;font-weight:600;color:#211C15}
+.l-tktier{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 9px;border-radius:6px;border:1px solid currentColor;letter-spacing:.02em}
+.l-tksub{font-size:13px;color:#9A9080;margin-bottom:14px}
+.l-tkvouch{font-size:14px;color:#5A5347;margin-bottom:14px}.l-tkvouch b{color:#211C15}
+.l-tkthrow{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid #E0D8C8;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600;font-size:14px;color:#211C15;margin-bottom:12px}.l-tkthrow:hover{border-color:#E7D4AC}
+.l-tkchips{display:flex;flex-wrap:wrap;gap:8px}
+.l-tkchip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:13.5px;font-weight:500;color:#2C261D}.l-tkchip:hover{border-color:#E7D4AC}.l-tkchip.on{background:#F6EBD4;border-color:#E7D4AC;color:#97600F}
+.l-tkquota{font-size:12px;color:#9A9080;margin-top:12px;font-family:'JetBrains Mono',monospace}
 /* detail */
 .l-crumb{font-size:13px;color:#6E6557;padding:20px 0 0}
 .l-head{padding:26px 0 8px}.l-head h1{font-size:30px}
@@ -353,19 +365,21 @@ export function SearchIcon({ size = 17, color = '#9A9080' }: { size?: number; co
   )
 }
 
-export function StarRating({ value = 0, count = 0, size = 18 }: { value?: number; count?: number; size?: number }) {
+// Stars carry the rating shape; their COLOR carries the legit-ticket tier
+// (tone) — so a crowd-vouched product reads "hotter" even before reviews exist.
+export function StarRating({ value = 0, count = 0, size = 18, tone = '#E0A92E' }: { value?: number; count?: number; size?: number; tone?: string }) {
   const stars = [0, 1, 2, 3, 4].map(i => {
     const fill = Math.max(0, Math.min(1, value - i)) // 0..1 per star
     return (
       <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}>
         <defs>
           <linearGradient id={`lg-star-${i}`}>
-            <stop offset={`${fill * 100}%`} stopColor="#E0A92E" />
-            <stop offset={`${fill * 100}%`} stopColor="#E7DECB" />
+            <stop offset={`${fill * 100}%`} stopColor={tone} />
+            <stop offset={`${fill * 100}%`} stopColor="#EFE7D6" />
           </linearGradient>
         </defs>
         <path d="M12 2.5l2.9 6.2 6.6.9-4.8 4.6 1.2 6.6L12 18.7 6 21.4l1.2-6.6L2.4 9.6l6.6-.9z"
-          fill={`url(#lg-star-${i})`} stroke="#D9C9A0" strokeWidth="0.6" />
+          fill={`url(#lg-star-${i})`} stroke={tone} strokeOpacity="0.5" strokeWidth="0.7" />
       </svg>
     )
   })
@@ -373,6 +387,143 @@ export function StarRating({ value = 0, count = 0, size = 18 }: { value?: number
     <div className="l-rate">
       <span className="l-stars">{stars}</span>
       <span className="l-raten">{count > 0 ? `${value.toFixed(1)} · ${count} review${count === 1 ? '' : 's'}` : 'No ratings yet'}</span>
+    </div>
+  )
+}
+
+// ── Legit tickets — the heavy, scarce, specialty-tagged vouch ──
+export const SPECIALTIES: { key: string; label: string }[] = [
+  { key: 'reliable', label: 'Reliable' },
+  { key: 'polished', label: 'Polished' },
+  { key: 'value', label: 'Great value' },
+  { key: 'time_saver', label: 'Time-saver' },
+  { key: 'innovative', label: 'Innovative' },
+  { key: 'supported', label: 'Well-supported' },
+]
+const SPECIALTY_LABEL: Record<string, string> = Object.fromEntries(SPECIALTIES.map(s => [s.key, s.label]))
+
+// Ticket tier → star/badge tone + label. More vouches = hotter color.
+export function ticketTier(n: number): { tone: string; label: string } {
+  if (n >= 15) return { tone: '#C8102E', label: 'Certified legit' }   // scarlet
+  if (n >= 5) return { tone: '#C2752A', label: 'Crowd-vouched' }       // bronze
+  if (n >= 1) return { tone: '#E0A92E', label: 'Vouched' }            // gold
+  return { tone: '#C9BBA0', label: '' }                                // muted
+}
+
+// Verified-seal rosette — a certified-specialty mark, not a plain ticket.
+export function LegitSeal({ size = 16, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true" style={{ color, flexShrink: 0 }}>
+      <path d="M8.4 13.1 6.2 21.6 12 18.3 17.8 21.6 15.6 13.1" />
+      <circle cx="12" cy="8.8" r="6.4" />
+      <path d="M12 5.1l1.36 2.76 3.04.44-2.2 2.14.52 3.03L12 12.0 9.28 13.51l.52-3.03-2.2-2.14 3.04-.44z" fill={color} stroke="none" />
+    </svg>
+  )
+}
+
+// Tier-colored "◈ N legit" count — shown wherever a listing surfaces.
+export function TicketBadge({ count, size = 13 }: { count: number; size?: number }) {
+  if (!count) return null
+  const { tone } = ticketTier(count)
+  return (
+    <span className="l-ticket" style={{ color: tone }}>
+      <LegitSeal size={size} color={tone} /> {count} legit
+    </span>
+  )
+}
+
+const TICKET_QUOTA = 12
+
+// Detail-page panel: throw / re-tag / take back a legit ticket, see the count,
+// the tier, the crowd-vouched specialties, and your monthly quota.
+export function TicketPanel({ listingId }: { listingId: string }) {
+  const { openAuth, loggedIn } = useLegitAuth()
+  const { user } = useAuth() as { user: { id?: string } | null }
+  const myId = user?.id || null
+  const [count, setCount] = useState(0)
+  const [specs, setSpecs] = useState<Record<string, number>>({})
+  const [mine, setMine] = useState<string | null>(null)
+  const [used, setUsed] = useState(0)
+  const [picking, setPicking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    supabase.from('listing_ticket_stats').select('ticket_count, specialties').eq('listing_id', listingId).maybeSingle()
+      .then(({ data }) => { if (!alive) return; const d = data as { ticket_count: number; specialties: Record<string, number> } | null; setCount(d?.ticket_count || 0); setSpecs(d?.specialties || {}) })
+    if (myId) {
+      supabase.from('listing_tickets').select('specialty').eq('listing_id', listingId).eq('member_id', myId).maybeSingle()
+        .then(({ data }) => { if (alive) setMine((data as { specialty: string } | null)?.specialty ?? null) })
+      const d = new Date(); const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).toISOString()
+      supabase.from('listing_tickets').select('listing_id', { count: 'exact', head: true }).eq('member_id', myId).gte('created_at', monthStart)
+        .then(({ count: c }) => { if (alive) setUsed(c || 0) })
+    }
+    return () => { alive = false }
+  }, [listingId, myId])
+
+  const tier = ticketTier(count)
+  const top = Object.entries(specs).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => SPECIALTY_LABEL[k] || k)
+  const remaining = Math.max(0, TICKET_QUOTA - used)
+
+  const throwTicket = async (specialty: string) => {
+    if (!loggedIn || !myId) { openAuth('signup'); return }
+    if (busy) return
+    setBusy(true); setMsg('')
+    const had = mine !== null
+    const q = had
+      ? supabase.from('listing_tickets').update({ specialty }).eq('listing_id', listingId).eq('member_id', myId)
+      : supabase.from('listing_tickets').insert({ listing_id: listingId, member_id: myId, specialty })
+    const { error } = await q
+    if (error) {
+      setMsg(/quota/i.test(error.message) ? `You've used all ${TICKET_QUOTA} legit tickets this month.` : 'Could not throw the ticket — try again.')
+    } else {
+      setSpecs(prev => { const n = { ...prev }; if (had && mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); n[specialty] = (n[specialty] || 0) + 1; return n })
+      if (!had) { setCount(c => c + 1); setUsed(u => u + 1) }
+      setMine(specialty); setPicking(false)
+    }
+    setBusy(false)
+  }
+  const takeBack = async () => {
+    if (!myId || busy) return
+    setBusy(true); setMsg('')
+    const { error } = await supabase.from('listing_tickets').delete().eq('listing_id', listingId).eq('member_id', myId)
+    if (!error) { setSpecs(prev => { const n = { ...prev }; if (mine) n[mine] = Math.max(0, (n[mine] || 1) - 1); return n }); setCount(c => Math.max(0, c - 1)); setMine(null); setPicking(false) }
+    setBusy(false)
+  }
+
+  return (
+    <div className="l-tk">
+      <div className="l-tkhead">
+        <LegitSeal size={20} color={tier.tone} />
+        <span className="l-tkh">Legit tickets</span>
+        {count > 0 && <span className="l-tktier" style={{ color: tier.tone }}>{count} · {tier.label}</span>}
+      </div>
+      {top.length > 0
+        ? <div className="l-tkvouch">Vouched legit for <b>{top.join(' · ')}</b></div>
+        : <div className="l-tksub">No legit tickets yet — be the first to vouch for what this nails.</div>}
+
+      {!loggedIn
+        ? <span className="l-tkthrow" onClick={() => openAuth('signup')}><LegitSeal size={15} /> Sign in to throw a legit ticket</span>
+        : <>
+            {!mine && !picking && (
+              <span className="l-tkthrow" onClick={() => setPicking(true)}><LegitSeal size={15} /> Throw a legit ticket</span>
+            )}
+            {(mine || picking) && (
+              <>
+                <div className="l-tksub" style={{ marginBottom: 8 }}>{mine ? 'Your vouch — tap another to change it' : 'What does this product nail?'}</div>
+                <div className="l-tkchips">
+                  {SPECIALTIES.map(s => (
+                    <span key={s.key} className={`l-tkchip ${mine === s.key ? 'on' : ''}`} onClick={() => throwTicket(s.key)}>
+                      {mine === s.key && <LegitSeal size={13} color={tier.tone} />}{s.label}
+                    </span>
+                  ))}
+                </div>
+                {mine && <div style={{ marginTop: 10 }}><span className="l-login" style={{ color: '#C8102E' }} onClick={takeBack}>take back ticket</span></div>}
+              </>
+            )}
+            <div className="l-tkquota">{remaining} of {TICKET_QUOTA} legit tickets left this month{msg ? ` · ${msg}` : ''}</div>
+          </>}
     </div>
   )
 }
@@ -417,7 +568,7 @@ export function FaviconTile({ name, domain, icon = null, cls = 'l-ic' }: { name:
   )
 }
 
-export function ListingRow({ p }: { p: Listing }) {
+export function ListingRow({ p, tickets = 0 }: { p: Listing; tickets?: number }) {
   const oneliner = (p.tagline || p.description || '').slice(0, 180)
   return (
     <Link to={`/v2/s/${p.slug}`} className="l-row">
@@ -425,7 +576,8 @@ export function ListingRow({ p }: { p: Listing }) {
       <div style={{ flex: 1 }}>
         <div className="l-nm">{p.name} <span className="l-dm">{p.domain}</span></div>
         <div className="l-ol">{oneliner}</div>
-        <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {tickets > 0 && <TicketBadge count={tickets} />}
           {p.category && <span className="l-tag">{p.category}</span>}
           <span className="l-tag">{p.platform || 'web'}</span>
           {p.has_pricing && <span className="l-tag">pricing</span>}
@@ -459,7 +611,7 @@ function CardVisual({ p }: { p: Listing }) {
   )
 }
 
-export function PremiumCard({ p }: { p: Listing }) {
+export function PremiumCard({ p, tickets = 0 }: { p: Listing; tickets?: number }) {
   return (
     <Link to={`/v2/s/${p.slug}`} className="l-card">
       <CardVisual p={p} />
@@ -467,6 +619,7 @@ export function PremiumCard({ p }: { p: Listing }) {
         <div className="l-cn">{p.name}</div>
         <div className="l-cdm">{p.category || p.platform || p.domain}</div>
         <div className="l-ct">{p.tagline || p.description}</div>
+        {tickets > 0 && <div style={{ marginTop: 3 }}><TicketBadge count={tickets} size={12} /></div>}
       </div>
     </Link>
   )

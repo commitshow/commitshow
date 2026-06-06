@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { FaviconTile, LegitShell, ReactionBar, StarRating, useLegitAuth, visuals, type Listing } from './legit'
+import { FaviconTile, LegitShell, ReactionBar, StarRating, TicketPanel, ticketTier, useLegitAuth, visuals, type Listing } from './legit'
 
 export function ListingDetailPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -42,6 +42,14 @@ function Detail({ p }: { p: Listing }) {
   const whoFor = p.who_for || []
   const features = p.features || []
   const { icon: vIcon, preview: vPreview } = visuals(p)
+  const [ticketCount, setTicketCount] = useState(0)
+  useEffect(() => {
+    let alive = true
+    supabase.from('listing_ticket_stats').select('ticket_count').eq('listing_id', p.id).maybeSingle()
+      .then(({ data }) => { if (alive) setTicketCount((data as { ticket_count: number } | null)?.ticket_count || 0) })
+    return () => { alive = false }
+  }, [p.id])
+  const starTone = ticketTier(ticketCount).tone
   return (
     <>
       <div className="l-crumb">
@@ -52,7 +60,7 @@ function Detail({ p }: { p: Listing }) {
         <FaviconTile name={p.name} domain={p.domain} icon={vIcon} cls="l-ico" />
         <div>
           <h1 style={{ fontSize: 32, lineHeight: 1.1 }}>{p.name}</h1>
-          <StarRating value={0} count={0} />
+          <StarRating value={0} count={0} tone={starTone} />
           <div className="l-one">{p.tagline || p.description}</div>
           <div className="l-pills">
             <span className="l-pill plat">{p.platform || 'web'}</span>
@@ -116,6 +124,8 @@ function Detail({ p }: { p: Listing }) {
           </div>
         </aside>
       </div>
+
+      <TicketPanel listingId={p.id} />
 
       <ReactionBar listingId={p.id} />
 
