@@ -19,9 +19,8 @@ const SOURCES: { key: string; label: string; hint: string }[] = [
   { key: 'hn', label: 'Show HN', hint: 'Hacker News · recent Show HN' },
   { key: 'SideProject vibecoding SaaS indiehackers startups', label: 'Builder subs', hint: 'r/SideProject r/vibecoding r/SaaS r/indiehackers r/startups' },
   { key: 'ChatGPTCoding cursor ClaudeAI LocalLLaMA', label: 'AI-coding subs', hint: 'r/ChatGPTCoding r/cursor r/ClaudeAI r/LocalLLaMA' },
-  { key: 'ph', label: 'Product Hunt', hint: 'producthunt.com /feed → resolves to product site' },
-  { key: 'betalist', label: 'BetaList', hint: 'betalist.com /feed → resolves to product site' },
-  { key: 'devto', label: 'dev.to (Show Dev)', hint: 'dev.to /tag/showdev → resolves to product site' },
+  { key: 'betalist', label: 'BetaList', hint: 'feed → /startups/.../visit → real product site' },
+  { key: 'ph', label: 'Product Hunt', hint: 'GraphQL → exact product website (needs PRODUCTHUNT_TOKEN)' },
 ]
 
 export function DirectoryAdminPage() {
@@ -142,7 +141,7 @@ export function DirectoryAdminPage() {
         </div>
         <div style={{ fontSize: 12.5, color: '#9A9080', marginBottom: 6, maxWidth: 620 }}>
           Custom sources — space-separated. Mix any: subreddit name (e.g. <code>SideProject</code>) ·{' '}
-          <code>hn</code> · <code>mcp</code> · <code>skills</code> · <code>ph</code> · <code>betalist</code> · <code>devto</code> ·{' '}
+          <code>hn</code> · <code>mcp</code> · <code>skills</code> · <code>betalist</code> · <code>ph</code> ·{' '}
           <code>gh:&lt;keyword&gt;</code> (GitHub search) · <code>npm:&lt;keyword&gt;</code> (npm search).
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, maxWidth: 620 }}>

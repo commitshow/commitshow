@@ -25,6 +25,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SR_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const ADMIN_TOKEN = Deno.env.get('ADMIN_TOKEN') ?? ''
+const PH_TOKEN = Deno.env.get('PRODUCTHUNT_TOKEN') ?? ''
 const SR = { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` }
 
 // Two ways in: the shared x-admin-token (used by the main /admin console + CLI),
@@ -108,7 +109,7 @@ async function fetchJSON(url: string, ua: string, ms = 12000): Promise<any> {
 }
 
 const EXT = (u: string) => /^https?:\/\//.test(u) && !/reddit\.com|redd\.it|redditstatic|redditmedia|preview\.redd|reddit\.media/.test(u)
-const NOISE = (d: string) => /imgur\.com|instagram\.com|twitter\.com|x\.com|youtube\.com|youtu\.be|facebook\.com|linkedin\.com|tiktok\.com|patreon\.com|discord\.(gg|com)|t\.me|paypal|ko-fi|buymeacoffee|medium\.com|dev\.to|substack\.com|hashnode|wikipedia\.org|news\.ycombinator|loom\.com|notion\.site|docs\.google|forms\.gle/i.test(d)
+const NOISE = (d: string) => /imgur\.com|instagram\.com|twitter\.com|x\.com|youtube\.com|youtu\.be|facebook\.com|linkedin\.com|tiktok\.com|patreon\.com|discord\.(gg|com)|t\.me|paypal|ko-fi|buymeacoffee|medium\.com|dev\.to|substack\.com|hashnode|wikipedia\.org|news\.ycombinator|loom\.com|notion\.site|docs\.google|forms\.gle|itch\.io|steampowered\.com|gamejolt\.com|newgrounds\.com|crazygames\.com|lu\.ma|app\.link|page\.link|onelink\.me|smart\.link/i.test(d)
 
 function guessPlatform(url: string): string {
   if (/apps\.apple\.com/.test(url)) return 'iOS app'
@@ -263,40 +264,56 @@ async function discoverNpm(q: string, n = 15): Promise<Cand[]> {
   return out
 }
 
-// Aggregator feeds (Product Hunt, BetaList, dev.to) link to their OWN post page,
-// not the product. Resolve the dominant external link on the post page = the
-// product's real site.
-function resolveOutbound(html: string, selfHost: string): string | null {
-  const count = new Map<string, { url: string; n: number }>()
-  for (const m of html.matchAll(/href=["'](https?:\/\/[^"']+)["']/gi)) {
-    try {
-      const u = new URL(m[1]); const host = u.host.toLowerCase()
-      if (host.includes(selfHost) || NOISE(host)) continue
-      if (/\.(png|jpe?g|svg|gif|webp|css|js|ico|woff2?|mp4)($|\?)/i.test(u.pathname)) continue
-      if (/google|gstatic|cloudflare|cdn|fonts|gravatar|amazonaws|cloudfront|googletagmanager|sentry|segment|intercom|stripe\.com\/v|js\./.test(host)) continue
-      const reg = registrable(host)
-      const cur = count.get(reg) || { url: `${u.protocol}//${host}`, n: 0 }
-      cur.n++; count.set(reg, cur)
-    } catch { /* skip */ }
-  }
-  if (!count.size) return null
-  return [...count.values()].sort((a, b) => b.n - a.n)[0].url
+// Resolve a URL through redirects to its final destination.
+async function fetchFinalUrl(url: string, ms = 9000): Promise<string | null> {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms)
+  try { const r = await fetch(url, { headers: { 'user-agent': UA_WEB }, redirect: 'follow', signal: c.signal }); return r.url } catch { return null } finally { clearTimeout(t) }
 }
-async function discoverRssResolve(feedUrl: string, source: string, selfHost: string, n: number): Promise<Cand[]> {
-  const xml = await fetchText(feedUrl, UA_RSS, 12000)
-  const items = [...xml.matchAll(/<(?:item|entry)>([\s\S]*?)<\/(?:item|entry)>/gi)].map(m => m[1]).slice(0, Math.min(n, 25))
+
+// BetaList: feed → /startups/<slug>/visit 302-redirects to the real product site.
+async function discoverBetaList(n: number): Promise<Cand[]> {
+  const xml = await fetchText('https://feeds.feedburner.com/BetaList', UA_RSS, 12000)
+  const items = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/gi)].map(m => m[1]).slice(0, Math.min(n, 25))
   const out: Cand[] = []
   await Promise.all(items.map(async it => {
-    const title = dec((it.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/) || [])[1] || '').replace(/<[^>]+>/g, '').trim()
-    const link = (it.match(/<link[^>]*>(?:<!\[CDATA\[)?\s*(https?:\/\/[^<\]\s]+)/i) || it.match(/<link[^>]*href=["'](https?:\/\/[^"']+)/i) || [])[1]
-    if (!link) return
-    const page = await fetchText(link, UA_WEB, 9000)
-    const product = resolveOutbound(page, selfHost)
-    if (!product) return
-    const domain = product.replace(/^https?:\/\/(www\.)?/i, '').split('/')[0].toLowerCase()
-    out.push({ postTitle: title, url: product, domain, source })
+    const title = dec((it.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/) || [])[1] || '').replace(/<[^>]+>/g, '').trim()
+    const m = it.match(/https?:\/\/betalist\.com\/startups\/[a-z0-9-]+/i)
+    if (!m) return
+    const final = await fetchFinalUrl(`${m[0]}/visit`)
+    if (!final) return
+    let host = ''; try { host = new URL(final).host.toLowerCase().replace(/^www\./, '') } catch { return }
+    if (/betalist\.com/.test(host)) return
+    out.push({ postTitle: title, url: final.split('?')[0], domain: host, source: 'BetaList' })
   }))
-  return out.filter(c => c.url && !NOISE(c.domain))
+  return out
+}
+
+// Product Hunt: GraphQL gives the exact product `website` (a PH /r/ redirect we
+// follow). Needs PRODUCTHUNT_TOKEN — returns [] gracefully without one.
+async function discoverProductHunt(n: number): Promise<Cand[]> {
+  if (!PH_TOKEN) return []
+  const q = `{ posts(first: ${Math.min(n, 20)}, order: NEWEST) { edges { node { name tagline website url } } } }`
+  let j: any = null
+  try {
+    const r = await fetch('https://api.producthunt.com/v2/api/graphql', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${PH_TOKEN}`, 'user-agent': 'legit-directory/0.1' },
+      body: JSON.stringify({ query: q }),
+    })
+    if (!r.ok) return []
+    j = await r.json()
+  } catch { return [] }
+  const out: Cand[] = []
+  for (const e of (j?.data?.posts?.edges || [])) {
+    const node = e.node || {}
+    let site: string | null = node.website || node.url
+    if (!site) continue
+    if (/producthunt\.com/.test(site)) { const f = await fetchFinalUrl(site); site = f && !/producthunt\.com/.test(f) ? f : null }
+    if (!site) continue
+    let host = ''; try { host = new URL(site).host.toLowerCase().replace(/^www\./, '') } catch { continue }
+    if (NOISE(host)) continue
+    out.push({ postTitle: node.tagline || node.name, url: site.split('?')[0], domain: host, source: 'Product Hunt', name: node.name })
+  }
+  return out
 }
 
 async function upsertListings(rows: any[]) {
@@ -340,10 +357,9 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
   const isSkills = (p: string) => /^skills?$/i.test(p)
   const isPH = (p: string) => /^(ph|producthunt)$/i.test(p)
   const isBeta = (p: string) => /^betalist$/i.test(p)
-  const isDevto = (p: string) => /^devto$/i.test(p)
   const ghQ: string[] = [], npmQ: string[] = []
   const subs = new Set<string>()
-  let wantHN = false, wantMCP = false, wantSkills = false, wantPH = false, wantBeta = false, wantDevto = false
+  let wantHN = false, wantMCP = false, wantSkills = false, wantPH = false, wantBeta = false
   for (const p of parts) {
     const gh = p.match(/^(?:gh|github):(.+)$/i); const np = p.match(/^npm:(.+)$/i)
     if (isHN(p)) { wantHN = true; continue }
@@ -351,23 +367,21 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
     if (isSkills(p)) { wantSkills = true; continue }
     if (isPH(p)) { wantPH = true; continue }
     if (isBeta(p)) { wantBeta = true; continue }
-    if (isDevto(p)) { wantDevto = true; continue }
     if (gh) { if (gh[1]) ghQ.push(gh[1]); continue }
     if (np) { if (np[1]) npmQ.push(np[1]); continue }
     const m = p.match(/reddit\.com\/r\/([A-Za-z0-9_]+)/i) || p.match(/^\/?r\/([A-Za-z0-9_]+)$/i) || p.match(/^([A-Za-z0-9_]+)$/)
     if (m) subs.add(m[1])
   }
-  if (!subs.size && !wantHN && !wantMCP && !wantSkills && !wantPH && !wantBeta && !wantDevto && !ghQ.length && !npmQ.length)
-    return { error: 'Enter sources — subreddits, "hn", "mcp", "skills", "ph", "betalist", "devto", "gh:<keyword>", or "npm:<keyword>".' }
+  if (!subs.size && !wantHN && !wantMCP && !wantSkills && !wantPH && !wantBeta && !ghQ.length && !npmQ.length)
+    return { error: 'Enter sources — subreddits, "hn", "mcp", "skills", "ph", "betalist", "gh:<keyword>", or "npm:<keyword>".' }
 
   const raw: Cand[] = []
   if (subs.size) raw.push(...await discoverReddit([...subs], win))
   if (wantHN) raw.push(...await discoverHN(hnCutoff))
   if (wantMCP) raw.push(...await discoverGitHub('mcp server in:name,description,topics', perSource), ...await discoverNpm('mcp', perSource))
   if (wantSkills) raw.push(...await discoverGitHub('claude skill in:name,description,topics', perSource))
-  if (wantPH) raw.push(...await discoverRssResolve('https://www.producthunt.com/feed', 'Product Hunt', 'producthunt.com', perSource))
-  if (wantBeta) raw.push(...await discoverRssResolve('https://betalist.com/feed', 'BetaList', 'betalist.com', perSource))
-  if (wantDevto) raw.push(...await discoverRssResolve('https://dev.to/feed/tag/showdev', 'dev.to', 'dev.to', perSource))
+  if (wantPH) raw.push(...await discoverProductHunt(perSource))
+  if (wantBeta) raw.push(...await discoverBetaList(perSource))
   for (const q of ghQ) raw.push(...await discoverGitHub(`${q} in:name,description,topics`, perSource))
   for (const q of npmQ) raw.push(...await discoverNpm(q, perSource))
   // dedup within this run by canonical key (not just domain)
@@ -431,7 +445,7 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
   const sources = [
     ...[...subs].map(s => 'r/' + s),
     ...(wantHN ? ['Show HN'] : []), ...(wantMCP ? ['GitHub·MCP', 'npm·MCP'] : []), ...(wantSkills ? ['GitHub·Skills'] : []),
-    ...(wantPH ? ['Product Hunt'] : []), ...(wantBeta ? ['BetaList'] : []), ...(wantDevto ? ['dev.to'] : []),
+    ...(wantPH ? ['Product Hunt'] : []), ...(wantBeta ? ['BetaList'] : []),
     ...ghQ.map(q => `gh:${q}`), ...npmQ.map(q => `npm:${q}`),
   ]
   return {
