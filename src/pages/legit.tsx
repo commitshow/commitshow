@@ -178,6 +178,7 @@ const CSS = `
 .l-row{display:flex;gap:18px;align-items:flex-start;padding:20px 4px;border-bottom:1px solid #E9E2D4;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
 .l-ic{width:72px;height:72px;border-radius:14px;background:linear-gradient(135deg,#C99A2E,#A66A18);color:#fff;font-weight:700;font-size:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Fraunces;background-size:cover;background-position:center;overflow:hidden}
 .l-fav{background:#fff;border:1px solid #EDE6D8}.l-fav img{width:100%;height:100%;object-fit:cover}
+.l-fav-mark{background:#FBF6EC}.l-fav-mark img{object-fit:contain;padding:16%;box-sizing:border-box}
 .l-nm{font-weight:600;color:#211C15;font-size:19px;font-family:Fraunces,Georgia,serif;line-height:1.2}.l-dm{font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace;font-weight:400}.l-ol{font-size:15px;color:#5A5347;margin-top:5px;line-height:1.55;max-width:680px}
 .l-tag{font-size:11px;font-family:'JetBrains Mono',monospace;padding:3px 9px;border-radius:5px;background:#F4F0E8;color:#6E6557;border:1px solid #E9E2D4}.l-tag.warn{background:#FBEFD9;color:#97600F;border-color:#E7D4AC}
 .l-score{font-size:11.5px;font-family:'JetBrains Mono',monospace;font-weight:700;padding:3px 9px;border-radius:5px;background:#F6EBD4;color:#97600F;border:1px solid #E7D4AC}
@@ -945,16 +946,21 @@ export function visuals(p: Listing): { icon: string | null; preview: string | nu
 // Small square tile: prefers the service's real app icon when we have one,
 // then the domain favicon, then the initial letter. A wide OG image would
 // crop and look broken at thumbnail size, so we never use it here.
+const OUR_MARK = '/favicon-192.png'   // the gold lens-ring — placeholder for icon-less services
 export function FaviconTile({ name, domain, icon = null, cls = 'l-ic' }: { name: string; domain: string; icon?: string | null; cls?: string }) {
   const host = (domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '')
   const fav = host ? `https://www.google.com/s2/favicons?domain=${host}&sz=128` : null
-  const chain = [icon, fav].filter(Boolean) as string[]
+  // chain: real app icon → site favicon → our mark. Always ends on our mark.
+  const chain = [icon, fav, OUR_MARK].filter(Boolean) as string[]
   const [stage, setStage] = useState(0)
   const src = chain[stage]
   if (!src) return <div className={cls}>{(name[0] || '?').toUpperCase()}</div>
+  const isMark = src === OUR_MARK
   return (
-    <div className={`${cls} l-fav`}>
-      <img src={src} alt="" loading="lazy" decoding="async" onError={() => setStage(s => s + 1)} />
+    <div className={`${cls} l-fav ${isMark ? 'l-fav-mark' : ''}`}>
+      <img src={src} alt="" loading="lazy" decoding="async"
+        onError={() => setStage(s => s + 1)}
+        onLoad={src === fav ? (e => { if ((e.currentTarget.naturalWidth || 0) <= 24) setStage(s => s + 1) }) : undefined} />
     </div>
   )
 }
