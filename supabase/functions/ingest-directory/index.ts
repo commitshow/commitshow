@@ -71,6 +71,16 @@ const COMPOSE_SCHEMA = {
 const dec = (x: string) => (x || '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&#x27;/g, "'")
 const slugify = (d: string) => d.toLowerCase().replace(/^www\./, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 44)
 
+// Page <title> is often generic ("New Tab", "Home") or SEO-stuffed. Prefer a
+// clean candidate (source post title / API name) over those.
+const GENERIC_TITLE = /^(new tab|home|homepage|dashboard|welcome|loading|untitled|index|app|application|log ?in|sign ?in|sign ?up|get started|page not found|404|website|overview|console|start|menu)$/i
+const firstSeg = (s: string) => (s || '').split(/\s[–—-]\s|[|·:]/)[0].trim()
+function pickName(cands: (string | undefined)[], domain: string): string {
+  for (const c of cands) { const v = firstSeg(c || ''); if (v && !GENERIC_TITLE.test(v) && v.length <= 48) return v }
+  for (const c of cands) { const v = firstSeg(c || ''); if (v) return v.slice(0, 48) }
+  return domain
+}
+
 // ── canonical entity resolver (cross-run / cross-source dedup) ──
 // Multi-tenant hosts: the registrable unit is the full subdomain (foo.github.io,
 // not github.io). Keep this list in sync with the backfill script.
@@ -418,7 +428,7 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
       }
     } else {
       const ex = await extractLanding(c.url)
-      name = (ex.title || c.domain).split(/[\|—–\-·:]/)[0].trim().slice(0, 50) || c.domain
+      name = pickName([c.name, ex.title, c.postTitle], c.domain)
       oneliner = ex.desc || c.postTitle || ''; platform = guessPlatform(c.url)
       image = ex.image; icon = ex.icon
       price = ex.price; starved = ex.starved; fullBody = ex.body
