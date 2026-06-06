@@ -126,6 +126,7 @@ export function DirectoryPage() {
         <div className="l-wrap">
           <h1>Every launched service, tested</h1>
           <div className="sub">What each one does, who it&apos;s for, and how it holds up.</div>
+          <img className="l-owl" src="/legit-owl.png" alt="" width="108" />
           <div className="l-bigsearch">
             <CategoryPicker variant="search" current={cat} />
             <input
