@@ -104,6 +104,7 @@ function Detail({ p }: { p: Listing }) {
             <span className="l-pill plat">{p.platform || 'web'}</span>
             <span className="l-pill">{p.domain}</span>
             {p.category && <span className="l-pill plat">{p.category}</span>}
+            {p.category && <Link to={`/v2/alternatives/${p.slug}`} className="l-pill" style={{ color: '#97600F', textDecoration: 'none' }}>alternatives →</Link>}
           </div>
         </div>
         <div className="l-heroact">

@@ -49,6 +49,14 @@ async function getStats(env: Env, id: string): Promise<{ avg: number; count: num
     return { avg: ar?.avg_rating ?? 0, count: ar?.rating_count ?? 0, tickets: br?.ticket_count ?? 0 }
   } catch { return { avg: 0, count: 0, tickets: 0 } }
 }
+async function getAlternatives(env: Env, category: string | null, slug: string): Promise<{ slug: string; name: string; url: string }[]> {
+  const key = env.SUPABASE_ANON_KEY ?? ''
+  if (!key || !category) return []
+  const r = await fetch(`${supa(env)}/rest/v1/listings?category=eq.${encodeURIComponent(category)}&slug=neq.${encodeURIComponent(slug)}&benchmark=not.is.null&select=slug,name,url&limit=12`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } })
+  if (!r.ok) return []
+  return await r.json() as { slug: string; name: string; url: string }[]
+}
 
 const clean = (s: string | null | undefined, max = 300) =>
   (s ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
@@ -89,7 +97,8 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   const path = url.pathname.replace(/\.html$/, '')
   const isIndex = path === '/v2' || path === '/v2/'
   const m = path.match(/^\/v2\/s\/([A-Za-z0-9._-]+)\/?$/)
-  if (!isIndex && !m) return ctx.next()
+  const ma = path.match(/^\/v2\/alternatives\/([A-Za-z0-9._-]+)\/?$/)
+  if (!isIndex && !m && !ma) return ctx.next()
 
   // Pull the SPA shell directly (ctx.next can fall through opaquely on Pages).
   const assetRes = await fetch(new URL('/index.html', ctx.request.url).toString())
@@ -107,6 +116,40 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     }
     const out = rewrite(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [website] })
     const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'index'); return r
+  }
+
+  // ── "{X} alternatives" comparison ──
+  if (ma) {
+    const aslug = ma[1]
+    let subject: Listing | null = null
+    try { subject = await getListing(ctx.env, aslug) } catch { subject = null }
+    if (!subject) { const pt = new Response(assetRes.body, assetRes); pt.headers.set('x-legit-seo', 'miss'); return pt }
+    const acat = subject.category || subject.platform || 'service'
+    const alts = await getAlternatives(ctx.env, subject.category, aslug)
+    const canonical = `${SITE}/v2/alternatives/${subject.slug}`
+    const names = alts.map(a => a.name)
+    const title = `${subject.name} alternatives — ${names.length} tested options compared | Legit.Show`
+    const description = clean(names.length
+      ? `${names.length} tested ${acat} alternatives to ${subject.name}, compared on the same objective benchmark: ${names.slice(0, 6).join(', ')}.`
+      : `Tested ${acat} alternatives to ${subject.name} on Legit.Show.`, 200)
+    const graph = {
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'CollectionPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: `${SITE}/v2` } },
+        { '@type': 'ItemList', name: `${subject.name} alternatives`, numberOfItems: alts.length,
+          itemListElement: alts.map((a, i) => ({ '@type': 'ListItem', position: i + 1, item: { '@type': 'SoftwareApplication', name: a.name, url: a.url, applicationCategory: acat } })) },
+        { '@type': 'BreadcrumbList', itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Legit.Show', item: `${SITE}/v2` },
+          { '@type': 'ListItem', position: 2, name: acat, item: `${SITE}/v2?cat=${encodeURIComponent(acat)}` },
+          { '@type': 'ListItem', position: 3, name: subject.name, item: `${SITE}/v2/s/${subject.slug}` },
+          { '@type': 'ListItem', position: 4, name: 'alternatives', item: canonical },
+        ] },
+      ],
+    }
+    const out = rewrite(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [graph] })
+    const r = new Response(out.body, out)
+    r.headers.set('x-legit-seo', 'alternatives'); r.headers.set('x-legit-slug', subject.slug)
+    return r
   }
 
   // ── listing detail ──

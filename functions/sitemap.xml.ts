@@ -78,6 +78,7 @@ const SECTION_URLS: Array<{ loc: string; changefreq: string; priority: string }>
   { loc: '/creators',               changefreq: 'daily',   priority: '0.7' },
   { loc: '/library',                changefreq: 'daily',   priority: '0.8' },
   { loc: '/v2',                     changefreq: 'daily',   priority: '0.9' },
+  { loc: '/v2/insights',            changefreq: 'weekly',  priority: '0.6' },
   { loc: '/community',              changefreq: 'daily',   priority: '0.8' },
   { loc: '/community/open-mic',     changefreq: 'daily',   priority: '0.7' },
   { loc: '/community/build-logs',   changefreq: 'daily',   priority: '0.7' },
@@ -141,13 +142,13 @@ async function fetchProjects(env: Env): Promise<ProjectRow[]> {
   return await res.json() as ProjectRow[]
 }
 
-interface ListingRow { slug: string; updated_at: string | null; last_fetched_at: string | null }
+interface ListingRow { slug: string; category: string | null; updated_at: string | null; last_fetched_at: string | null }
 async function fetchListings(env: Env): Promise<ListingRow[]> {
   const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
   const anonKey = env.SUPABASE_ANON_KEY ?? ''
   if (!anonKey) return []
   const res = await fetch(
-    `${url}/rest/v1/listings?select=slug,updated_at,last_fetched_at&order=created_at.desc&limit=10000`,
+    `${url}/rest/v1/listings?select=slug,category,updated_at,last_fetched_at&order=created_at.desc&limit=10000`,
     { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } },
   )
   if (!res.ok) return []
@@ -175,7 +176,14 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     ])
     listingsXml = listings
       .filter(l => l.slug)
-      .map(l => urlEntry(`${base}/v2/s/${l.slug}`, l.updated_at ?? l.last_fetched_at, 'weekly', '0.7'))
+      .flatMap(l => {
+        const lastmod = l.updated_at ?? l.last_fetched_at
+        const entries = [urlEntry(`${base}/v2/s/${l.slug}`, lastmod, 'weekly', '0.7')]
+        // "{X} alternatives" comparison page — only for categorized listings
+        // (an uncategorized one has no comparison set).
+        if (l.category) entries.push(urlEntry(`${base}/v2/alternatives/${l.slug}`, lastmod, 'weekly', '0.6'))
+        return entries
+      })
       .join('\n')
 
     postsXml = posts
