@@ -58,14 +58,25 @@ const PICK_HARD_CAP = 30     // ceiling on candidates processed per run
 // Reddit `t` window → seconds (HN recency cutoff). null = all-time.
 const WINDOW_SECONDS: Record<string, number | null> = { day: 86400, week: 604800, month: 2592000, year: 31536000, all: null }
 
+// Canonical category taxonomy — keep this list in sync with the directory's
+// reclassifier. `category` is constrained to this enum so the chip filter never
+// fragments again; `subcategory` carries the granular free-text label.
+const CANON_CATEGORIES = [
+  'AI & Agents', 'Developer Tools', 'MCP & Integrations', 'Frameworks & Starter Kits',
+  'Infrastructure & DevOps', 'Data & Analytics', 'Productivity', 'Business & Finance',
+  'Design & Creative', 'Content & Docs', 'Education & Reference', 'Lifestyle & Other',
+]
+
 const EXTRACT_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
     what_it_is: { type: 'string' }, who_for: { type: 'array', items: { type: 'string' } },
     features: { type: 'array', items: { type: 'string' } }, pricing: { type: 'string' },
-    how_to_use: { type: 'string' }, category: { type: 'string' },
+    how_to_use: { type: 'string' },
+    category: { type: 'string', enum: CANON_CATEGORIES },
+    subcategory: { type: 'string' },
   },
-  required: ['what_it_is', 'who_for', 'features', 'pricing', 'how_to_use', 'category'],
+  required: ['what_it_is', 'who_for', 'features', 'pricing', 'how_to_use', 'category', 'subcategory'],
 }
 const COMPOSE_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -205,7 +216,9 @@ async function claudeJSON(model: string, system: string, user: string, schema: u
 
 async function claudeExtract(p: { name: string; url: string; source: string; bodyText: string }) {
   if (!p.bodyText || p.bodyText.length < 200) return null
-  const system = "You extract structured directory-listing fields from a web page's own text. GROUNDED-ONLY: use only facts stated in the provided text. If a field is not stated, return an empty string or empty array — NEVER invent. Pricing especially: if no explicit price/plan is on the page, set pricing to \"\". who_for: up to 5 short audience labels. features: 3-6 short concrete phrases. category: one short label (e.g. \"Web analytics\", \"AI voice\", \"MCP server\", \"Scheduling\"). Be concise."
+  const system = `You extract structured directory-listing fields from a web page's own text. GROUNDED-ONLY: use only facts stated in the provided text. If a field is not stated, return an empty string or empty array — NEVER invent. Pricing especially: if no explicit price/plan is on the page, set pricing to "". who_for: up to 5 short audience labels. features: 3-6 short concrete phrases. Be concise.
+category: choose the SINGLE best-fit canonical bucket from this fixed list (the directory excludes games), by the product's primary purpose: ${CANON_CATEGORIES.join(' · ')}.
+subcategory: one short specific free-text label for the finer kind (e.g. "Web analytics", "MCP server", "React UI library", "OCR API").`
   const user = `Service: ${p.name}\nURL: ${p.url}\nSource: ${p.source}\n\nPAGE TEXT (extract only from this):\n"""\n${p.bodyText.slice(0, 4000)}\n"""`
   return claudeJSON(EXTRACT_MODEL, system, user, EXTRACT_SCHEMA)
 }
@@ -344,6 +357,7 @@ async function upsertListings(rows: any[]) {
   const payload = rows.map(L => ({
     slug: L.slug, name: L.name, domain: L.domain, url: L.url, platform: L.platform || null,
     category: (L.rich && L.rich.category) || null,
+    subcategory: (L.rich && L.rich.subcategory) || null,
     tagline: (L.prose && L.prose.tagline) || L.oneliner || null,
     description: (L.prose && L.prose.description) || (L.rich && L.rich.what_it_is) || null,
     who_for: (L.rich && L.rich.who_for) || [], features: (L.rich && L.rich.features) || [],
@@ -493,7 +507,7 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
 }
 
 async function patchListing(id: string, patch: Record<string, unknown>) {
-  const allow = ['category', 'tagline', 'description', 'platform', 'pricing']
+  const allow = ['category', 'subcategory', 'tagline', 'description', 'platform', 'pricing']
   const clean: Record<string, unknown> = {}
   for (const k of allow) if (k in patch) clean[k] = patch[k]
   if (!Object.keys(clean).length) return { error: 'no allowed fields' }
