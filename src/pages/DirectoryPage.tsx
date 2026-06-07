@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { CategoryPicker, LegitShell, ListingRow, PremiumCard, type Listing } from './legit'
 import { setHead, clearJsonLd } from '../lib/seo'
@@ -124,7 +124,7 @@ export function DirectoryPage() {
     <LegitShell>
       <div className="l-herobig">
         <div className="l-wrap">
-          <h1>Every launched service, tested</h1>
+          <h1>Discover Legit Products</h1>
           <div className="sub">What each one does, who it&apos;s for, and how it holds up.</div>
           <img className="l-owl" src="/owl_up.png" alt="" width="108" />
           <div className="l-bigsearch">
@@ -140,6 +140,7 @@ export function DirectoryPage() {
           <div className="l-statrow">
             <span><b>{rows ? rows.length : '—'}</b> services</span>
             <span><b>{cats.length}</b> categories</span>
+            <Link to="/v2/insights" style={{ color: '#97600F', textDecoration: 'none' }}>insights →</Link>
           </div>
         </div>
       </div>
