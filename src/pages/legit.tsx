@@ -28,12 +28,12 @@ export type Benchmark = {
 }
 
 const CSS = `
-.lgt{min-height:100vh;background:#FAF8F3;color:#2C261D;font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;padding-top:60px}
+.lgt{min-height:100vh;background:#FFFFFF;color:#2C261D;font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;padding-top:60px}
 .lgt a{color:inherit;text-decoration:none}
 .lgt h1,.lgt h2,.lgt h3{font-family:Fraunces,Georgia,serif;font-weight:600;letter-spacing:-.01em;color:#211C15;margin:0}
 .lgt img{max-width:100%}
 .l-wrap{max-width:1080px;margin:0 auto;padding:0 24px}
-.l-h{position:fixed;top:0;left:0;right:0;background:rgba(250,248,243,.92);backdrop-filter:blur(8px);border-bottom:1px solid #E9E2D4;z-index:20}
+.l-h{position:fixed;top:0;left:0;right:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #E9E2D4;z-index:20}
 .l-hd{display:flex;align-items:center;gap:18px;height:60px}
 .l-logo{font-family:Fraunces;font-weight:700;font-size:23px;color:#8A5A12;display:flex;align-items:center}
 .lgt a.l-logo,.lgt a.l-logo:hover{color:#8A5A12}
@@ -53,13 +53,15 @@ const CSS = `
 .l-lockic{display:block;margin:14px auto 0}
 .l-avatar{width:34px;height:34px;border-radius:50%;background:#B5791C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;font-size:15px}
 /* landing hero */
-.l-herobig{padding:60px 0 38px;text-align:center;background:linear-gradient(180deg,#FBF8F1 0%,#FAF8F3 100%)}
+.l-herobig{padding:60px 0 22px;text-align:center;background:#FCFAF5}
 .l-herobig h1{font-size:clamp(34px,5vw,52px);line-height:1.05;max-width:800px;margin:0 auto}
 .l-herobig .sub{font-size:18px;color:#6E6557;max-width:640px;margin:18px auto 28px;line-height:1.5}
 .l-owl{display:block;width:108px;height:auto;margin:6px auto 0;position:relative;z-index:1}
 .l-bigsearch{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E0D8C8;border-radius:12px;padding:14px 18px;box-shadow:0 2px 16px rgba(150,110,30,.07)}
 .l-bigsearch input{border:none;outline:none;flex:1;font-size:16px;background:transparent;color:#2C261D;font-family:Inter,sans-serif}
 .lgt input:focus,.lgt input:focus-visible{outline:none!important;box-shadow:none!important}
+/* iOS: stop double-tap zoom on tappable controls (rating stars, vouch, chips, buttons) */
+.lgt button,.lgt a,.l-starbtn,.l-vouchbtn,.l-tkchip,.l-tkthrow,.l-rxuse,.l-row{touch-action:manipulation}
 .l-statrow{display:flex;gap:22px;justify-content:center;margin-top:22px;font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace;flex-wrap:wrap}.l-statrow b{color:#211C15}
 .l-cattiles{display:flex;flex-wrap:nowrap;gap:8px;padding:24px 0 6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}.l-cattiles::-webkit-scrollbar{display:none}
 .l-cattile{font-size:13.5px;color:#6E6557;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:500;white-space:nowrap;flex:0 0 auto}.l-cattile:hover{border-color:#E7D4AC;color:#211C15}.l-cattile.on{background:#B5791C;color:#fff;border-color:#B5791C}
@@ -67,7 +69,7 @@ const CSS = `
 .l-catfade{position:absolute;top:24px;right:0;bottom:6px;width:64px;pointer-events:none;background:linear-gradient(90deg,rgba(250,248,243,0) 0%,rgba(250,248,243,0) 52%,rgba(250,248,243,.92) 100%)}
 .l-feedhead{display:flex;align-items:baseline;justify-content:space-between;padding:26px 0 2px;border-bottom:1px solid #E9E2D4;margin-bottom:2px}.l-feedhead h2{font-size:19px}.l-feedhead .c{font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace}
 .l-prehead{font-size:11.5px;font-family:'JetBrains Mono',monospace;color:#9A9080;letter-spacing:.07em;text-transform:uppercase;padding:26px 0 0}
-.l-premium{display:flex;gap:16px;padding:12px 2px 8px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;-ms-overflow-style:none}.l-premium::-webkit-scrollbar{display:none}.l-premium>a{flex:0 0 300px;scroll-snap-align:start}
+.l-premium{display:flex;gap:16px;padding:28px 2px 8px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;-ms-overflow-style:none}.l-premium::-webkit-scrollbar{display:none}.l-premium>a{flex:0 0 300px;scroll-snap-align:start}
 /* PC: let the featured carousel run full viewport width, first card aligned to content */
 @media(min-width:900px){.l-premium{margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);padding-left:max(24px,calc(50vw - 540px));padding-right:max(24px,calc(50vw - 540px))}.l-premium>a{flex:0 0 340px}}
 .l-card{background:#fff;border:1px solid #E9E2D4;border-radius:14px;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 1px 8px rgba(150,110,30,.04);transition:box-shadow .15s,border-color .15s,transform .15s}.l-card:hover{border-color:#E7D4AC;box-shadow:0 10px 28px rgba(150,110,30,.13);transform:translateY(-2px)}
@@ -175,7 +177,7 @@ const CSS = `
 .l-claimcta-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:17px;color:#211C15}.l-claimcta-s{font-size:13px;color:#6E6557;margin-top:3px}
 .l-claimcta .l-btn{flex-shrink:0}
 .l-foot{border-top:1px solid #E9E2D4;margin-top:28px;padding:22px 0 50px;font-size:12.5px;color:#9A9080}
-.l-row{display:flex;gap:18px;align-items:flex-start;padding:20px 4px;border-bottom:1px solid #E9E2D4;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
+.l-row{display:flex;gap:18px;align-items:flex-start;padding:20px 4px;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
 .l-ic{width:72px;height:72px;border-radius:14px;background:linear-gradient(135deg,#C99A2E,#A66A18);color:#fff;font-weight:700;font-size:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Fraunces;background-size:cover;background-position:center;overflow:hidden}
 .l-fav{background:#fff;border:1px solid #EDE6D8}.l-fav img{width:100%;height:100%;object-fit:cover}
 .l-fav-mark{background:#FBF6EC}.l-fav-mark img{object-fit:contain;padding:16%;box-sizing:border-box}
@@ -202,7 +204,7 @@ const CSS = `
 .l-nempty{padding:34px 20px;text-align:center;font-size:13px;color:#9A9080}
 .l-nempty b{display:block;font-family:Fraunces;font-size:14px;color:#6E6557;margin-bottom:5px;font-weight:600}
 @media(max-width:680px){.l-nav{display:none}.l-npnl{width:300px}}
-@media(max-width:820px){.l-cols{grid-template-columns:1fr}.l-search{display:none}}
+@media(max-width:820px){.l-cols{grid-template-columns:1fr}.l-search{display:none}.lgt input,.lgt textarea,.lgt select{font-size:16px}}
 `
 
 let fontInjected = false
@@ -463,11 +465,11 @@ export function StarRating({ value = 0, count = 0, size = 18, tone = '#E0A92E', 
         <defs>
           <linearGradient id={`lg-star-${i}`}>
             <stop offset={`${fill * 100}%`} stopColor={tone} />
-            <stop offset={`${fill * 100}%`} stopColor="#EFE7D6" />
+            <stop offset={`${fill * 100}%`} stopColor="#E4D9C2" />
           </linearGradient>
         </defs>
         <path d="M12 2.5l2.9 6.2 6.6.9-4.8 4.6 1.2 6.6L12 18.7 6 21.4l1.2-6.6L2.4 9.6l6.6-.9z"
-          fill={`url(#lg-star-${i})`} stroke={tone} strokeOpacity="0.5" strokeWidth="0.7" />
+          fill={`url(#lg-star-${i})`} stroke={tone} strokeOpacity="0.7" strokeWidth="0.8" />
       </svg>
     )
   })
@@ -526,7 +528,7 @@ export function RatingPanel({ listingId, tone = '#E0A92E' }: { listingId: string
           <button key={n} className="l-starbtn" onMouseEnter={() => setHover(n)} onClick={() => set(n)} aria-label={`${n} star${n > 1 ? 's' : ''}`}>
             <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 2.5l2.9 6.2 6.6.9-4.8 4.6 1.2 6.6L12 18.7 6 21.4l1.2-6.6L2.4 9.6l6.6-.9z"
-                fill={n <= shown ? tone : '#EFE7D6'} stroke={tone} strokeOpacity="0.5" strokeWidth="0.7" />
+                fill={n <= shown ? tone : '#E4D9C2'} stroke={n <= shown ? tone : '#B9A684'} strokeOpacity={n <= shown ? 0.5 : 0.95} strokeWidth={n <= shown ? 0.7 : 1.2} />
             </svg>
           </button>
         ))}

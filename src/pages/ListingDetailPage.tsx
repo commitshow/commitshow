@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, ticketTier, useLegitAuth, visuals, type Listing } from './legit'
+import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, useLegitAuth, visuals, type Listing } from './legit'
 import { useAuth } from '../lib/auth'
 import { setHead, clearJsonLd } from '../lib/seo'
 
@@ -58,7 +58,10 @@ function Detail({ p }: { p: Listing }) {
     window.addEventListener('legit:rating', loadRating)
     return () => { alive = false; window.removeEventListener('legit:rating', loadRating) }
   }, [p.id])
-  const starTone = ticketTier(ticketCount).tone
+  // Star-rating color is independent of the legit-ticket tier. Tying it to the
+  // tier rendered ratings in the muted 0-ticket tone (#C9BBA0) on most listings —
+  // indistinguishable from an empty star. Always use a clear gold.
+  const RATING_GOLD = '#E0A92E'
 
   // SEO/AEO head for client nav + JS crawlers (edge middleware covers the rest)
   useEffect(() => {
@@ -93,7 +96,7 @@ function Detail({ p }: { p: Listing }) {
         <div>
           <h1 style={{ fontSize: 32, lineHeight: 1.1 }}>{p.name}</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13, flexWrap: 'wrap' }}>
-            <StarRating value={rating.avg} count={rating.count} tone={starTone} />
+            <StarRating value={rating.avg} count={rating.count} tone={RATING_GOLD} />
             {ticketCount > 0 && <TicketBadge count={ticketCount} />}
           </div>
           <div className="l-one">{p.tagline || p.description}</div>
@@ -165,7 +168,7 @@ function Detail({ p }: { p: Listing }) {
       <div className="l-reviews">
         <h2 style={{ marginBottom: 12 }}>Ratings &amp; reviews</h2>
         <div className="l-engage">
-          <RatingPanel listingId={p.id} tone={starTone} />
+          <RatingPanel listingId={p.id} tone={RATING_GOLD} />
           <LegitVouch listingId={p.id} />
         </div>
         <ReviewsSection listingId={p.id} />
