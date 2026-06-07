@@ -177,6 +177,19 @@ const CSS = `
 .l-claimcta-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:17px;color:#211C15}.l-claimcta-s{font-size:13px;color:#6E6557;margin-top:3px}
 .l-claimcta .l-btn{flex-shrink:0}
 .l-foot{border-top:1px solid #E9E2D4;margin-top:28px;padding:22px 0 50px;font-size:12.5px;color:#9A9080}
+.l-ft{border-top:1px solid #E9E2D4;margin-top:44px;background:#FCFAF5}
+.l-ftin{display:flex;gap:40px;justify-content:space-between;flex-wrap:wrap;padding:34px 0 22px}
+.l-ftbrand{max-width:380px}
+.l-ftlogo{display:inline-flex;align-items:center;font-family:Fraunces,Georgia,serif;font-weight:600;font-size:20px;color:#8A5A12;text-decoration:none}
+.lgt a.l-ftlogo,.lgt a.l-ftlogo:hover{color:#8A5A12}
+.l-ftowl{height:22px;width:auto;margin-right:6px;object-fit:contain}
+.l-fttag{font-size:13px;color:#6E6557;line-height:1.55;margin:9px 0 0}
+.l-ftnav{display:flex;flex-direction:column;gap:9px;font-size:13.5px}
+.l-ftnav a{color:#6E6557;text-decoration:none}.l-ftnav a:hover{color:#97600F}
+.l-ftbar{display:flex;gap:18px;justify-content:space-between;flex-wrap:wrap;align-items:baseline;padding:0 0 40px;font-size:11.5px;color:#9A9080;line-height:1.55}
+.l-ftbar>span:first-child{max-width:640px}
+.l-ftcc{font-family:'JetBrains Mono',monospace;white-space:nowrap}
+@media(max-width:640px){.l-ftnav{flex-direction:row;flex-wrap:wrap;gap:16px}}
 .l-row{display:flex;gap:18px;align-items:flex-start;padding:20px 4px;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
 .l-ic{width:72px;height:72px;border-radius:14px;background:linear-gradient(135deg,#C99A2E,#A66A18);color:#fff;font-weight:700;font-size:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Fraunces;background-size:cover;background-position:center;overflow:hidden}
 .l-fav{background:#fff;border:1px solid #EDE6D8}.l-fav img{width:100%;height:100%;object-fit:cover}
@@ -254,10 +267,36 @@ export function LegitShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {children}
+        <LegitFooter />
       </div>
       <LegitAuthModal open={open} onClose={() => setOpen(false)} initialMode={mode} />
       <ReactionToast />
     </LegitAuthCtx.Provider>
+  )
+}
+
+// Shared Legit footer — one consistent footer across every /v2 page.
+function LegitFooter() {
+  const year = new Date().getFullYear()
+  return (
+    <footer className="l-ft">
+      <div className="l-wrap l-ftin">
+        <div className="l-ftbrand">
+          <Link to="/v2" className="l-ftlogo"><img className="l-ftowl" src="/favicon2.png" alt="" />Legit</Link>
+          <p className="l-fttag">Every launched service, tested — what it does, who it&apos;s for, and an objective benchmark.</p>
+        </div>
+        <nav className="l-ftnav">
+          <Link to="/v2">Directory</Link>
+          <Link to="/v2/insights">Insights</Link>
+          <Link to="/terms">Terms</Link>
+          <Link to="/privacy">Privacy</Link>
+        </nav>
+      </div>
+      <div className="l-wrap l-ftbar">
+        <span>legit structures publicly available information on launched services. Listings reflect each provider&apos;s own materials — confirm details on the official site.</span>
+        <span className="l-ftcc">© {year} Madeflo Inc.</span>
+      </div>
+    </footer>
   )
 }
 

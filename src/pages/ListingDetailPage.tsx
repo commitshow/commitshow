@@ -184,10 +184,6 @@ function Detail({ p }: { p: Listing }) {
         </div>
         <span className="l-btn" onClick={() => openAuth('signup')}>Claim this listing</span>
       </div>
-
-      <div className="l-foot">
-        Structured from public information on the official site — confirm details there. · <Link to="/terms">Terms</Link>
-      </div>
     </>
   )
 }

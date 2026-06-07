@@ -169,11 +169,6 @@ export function DirectoryPage() {
         {rows === null && <div className="l-empty">Loading…</div>}
         {rows && filtered.length === 0 && <div className="l-empty">No services match — try a different search or category.</div>}
         {filtered.map(p => <ListingRow key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}
-
-        <div className="l-foot">
-          legit tests and structures publicly available information on launched services. Listings reflect
-          each provider&apos;s own materials — confirm details on the official site.
-        </div>
       </div>
     </LegitShell>
   )
