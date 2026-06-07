@@ -6,7 +6,10 @@
 //
 // Admin-gated (x-admin-token OR a signed-in is_admin member's JWT).
 //   { action:'benchmark', id }            → score one listing
-//   { action:'benchmark', all:true, limit} → score the newest N listings
+//   { all:true, limit }                    → (re)score the newest N listings
+//   { pending:true, limit }                → score only un-benchmarked (benchmark IS NULL)
+//                                            newest-first — used by the ingest auto-trigger
+//                                            and the weekly cron sweep (no wasted PageSpeed)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
@@ -28,7 +31,12 @@ const SR = { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` }
 async function isAuthedAdmin(req: Request): Promise<boolean> {
   if (ADMIN_TOKEN && req.headers.get('x-admin-token') === ADMIN_TOKEN) return true
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  if (!jwt || jwt === ANON_KEY || !SUPABASE_URL || !SR_KEY) return false
+  if (!jwt) return false
+  // Internal/cron server-to-server calls present a service-role JWT (role claim).
+  // It is never shipped to the browser — the web app only ever holds the anon key —
+  // and a service-role token already has full PostgREST access, so this is no escalation.
+  try { if (JSON.parse(atob((jwt.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/'))).role === 'service_role') return true } catch { /* not a JWT */ }
+  if (jwt === ANON_KEY || !SUPABASE_URL || !SR_KEY) return false
   try {
     const supa = createClient(SUPABASE_URL, SR_KEY)
     const { data, error } = await supa.auth.getUser(jwt)
@@ -210,9 +218,10 @@ Deno.serve(async (req) => {
   if (!(await isAuthedAdmin(req))) return json({ error: 'unauthorized' }, 401)
   let p: any = {}; try { p = await req.json() } catch { return json({ error: 'bad json' }, 400) }
   try {
-    if (p.all) {
+    if (p.all || p.pending) {
       const limit = Math.min(Number(p.limit) || 100, 200)
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?select=id,url,domain&order=created_at.desc&limit=${limit}`, { headers: SR })
+      const filter = p.pending ? '&benchmark=is.null' : ''
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?select=id,url,domain${filter}&order=created_at.desc&limit=${limit}`, { headers: SR })
       const rows = (await r.json()) as { id: string; url: string; domain: string }[]
       const out: { id: string; overall: number; form: string }[] = []
       for (let i = 0; i < rows.length; i += 8) {

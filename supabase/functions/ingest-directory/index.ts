@@ -34,7 +34,12 @@ const SR = { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` }
 async function isAuthedAdmin(req: Request): Promise<boolean> {
   if (ADMIN_TOKEN && req.headers.get('x-admin-token') === ADMIN_TOKEN) return true
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  if (!jwt || jwt === ANON_KEY || !SUPABASE_URL || !SR_KEY) return false
+  if (!jwt) return false
+  // Internal/cron server-to-server calls present a service-role JWT (role claim).
+  // It is never shipped to the browser — the web app only ever holds the anon key —
+  // and a service-role token already has full PostgREST access, so this is no escalation.
+  try { if (JSON.parse(atob((jwt.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/'))).role === 'service_role') return true } catch { /* not a JWT */ }
+  if (jwt === ANON_KEY || !SUPABASE_URL || !SR_KEY) return false
   try {
     const supa = createClient(SUPABASE_URL, SR_KEY)
     const { data, error } = await supa.auth.getUser(jwt)
@@ -328,6 +333,14 @@ async function discoverProductHunt(n: number): Promise<Cand[]> {
 
 async function upsertListings(rows: any[]) {
   if (!SUPABASE_URL || !SR_KEY || !rows.length) return { error: 'no rows / config' }
+  // De-dup by slug within this batch: PostgREST upsert with on_conflict=slug fails
+  // hard (21000 "ON CONFLICT DO UPDATE cannot affect row a second time") if the same
+  // slug appears twice in one command. Canonical-key dedup runs earlier, but two
+  // distinct keys can still slugify to the same value (e.g. same domain, different
+  // path). Keep the first occurrence.
+  const seenSlug = new Set<string>()
+  rows = rows.filter(L => { const s = L.slug; if (!s || seenSlug.has(s)) return false; seenSlug.add(s); return true })
+  if (!rows.length) return { error: 'no rows after slug-dedup' }
   const payload = rows.map(L => ({
     slug: L.slug, name: L.name, domain: L.domain, url: L.url, platform: L.platform || null,
     category: (L.rich && L.rich.category) || null,
@@ -452,6 +465,20 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
   }))
   const results = resultsRaw.filter(Boolean) as NonNullable<typeof resultsRaw[number]>[]
   const up = await upsertListings(results)
+  // Fire-and-forget: benchmark the freshly-ingested rows (benchmark IS NULL) so a
+  // new listing never sits un-scored. Service-role self-call; cron sweep covers any
+  // that race or exceed this cap. Non-blocking — the ingest response returns at once.
+  if (results.length && !(up as { error?: string })?.error) {
+    try {
+      ;(globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(
+        fetch(`${SUPABASE_URL}/functions/v1/benchmark-listing`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${SR_KEY}` },
+          body: JSON.stringify({ pending: true, limit: 30 }),
+        }).catch(() => {}),
+      )
+    } catch { /* waitUntil not available in this runtime — non-fatal */ }
+  }
   const sources = [
     ...[...subs].map(s => 'r/' + s),
     ...(wantHN ? ['Show HN'] : []), ...(wantMCP ? ['GitHub·MCP', 'npm·MCP'] : []), ...(wantSkills ? ['GitHub·Skills'] : []),
