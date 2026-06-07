@@ -201,8 +201,8 @@ const CSS = `
 .l-nrt{font-size:13px;color:#2C261D;line-height:1.45}.l-nrtime{font-size:11px;color:#9A9080;font-family:'JetBrains Mono',monospace;margin-top:2px}
 .l-nempty{padding:34px 20px;text-align:center;font-size:13px;color:#9A9080}
 .l-nempty b{display:block;font-family:Fraunces;font-size:14px;color:#6E6557;margin-bottom:5px;font-weight:600}
-@media(max-width:680px){.l-nav{display:none}.l-npnl{width:300px}.l-ol{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}
-@media(max-width:820px){.l-cols{grid-template-columns:1fr}.l-search{display:none}}
+@media(max-width:680px){.l-nav{display:none}.l-npnl{width:300px}}
+@media(max-width:820px){.l-cols{grid-template-columns:1fr}.l-search{display:none}.l-ol{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}
 `
 
 let fontInjected = false
