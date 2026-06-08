@@ -532,7 +532,7 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
 }
 
 async function patchListing(id: string, patch: Record<string, unknown>) {
-  const allow = ['category', 'subcategory', 'tagline', 'description', 'platform', 'pricing']
+  const allow = ['category', 'subcategory', 'tagline', 'description', 'platform', 'pricing', 'has_pricing']
   const clean: Record<string, unknown> = {}
   for (const k of allow) if (k in patch) clean[k] = patch[k]
   if (!Object.keys(clean).length) return { error: 'no allowed fields' }
@@ -553,7 +553,7 @@ async function deleteListing(id: string) {
 // Self-serve submit: a signed-in member POSTs a single URL. Resolve canonical →
 // route to an existing listing if we already have it · per-member daily cap ·
 // spam/junk gate · grounded Claude enrich · upsert · fire-and-forget benchmark.
-type SubmitFields = { name?: string; tagline?: string; description?: string; category?: string; pricing?: string; platform?: string }
+type SubmitFields = { name?: string; tagline?: string; description?: string; category?: string; pricing?: string; platform?: string; has_pricing?: boolean }
 async function runSubmit(rawUrl: string, memberId: string, opts: { preview?: boolean; fields?: SubmitFields } = {}) {
   let url = (rawUrl || '').trim()
   if (!url) return { error: 'no_url', message: 'Enter your service URL.' }
@@ -614,7 +614,7 @@ async function runSubmit(rawUrl: string, memberId: string, opts: { preview?: boo
   const row = {
     slug: slugify(host), name: f.name || autoName, oneliner: f.tagline || ex.desc || '',
     url, domain: host, platform: f.platform || guessPlatform(url),
-    image: ex.image, icon: ex.icon, price: !!(f.pricing || ex.price), starved: ex.starved,
+    image: ex.image, icon: ex.icon, price: f.has_pricing != null ? f.has_pricing : !!(f.pricing || ex.price), starved: ex.starved,
     source: 'Submitted', postTitle: '', meta: '', rich: richOut, prose: proseOut, ckey, submitted_by: memberId,
   }
   const up = await upsertListings([row])

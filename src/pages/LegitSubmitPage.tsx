@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { LegitShell, useLegitAuth } from './legit'
+import { LegitShell, PricingField, useLegitAuth } from './legit'
 import { setHead } from '../lib/seo'
 
 // Proper "add your service" page — paste a URL, we read the public page and
@@ -29,8 +29,8 @@ const CSS = `
 @media(max-width:560px){.sub-row{flex-direction:column}.sub-row .l-btn{width:100%}}
 `
 
-type Fields = { name: string; tagline: string; description: string; category: string; pricing: string }
-const EMPTY: Fields = { name: '', tagline: '', description: '', category: '', pricing: '' }
+type Fields = { name: string; tagline: string; description: string; category: string; pricing: string; has_pricing: boolean }
+const EMPTY: Fields = { name: '', tagline: '', description: '', category: '', pricing: '', has_pricing: false }
 
 export function LegitSubmitPage() {
   const nav = useNavigate()
@@ -125,7 +125,7 @@ export function LegitSubmitPage() {
             <label className="l-edlabel">Description</label>
             <textarea className="l-rvta" value={f.description} onChange={e => set('description', e.target.value)} placeholder="What it does, who it's for, the key differentiator." />
             <label className="l-edlabel">Pricing</label>
-            <input className="l-authin" value={f.pricing} onChange={e => set('pricing', e.target.value)} placeholder="e.g. Free · $29/mo" />
+            <PricingField initial={f.pricing} onChange={(pricing, has_pricing) => setF(prev => ({ ...prev, pricing, has_pricing }))} />
             {err && <div className="l-suberr" style={{ marginTop: 10 }}>{err}</div>}
             <button className="l-btn l-authsubmit" style={{ marginTop: 16, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={submit}>
               {busy ? 'Adding & benchmarking…' : 'Add to directory'}

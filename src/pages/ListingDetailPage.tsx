@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, useLegitAuth, visuals, type Listing } from './legit'
+import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, PricingField, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, useLegitAuth, visuals, type Listing } from './legit'
 import { useAuth } from '../lib/auth'
 import { setHead, clearJsonLd } from '../lib/seo'
 
@@ -217,6 +217,7 @@ function EditListingModal({ p, onClose, onSaved }: { p: Listing; onClose: () => 
   const [description, setDescription] = useState(p.description || '')
   const [category, setCategory] = useState(p.category || '')
   const [pricing, setPricing] = useState(p.pricing || '')
+  const [hasPricing, setHasPricing] = useState(!!p.has_pricing)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -224,7 +225,7 @@ function EditListingModal({ p, onClose, onSaved }: { p: Listing; onClose: () => 
     setBusy(true); setErr(null)
     try {
       const { data, error } = await supabase.functions.invoke('ingest-directory', {
-        body: { action: 'update', id: p.id, patch: { tagline, description, category, pricing } },
+        body: { action: 'update', id: p.id, patch: { tagline, description, category, pricing, has_pricing: hasPricing } },
       })
       const d = (data || {}) as { ok?: boolean; error?: string; message?: string }
       if (error || d.error) { setErr(d.message || 'Could not save. Please try again.'); setBusy(false); return }
@@ -247,7 +248,7 @@ function EditListingModal({ p, onClose, onSaved }: { p: Listing; onClose: () => 
           {CANON_CATS.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <label className="l-edlabel">Pricing</label>
-        <input className="l-authin" value={pricing} onChange={e => setPricing(e.target.value)} placeholder="e.g. Free · $29/mo" />
+        <PricingField initial={pricing} onChange={(pr, hp) => { setPricing(pr); setHasPricing(hp) }} />
         {err && <div className="l-suberr">{err}</div>}
         <button className="l-btn l-authsubmit" style={{ marginTop: 14, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
       </div>

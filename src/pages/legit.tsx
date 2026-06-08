@@ -144,6 +144,10 @@ const CSS = `
 .l-suberr{font-size:12.5px;color:#C8102E;margin:2px 0 10px}
 .l-subh{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:20px;color:#211C15;margin-bottom:4px}
 .l-edlabel{display:block;font-size:11px;font-weight:600;color:#6E6557;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.04em;margin:13px 0 5px}
+.l-pchips{display:flex;flex-wrap:wrap;gap:8px}
+.l-pchip{font-size:13px;padding:7px 14px;border-radius:20px;border:1px solid #E0D8C8;background:#fff;color:#5A5347;cursor:pointer;user-select:none}
+.l-pchip:hover{border-color:#C9A22E}
+.l-pchip.on{background:#B5791C;color:#fff;border-color:#B5791C}
 /* legit auth modal */
 .l-authcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:18px;padding:30px 28px 24px;max-width:380px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
 .l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#B5791C;text-align:center}
@@ -312,6 +316,54 @@ function LegitFooter() {
         <span className="l-ftcc">© {year} Madeflo Inc.</span>
       </div>
     </footer>
+  )
+}
+
+// Friendly pricing input — pick a model (chips), add an optional price detail.
+// Composes a readable `pricing` string + a `hasPricing` flag (Free = false).
+const PRICING_MODELS = ['Free', 'Freemium', 'Paid', 'Subscription', 'Contact'] as const
+type PModel = typeof PRICING_MODELS[number]
+function inferPModel(p: string): PModel | '' {
+  if (!p) return ''
+  if (/freemium|free (tier|plan)/i.test(p)) return 'Freemium'
+  if (/^\s*free\s*$/i.test(p)) return 'Free'
+  if (/contact|enterprise|custom (quote|pricing)|talk to|get a quote/i.test(p)) return 'Contact'
+  if (/\/mo\b|\/month|per month|per year|\/yr\b|monthly|annually|subscription/i.test(p)) return 'Subscription'
+  return 'Paid'
+}
+function composePricing(model: PModel | '', detail: string): { pricing: string; hasPricing: boolean } {
+  const d = detail.trim()
+  switch (model) {
+    case 'Free': return { pricing: 'Free', hasPricing: false }
+    case 'Contact': return { pricing: 'Contact for pricing', hasPricing: true }
+    case 'Freemium': return { pricing: d ? `Freemium · ${d}` : 'Freemium', hasPricing: true }
+    case 'Paid': return { pricing: d || 'Paid', hasPricing: true }
+    case 'Subscription': return { pricing: d || 'Subscription', hasPricing: true }
+    default: return { pricing: '', hasPricing: false }
+  }
+}
+export function PricingField({ initial, onChange }: { initial: string; onChange: (pricing: string, hasPricing: boolean) => void }) {
+  const guess = inferPModel(initial)
+  const [model, setModel] = useState<PModel | ''>(guess)
+  const [detail, setDetail] = useState(guess === 'Freemium' || guess === 'Paid' || guess === 'Subscription' ? initial.replace(/^freemium\s*·\s*/i, '') : '')
+  const showDetail = model === 'Freemium' || model === 'Paid' || model === 'Subscription'
+  const emit = (m: PModel | '', d: string) => { const r = composePricing(m, d); onChange(r.pricing, r.hasPricing) }
+  const pick = (m: PModel) => {
+    const nm: PModel | '' = m === model ? '' : m
+    const keepDetail = nm === 'Freemium' || nm === 'Paid' || nm === 'Subscription'
+    setModel(nm); if (!keepDetail) setDetail('')
+    emit(nm, keepDetail ? detail : '')
+  }
+  return (
+    <div>
+      <div className="l-pchips">
+        {PRICING_MODELS.map(m => <span key={m} className={`l-pchip ${model === m ? 'on' : ''}`} onClick={() => pick(m)}>{m === 'Contact' ? 'Contact us' : m}</span>)}
+      </div>
+      {showDetail && (
+        <input className="l-authin" style={{ marginTop: 9, marginBottom: 0 }} value={detail}
+          placeholder="e.g. $29/mo · from $10 · $99 one-time" onChange={e => { setDetail(e.target.value); emit(model, e.target.value) }} />
+      )}
+    </div>
   )
 }
 
