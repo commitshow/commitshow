@@ -21,6 +21,7 @@ export type Listing = {
   info_as_of: string | null; created_at: string
   benchmark: Benchmark | null
   subcategory?: string | null; submitted_by?: string | null
+  verified_by?: string | null; verified_at?: string | null
 }
 
 export type Benchmark = {
@@ -148,6 +149,14 @@ const CSS = `
 .l-pchip{font-size:13px;padding:7px 14px;border-radius:20px;border:1px solid #E0D8C8;background:#fff;color:#5A5347;cursor:pointer;user-select:none}
 .l-pchip:hover{border-color:#C9A22E}
 .l-pchip.on{background:#B5791C;color:#fff;border-color:#B5791C}
+.l-vfy{background:#FBF6EC;border:1px solid #E7D4AC;border-radius:14px;padding:18px 20px;margin-top:36px}
+.l-vfy-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:17px;color:#211C15}
+.l-vfy-s{font-size:13px;color:#5A5347;margin:4px 0 14px;line-height:1.55}
+.l-vfy-step{font-size:12.5px;color:#6E6557;margin:12px 0 6px;line-height:1.55}
+.l-vfy-step code{background:#F1EADE;border-radius:4px;padding:1px 5px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#5A5347}
+.l-vfy-code{position:relative;background:#2C261D;color:#E8DFCD;font-family:'JetBrains Mono',monospace;font-size:12px;padding:11px 42px 11px 13px;border-radius:8px;cursor:pointer;word-break:break-all;line-height:1.5}
+.l-vfy-copy{position:absolute;top:9px;right:11px;font-size:10px;color:#9A8C6E;text-transform:uppercase;letter-spacing:.04em}
+.l-vfy.l-vfy-ok{display:flex;align-items:center;gap:9px;background:#EAF6EE;border-color:#BFE3CC;color:#1E7A3D;font-weight:600;font-size:14.5px}
 /* legit auth modal */
 .l-authcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:18px;padding:30px 28px 24px;max-width:380px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
 .l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#B5791C;text-align:center}

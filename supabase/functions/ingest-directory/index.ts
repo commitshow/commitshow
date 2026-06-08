@@ -61,16 +61,58 @@ async function getMemberId(req: Request): Promise<string | null> {
   } catch { return null }
 }
 
-// True if `memberId` is the member who submitted listing `id`.
+// True if `memberId` submitted listing `id` OR verified ownership of it.
 async function isListingOwner(id: string, memberId: string): Promise<boolean> {
   if (!id || !memberId) return false
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}&select=submitted_by&limit=1`,
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}&select=submitted_by,verified_by&limit=1`,
       { headers: { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` } })
     if (!r.ok) return false
-    const rows = await r.json() as { submitted_by: string | null }[]
-    return !!rows[0] && rows[0].submitted_by === memberId
+    const rows = await r.json() as { submitted_by: string | null; verified_by: string | null }[]
+    return !!rows[0] && (rows[0].submitted_by === memberId || rows[0].verified_by === memberId)
   } catch { return false }
+}
+
+// Ownership verification via domain meta tag (or DNS TXT).
+async function runVerifyToken(id: string) {
+  const SRH = { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` }
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}&select=verify_token,domain,verified_by&limit=1`, { headers: SRH })
+  const row = (r.ok ? await r.json() : [])[0] as { verify_token: string | null; domain: string; verified_by: string | null } | undefined
+  if (!row) return { error: 'not_found' }
+  if (row.verified_by) return { verified: true }
+  let token = row.verify_token
+  if (!token) {
+    token = 'legit-' + crypto.randomUUID().replace(/-/g, '').slice(0, 24)
+    await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}`,
+      { method: 'PATCH', headers: { ...SRH, 'content-type': 'application/json', prefer: 'return=minimal' }, body: JSON.stringify({ verify_token: token }) })
+  }
+  return { token, domain: row.domain }
+}
+async function runVerify(id: string, memberId: string) {
+  const SRH = { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` }
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}&select=verify_token,domain,url,verified_by&limit=1`, { headers: SRH })
+  const row = (r.ok ? await r.json() : [])[0] as { verify_token: string | null; domain: string; url: string | null; verified_by: string | null } | undefined
+  if (!row) return { error: 'not_found' }
+  if (row.verified_by) return { verified: true }
+  if (!row.verify_token) return { verified: false, message: 'Get a verification tag first.' }
+  const tok = row.verify_token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // 1) meta tag on the site
+  const html = await fetchText(row.url || `https://${row.domain}`, UA_WEB, 9000)
+  const metaOk = new RegExp(`<meta[^>]+name=["']legit-verify["'][^>]+content=["']${tok}["']`, 'i').test(html)
+    || new RegExp(`<meta[^>]+content=["']${tok}["'][^>]+name=["']legit-verify["']`, 'i').test(html)
+  // 2) DNS TXT _legit.<domain> via DNS-over-HTTPS
+  let dnsOk = false
+  if (!metaOk) {
+    try {
+      const dr = await fetch(`https://cloudflare-dns.com/dns-query?name=_legit.${row.domain}&type=TXT`, { headers: { accept: 'application/dns-json' } })
+      const dj = await dr.json() as { Answer?: { data: string }[] }
+      dnsOk = !!dj.Answer?.some(a => a.data.includes(row.verify_token!))
+    } catch { /* DNS lookup failed — fall through */ }
+  }
+  if (!metaOk && !dnsOk) return { verified: false, message: "Couldn't find the verification tag yet. Add it, give it a minute to deploy, and try again." }
+  await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}`,
+    { method: 'PATCH', headers: { ...SRH, 'content-type': 'application/json', prefer: 'return=minimal' }, body: JSON.stringify({ verified_by: memberId, verified_at: new Date().toISOString() }) })
+  return { verified: true }
 }
 
 const UA_RSS = 'legit-directory-research/0.1 (by /u/legit_research)'
@@ -644,6 +686,16 @@ Deno.serve(async (req) => {
     if (!memberId) return json({ error: 'unauthorized', message: 'Sign in to submit a service.' }, 401)
     try { return json(await runSubmit(String(payload.url || ''), memberId, { preview: !!payload.preview, fields: payload.fields })) }
     catch (e) { return json({ error: 'server', message: String(e) }, 500) }
+  }
+
+  // Ownership verification — any signed-in member (proof is domain control).
+  if (action === 'verify_token' || action === 'verify') {
+    const memberId = await getMemberId(req)
+    if (!memberId) return json({ error: 'unauthorized', message: 'Sign in to verify ownership.' }, 401)
+    const id = String(payload.id || '')
+    try {
+      return json(action === 'verify_token' ? await runVerifyToken(id) : await runVerify(id, memberId))
+    } catch (e) { return json({ error: 'server', message: String(e) }, 500) }
   }
 
   // Edit is open to the listing's owner (the member who submitted it) or an admin.
