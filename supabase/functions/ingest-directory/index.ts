@@ -61,6 +61,18 @@ async function getMemberId(req: Request): Promise<string | null> {
   } catch { return null }
 }
 
+// True if `memberId` is the member who submitted listing `id`.
+async function isListingOwner(id: string, memberId: string): Promise<boolean> {
+  if (!id || !memberId) return false
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?id=eq.${id}&select=submitted_by&limit=1`,
+      { headers: { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` } })
+    if (!r.ok) return false
+    const rows = await r.json() as { submitted_by: string | null }[]
+    return !!rows[0] && rows[0].submitted_by === memberId
+  } catch { return false }
+}
+
 const UA_RSS = 'legit-directory-research/0.1 (by /u/legit_research)'
 const UA_WEB = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
 const EXTRACT_MODEL = 'claude-haiku-4-5'
@@ -612,11 +624,23 @@ Deno.serve(async (req) => {
     catch (e) { return json({ error: 'server', message: String(e) }, 500) }
   }
 
-  // Everything else (discovery, edit, delete) stays admin-gated.
+  // Edit is open to the listing's owner (the member who submitted it) or an admin.
+  if (action === 'update') {
+    const id = String(payload.id || '')
+    const admin = await isAuthedAdmin(req)
+    if (!admin) {
+      const memberId = await getMemberId(req)
+      if (!memberId) return json({ error: 'unauthorized', message: 'Sign in to edit.' }, 401)
+      if (!(await isListingOwner(id, memberId))) return json({ error: 'forbidden', message: 'You can only edit a service you added.' }, 403)
+    }
+    try { return json(await patchListing(id, payload.patch || {})) }
+    catch (e) { return json({ error: 'server', message: String(e) }, 500) }
+  }
+
+  // Discovery + delete stay admin-only.
   if (!(await isAuthedAdmin(req))) return json({ error: 'unauthorized' }, 401)
   try {
     if (action === 'ingest') return json(await runIngest(payload.target || '', { window: payload.window, limit: payload.limit }))
-    if (action === 'update') return json(await patchListing(String(payload.id), payload.patch || {}))
     if (action === 'delete') return json(await deleteListing(String(payload.id)))
     return json({ error: 'unknown action' }, 400)
   } catch (e) { return json({ error: String(e) }, 500) }

@@ -8,6 +8,7 @@ import { setHead, clearJsonLd } from '../lib/seo'
 export function ListingDetailPage() {
   const { slug } = useParams<{ slug: string }>()
   const [p, setP] = useState<Listing | null | undefined>(undefined)
+  const [bump, setBump] = useState(0)
 
   useEffect(() => {
     if (!slug) return
@@ -20,7 +21,7 @@ export function ListingDetailPage() {
       .maybeSingle()
       .then(({ data }) => { if (alive) setP((data as Listing | null) ?? null) })
     return () => { alive = false }
-  }, [slug])
+  }, [slug, bump])
 
   return (
     <LegitShell>
@@ -32,16 +33,19 @@ export function ListingDetailPage() {
             <p><Link to="/v2" style={{ color: '#97600F' }}>← directory</Link></p>
           </div>
         )}
-        {p && <Detail p={p} />}
+        {p && <Detail p={p} onReload={() => setBump(b => b + 1)} />}
       </div>
     </LegitShell>
   )
 }
 
-function Detail({ p }: { p: Listing }) {
+function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
   const { openAuth } = useLegitAuth()
-  const { member } = useAuth() as { member: { is_admin?: boolean } | null }
+  const { user, member } = useAuth() as { user: { id?: string } | null; member: { is_admin?: boolean } | null }
   const isAdmin = !!member?.is_admin
+  const isOwner = !!user?.id && p.submitted_by === user.id
+  const canEdit = isOwner || isAdmin
+  const [editing, setEditing] = useState(false)
   const dt = (p.info_as_of || '').slice(0, 10)
   const whoFor = p.who_for || []
   const features = p.features || []
@@ -177,13 +181,76 @@ function Detail({ p }: { p: Listing }) {
 
       <ReactionBar listingId={p.id} />
 
-      <div className="l-claimcta">
-        <div>
-          <div className="l-claimcta-h">Is this your service?</div>
-          <div className="l-claimcta-s">Claim {p.name} to manage its details and respond to ratings.</div>
+      {canEdit ? (
+        <div className="l-claimcta">
+          <div>
+            <div className="l-claimcta-h">{isOwner ? 'Your listing' : 'Admin'}</div>
+            <div className="l-claimcta-s">Edit {p.name}&apos;s tagline, description, category and pricing.</div>
+          </div>
+          <span className="l-btn" onClick={() => setEditing(true)}>Edit listing</span>
         </div>
-        <span className="l-btn" onClick={() => openAuth('signup')}>Claim this listing</span>
-      </div>
+      ) : (
+        <div className="l-claimcta">
+          <div>
+            <div className="l-claimcta-h">Is this your service?</div>
+            <div className="l-claimcta-s">Claim {p.name} to manage its details and respond to ratings.</div>
+          </div>
+          <span className="l-btn" onClick={() => openAuth('signup')}>Claim this listing</span>
+        </div>
+      )}
+      {editing && <EditListingModal p={p} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onReload() }} />}
     </>
+  )
+}
+
+const CANON_CATS = [
+  'AI & Agents', 'Developer Tools', 'MCP & Integrations', 'Frameworks & Starter Kits',
+  'Infrastructure & DevOps', 'Data & Analytics', 'Productivity', 'Business & Finance',
+  'Design & Creative', 'Content & Docs', 'Education & Reference', 'Lifestyle & Other',
+]
+
+// Owner/admin edit — patches the curated fields via ingest-directory's update
+// action (ownership enforced server-side). Auto-discovered facts the benchmark
+// owns (URL, signals, scores) aren't editable here.
+function EditListingModal({ p, onClose, onSaved }: { p: Listing; onClose: () => void; onSaved: () => void }) {
+  const [tagline, setTagline] = useState(p.tagline || '')
+  const [description, setDescription] = useState(p.description || '')
+  const [category, setCategory] = useState(p.category || '')
+  const [pricing, setPricing] = useState(p.pricing || '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const save = async () => {
+    setBusy(true); setErr(null)
+    try {
+      const { data, error } = await supabase.functions.invoke('ingest-directory', {
+        body: { action: 'update', id: p.id, patch: { tagline, description, category, pricing } },
+      })
+      const d = (data || {}) as { ok?: boolean; error?: string; message?: string }
+      if (error || d.error) { setErr(d.message || 'Could not save. Please try again.'); setBusy(false); return }
+      onSaved()
+    } catch { setErr('Network error. Please try again.'); setBusy(false) }
+  }
+
+  return (
+    <div className="l-modal" onClick={onClose}>
+      <div className="l-modalcard" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <button className="l-modalclose" onClick={onClose} aria-label="Close">×</button>
+        <div className="l-subh">Edit {p.name}</div>
+        <label className="l-edlabel">Tagline</label>
+        <input className="l-authin" value={tagline} maxLength={90} onChange={e => setTagline(e.target.value)} placeholder="One plain sentence" />
+        <label className="l-edlabel">Description</label>
+        <textarea className="l-rvta" value={description} onChange={e => setDescription(e.target.value)} placeholder="What it does, who it's for, the key differentiator." />
+        <label className="l-edlabel">Category</label>
+        <select className="l-authin" value={category} onChange={e => setCategory(e.target.value)}>
+          <option value="">—</option>
+          {CANON_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label className="l-edlabel">Pricing</label>
+        <input className="l-authin" value={pricing} onChange={e => setPricing(e.target.value)} placeholder="e.g. Free · $29/mo" />
+        {err && <div className="l-suberr">{err}</div>}
+        <button className="l-btn l-authsubmit" style={{ marginTop: 14, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
+      </div>
+    </div>
   )
 }

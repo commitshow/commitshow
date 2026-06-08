@@ -20,6 +20,7 @@ export type Listing = {
   has_pricing: boolean; js_starved: boolean
   info_as_of: string | null; created_at: string
   benchmark: Benchmark | null
+  subcategory?: string | null; submitted_by?: string | null
 }
 
 export type Benchmark = {
@@ -137,13 +138,9 @@ const CSS = `
 .l-modalclose{position:absolute;top:10px;right:14px;background:none;border:none;font-size:25px;line-height:1;color:#9A9080;cursor:pointer}.l-modalclose:hover{color:#211C15}
 .l-modaltext{font-size:13.5px;color:#5A5347;line-height:1.55;margin:8px 0 14px}
 .l-modalhint{font-size:12px;color:#9A9080;margin-top:10px}
-.l-addbtn{font-size:13.5px;font-weight:500;color:#97600F;cursor:pointer;margin-right:16px;white-space:nowrap}
-.l-addbtn:hover{color:#7A4D0C}
 .l-suberr{font-size:12.5px;color:#C8102E;margin:2px 0 10px}
 .l-subh{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:20px;color:#211C15;margin-bottom:4px}
-.l-herocta{display:inline-block;margin-top:18px;background:#B5791C;color:#fff;font-weight:600;font-size:14px;border:none;border-radius:8px;padding:11px 20px;cursor:pointer}
-.l-herocta:hover{background:#9C6716}
-@media(max-width:560px){.l-addbtn{display:none}}
+.l-edlabel{display:block;font-size:11px;font-weight:600;color:#6E6557;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.04em;margin:13px 0 5px}
 /* legit auth modal */
 .l-authcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:18px;padding:30px 28px 24px;max-width:380px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
 .l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#B5791C;text-align:center}
@@ -267,7 +264,6 @@ export function LegitShell({ children }: { children: ReactNode }) {
           <div className="l-wrap l-hd">
             <Link to="/v2" className="l-logo"><img className="l-logoowl" src="/favicon2.png" alt="" />Legit</Link>
             <div className="l-auth" style={{ marginLeft: 'auto' }}>
-              <span className="l-addbtn" onClick={openSubmit}>+ Add your service</span>
               {user
                 ? <>
                     <LegitBell recipientId={user.id || ''} />
@@ -413,6 +409,7 @@ function ProfileMenu({ name, email, initial, avatar, isAdmin, memberId, onSignOu
   const [open, setOpen] = useState(false)
   const [used, setUsed] = useState(0)
   const nav = useNavigate()
+  const { openSubmit } = useLegitAuth()
   const ref = useClickAway(() => setOpen(false))
   const go = (to: string) => { setOpen(false); nav(to) }
 
@@ -448,6 +445,8 @@ function ProfileMenu({ name, email, initial, avatar, isAdmin, memberId, onSignOu
           <div className="l-ddi" onClick={() => go('/me')}>Profile &amp; settings</div>
           <div className="l-ddi" onClick={() => go('/me/products')}>My products</div>
           <div className="l-ddi" onClick={() => go('/library')}>Library</div>
+          <div className="l-ddsep" />
+          <div className="l-ddi" onClick={() => { setOpen(false); openSubmit() }}>Add your service</div>
           {isAdmin && <>
             <div className="l-ddsep" />
             <div className="l-ddi" style={{ color: '#97600F', fontWeight: 600 }} onClick={() => go('/v2/admin')}>Directory admin</div>

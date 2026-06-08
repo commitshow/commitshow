@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { CategoryPicker, LegitShell, ListingRow, PremiumCard, useLegitAuth, type Listing } from './legit'
+import { CategoryPicker, LegitShell, ListingRow, PremiumCard, type Listing } from './legit'
 import { setHead, clearJsonLd } from '../lib/seo'
 
 type Stats = { uses_count: number; positive_count: number; negative_count: number }
@@ -23,7 +23,6 @@ function rankScore(r: Listing, s?: Stats, tickets = 0): number {
 }
 
 export function DirectoryPage() {
-  const { openSubmit } = useLegitAuth()
   const [rows, setRows] = useState<Listing[] | null>(null)
   const [stats, setStats] = useState<Map<string, Stats>>(new Map())
   const [tickets, setTickets] = useState<Map<string, number>>(new Map())
@@ -143,7 +142,6 @@ export function DirectoryPage() {
             <span><b>{cats.length}</b> categories</span>
             <Link to="/v2/insights" style={{ color: '#97600F', textDecoration: 'none' }}>insights →</Link>
           </div>
-          <button className="l-herocta" onClick={openSubmit}>+ Add your service</button>
         </div>
       </div>
 
