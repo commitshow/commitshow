@@ -671,7 +671,13 @@ async function runSubmit(rawUrl: string, memberId: string, opts: { preview?: boo
     )
   } catch { /* waitUntil unavailable — benchmark still runs on the weekly sweep */ }
 
-  return { slug: row.slug, name: row.name }
+  // return the id + domain so the submit flow can offer ownership verification next
+  let id: string | undefined
+  try {
+    const idr = await fetch(`${SUPABASE_URL}/rest/v1/listings?canonical_key=eq.${encodeURIComponent(ckey)}&select=id&limit=1`, { headers: SRH })
+    id = (idr.ok ? await idr.json() : [])[0]?.id
+  } catch { /* id lookup best-effort */ }
+  return { slug: row.slug, name: row.name, id, domain: host }
 }
 
 Deno.serve(async (req) => {

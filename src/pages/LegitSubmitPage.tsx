@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { LegitShell, PricingField, useLegitAuth } from './legit'
+import { LegitShell, PricingField, VerifyOwnership, useLegitAuth } from './legit'
 import { setHead } from '../lib/seo'
 
 // Proper "add your service" page — paste a URL, we read the public page and
@@ -37,7 +37,8 @@ export function LegitSubmitPage() {
   const { user } = useAuth() as { user: { id?: string } | null }
   const { openAuth } = useLegitAuth()
   const [url, setUrl] = useState('')
-  const [phase, setPhase] = useState<'url' | 'form'>('url')
+  const [phase, setPhase] = useState<'url' | 'form' | 'verify'>('url')
+  const [done, setDone] = useState<{ id: string; domain: string; slug: string; name: string } | null>(null)
   const [f, setF] = useState<Fields>(EMPTY)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -71,10 +72,14 @@ export function LegitSubmitPage() {
     setBusy(true)
     try {
       const { data, error } = await supabase.functions.invoke('ingest-directory', { body: { action: 'submit', url: url.trim(), fields: f } })
-      const d = (data || {}) as { slug?: string; existing?: boolean; error?: string; message?: string }
+      const d = (data || {}) as { slug?: string; id?: string; domain?: string; name?: string; existing?: boolean; error?: string; message?: string }
       if (error && !d?.slug && !d?.error) { setErr('Could not save. Please try again.'); setBusy(false); return }
       if (d.error) { setErr(d.message || 'Could not save this service.'); setBusy(false); return }
-      if (d.slug) { nav(`/v2/s/${d.slug}`); return }
+      if (d.slug) {
+        const host = d.domain || url.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')
+        setDone({ id: d.id || '', domain: host, slug: d.slug, name: d.name || f.name })
+        setPhase('verify'); setBusy(false); return
+      }
       setErr('Could not save this service.'); setBusy(false)
     } catch { setErr('Network error. Please try again.'); setBusy(false) }
   }
@@ -110,7 +115,7 @@ export function LegitSubmitPage() {
             )}
             <div className="sub-prov">App Store / Play apps: submit the marketing site · public landing pages only · up to 5 per day</div>
           </div>
-        ) : (
+        ) : phase === 'form' ? (
           <div className="sub-card">
             <span className="sub-back" onClick={() => { setPhase('url'); setErr(null) }}>← change URL</span>
             <label className="l-edlabel">Name</label>
@@ -131,6 +136,19 @@ export function LegitSubmitPage() {
               {busy ? 'Adding & benchmarking…' : 'Add to directory'}
             </button>
             <div className="sub-prov" style={{ marginTop: 12 }}>{url.replace(/^https?:\/\//, '')} · benchmark runs automatically</div>
+          </div>
+        ) : (
+          <div className="sub-card">
+            <div className="l-subh" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E7A3D" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+              {done?.name || 'Your service'} is in the directory
+            </div>
+            <p className="l-modaltext">Verify ownership now to manage the listing and earn a verified badge — or skip and do it later from the listing.</p>
+            {done?.id && <VerifyOwnership listingId={done.id} domain={done.domain} verified={false} onVerified={() => done && nav(`/v2/s/${done.slug}`)} />}
+            <div style={{ marginTop: 18, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="l-btn" onClick={() => done && nav(`/v2/s/${done.slug}`)}>View listing →</button>
+              <span className="sub-link" onClick={() => done && nav(`/v2/s/${done.slug}`)}>Do this later</span>
+            </div>
           </div>
         )}
       </div>

@@ -157,6 +157,9 @@ const CSS = `
 .l-vfy-code{position:relative;background:#2C261D;color:#E8DFCD;font-family:'JetBrains Mono',monospace;font-size:12px;padding:11px 42px 11px 13px;border-radius:8px;cursor:pointer;word-break:break-all;line-height:1.5}
 .l-vfy-copy{position:absolute;top:9px;right:11px;font-size:10px;color:#9A8C6E;text-transform:uppercase;letter-spacing:.04em}
 .l-vfy.l-vfy-ok{display:flex;align-items:center;gap:9px;background:#EAF6EE;border-color:#BFE3CC;color:#1E7A3D;font-weight:600;font-size:14.5px}
+.l-claimline{margin-top:30px;padding-top:18px;border-top:1px solid #F1EADE;font-size:13px}
+.l-claimlink{color:#97600F;cursor:pointer}.l-claimlink:hover{color:#7A4D0C}
+.l-claimverified{display:inline-flex;align-items:center;gap:7px;color:#1E7A3D;font-weight:600}
 /* legit auth modal */
 .l-authcard{position:relative;background:#FAF8F3;border:1px solid #E7D4AC;border-radius:18px;padding:30px 28px 24px;max-width:380px;width:100%;box-shadow:0 24px 60px rgba(60,45,20,.3)}
 .l-authlogo{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:#B5791C;text-align:center}
@@ -371,6 +374,67 @@ export function PricingField({ initial, onChange }: { initial: string; onChange:
       {showDetail && (
         <input className="l-authin" style={{ marginTop: 9, marginBottom: 0 }} value={detail}
           placeholder="e.g. $29/mo · from $10 · $99 one-time" onChange={e => { setDetail(e.target.value); emit(model, e.target.value) }} />
+      )}
+    </div>
+  )
+}
+
+// Domain ownership verification — add a meta tag (or DNS TXT), we fetch & confirm.
+// Shared by the submit flow (final step) and the listing page (claim later).
+export function VerifyOwnership({ listingId, domain, verified, onVerified }: { listingId: string; domain: string; verified: boolean; onVerified: () => void }) {
+  const { user } = useAuth() as { user: { id?: string } | null }
+  const { openAuth } = useLegitAuth()
+  const [token, setToken] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  if (verified) {
+    return (
+      <div className="l-vfy l-vfy-ok">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+        Ownership verified
+      </div>
+    )
+  }
+
+  const getCode = async () => {
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await supabase.functions.invoke('ingest-directory', { body: { action: 'verify_token', id: listingId } })
+      const d = (data || {}) as { token?: string; verified?: boolean; error?: string }
+      if (d.verified) { onVerified(); return }
+      if (d.token) setToken(d.token); else setMsg('Could not start verification. Please try again.')
+    } catch { setMsg('Network error. Please try again.') }
+    setBusy(false)
+  }
+  const doVerify = async () => {
+    setBusy(true); setMsg(null)
+    try {
+      const { data } = await supabase.functions.invoke('ingest-directory', { body: { action: 'verify', id: listingId } })
+      const d = (data || {}) as { verified?: boolean; message?: string }
+      if (d.verified) { onVerified(); return }
+      setMsg(d.message || "Couldn't verify yet."); setBusy(false)
+    } catch { setMsg('Network error. Please try again.'); setBusy(false) }
+  }
+  const tag = token ? `<meta name="legit-verify" content="${token}">` : ''
+
+  return (
+    <div className="l-vfy">
+      <div className="l-vfy-h">Verify ownership</div>
+      <div className="l-vfy-s">Prove you control {domain} to manage this listing and earn a verified badge.</div>
+      {!user ? (
+        <span className="l-btn" onClick={() => openAuth('signup')}>Sign in to verify</span>
+      ) : !token ? (
+        <span className="l-btn" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={getCode}>{busy ? 'Starting…' : 'Get verification tag'}</span>
+      ) : (
+        <>
+          <div className="l-vfy-step">1. Add this to your site&apos;s <code>&lt;head&gt;</code>:</div>
+          <div className="l-vfy-code" onClick={() => { try { navigator.clipboard?.writeText(tag) } catch { /* noop */ } setCopied(true) }}>{tag}<span className="l-vfy-copy">{copied ? 'copied' : 'copy'}</span></div>
+          <div className="l-vfy-step">…or add a DNS TXT record <code>_legit.{domain}</code> = <code>{token}</code></div>
+          <span className="l-btn" style={{ marginTop: 12, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={doVerify}>{busy ? 'Checking…' : "I've added it — Verify"}</span>
+          {msg && <div className="l-suberr" style={{ marginTop: 10 }}>{msg}</div>}
+        </>
       )}
     </div>
   )

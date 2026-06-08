@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, PricingField, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, useLegitAuth, visuals, type Listing } from './legit'
+import { BenchmarkChart, CategoryPicker, FaviconTile, LegitShell, LegitVouch, PricingField, RatingPanel, ReactionBar, ReviewsSection, StarRating, TicketBadge, useLegitAuth, VerifyOwnership, visuals, type Listing } from './legit'
 import { useAuth } from '../lib/auth'
 import { setHead, clearJsonLd } from '../lib/seo'
 
@@ -46,6 +46,7 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
   const isOwner = !!user?.id && (p.submitted_by === user.id || p.verified_by === user.id)
   const canEdit = isOwner || isAdmin
   const [editing, setEditing] = useState(false)
+  const [claimOpen, setClaimOpen] = useState(false)
   const dt = (p.info_as_of || '').slice(0, 10)
   const whoFor = p.who_for || []
   const features = p.features || []
@@ -181,16 +182,22 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
 
       <ReactionBar listingId={p.id} />
 
-      <VerifyOwnership p={p} onVerified={onReload} />
-
       {canEdit && (
-        <div className="l-claimcta" style={{ marginTop: 16 }}>
+        <div className="l-claimcta" style={{ marginTop: 28 }}>
           <div>
             <div className="l-claimcta-h">Manage this listing</div>
             <div className="l-claimcta-s">Edit {p.name}&apos;s tagline, description, category and pricing.</div>
           </div>
           <span className="l-btn" onClick={() => setEditing(true)}>Edit listing</span>
         </div>
+      )}
+
+      {p.verified_by ? (
+        <div className="l-claimline"><span className="l-claimverified"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg> Verified owner</span></div>
+      ) : claimOpen ? (
+        <VerifyOwnership listingId={p.id} domain={p.domain} verified={false} onVerified={onReload} />
+      ) : (
+        <div className="l-claimline"><span className="l-claimlink" onClick={() => setClaimOpen(true)}>Is this your service? Claim it →</span></div>
       )}
       {editing && <EditListingModal p={p} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onReload() }} />}
     </>
@@ -246,66 +253,6 @@ function EditListingModal({ p, onClose, onSaved }: { p: Listing; onClose: () => 
         {err && <div className="l-suberr">{err}</div>}
         <button className="l-btn l-authsubmit" style={{ marginTop: 14, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
       </div>
-    </div>
-  )
-}
-
-// Domain ownership verification — add a meta tag (or DNS TXT), we fetch & confirm.
-function VerifyOwnership({ p, onVerified }: { p: Listing; onVerified: () => void }) {
-  const { user } = useAuth() as { user: { id?: string } | null }
-  const { openAuth } = useLegitAuth()
-  const [token, setToken] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-
-  if (p.verified_by) {
-    return (
-      <div className="l-vfy l-vfy-ok">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-        Ownership verified
-      </div>
-    )
-  }
-
-  const getCode = async () => {
-    setBusy(true); setMsg(null)
-    try {
-      const { data } = await supabase.functions.invoke('ingest-directory', { body: { action: 'verify_token', id: p.id } })
-      const d = (data || {}) as { token?: string; verified?: boolean; error?: string }
-      if (d.verified) { onVerified(); return }
-      if (d.token) setToken(d.token); else setMsg('Could not start verification. Please try again.')
-    } catch { setMsg('Network error. Please try again.') }
-    setBusy(false)
-  }
-  const doVerify = async () => {
-    setBusy(true); setMsg(null)
-    try {
-      const { data } = await supabase.functions.invoke('ingest-directory', { body: { action: 'verify', id: p.id } })
-      const d = (data || {}) as { verified?: boolean; message?: string }
-      if (d.verified) { onVerified(); return }
-      setMsg(d.message || "Couldn't verify yet."); setBusy(false)
-    } catch { setMsg('Network error. Please try again.'); setBusy(false) }
-  }
-  const tag = token ? `<meta name="legit-verify" content="${token}">` : ''
-
-  return (
-    <div className="l-vfy">
-      <div className="l-vfy-h">Verify ownership</div>
-      <div className="l-vfy-s">Prove you control {p.domain} to claim this listing and earn a verified badge.</div>
-      {!user ? (
-        <span className="l-btn" onClick={() => openAuth('signup')}>Sign in to verify</span>
-      ) : !token ? (
-        <span className="l-btn" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={getCode}>{busy ? 'Starting…' : 'Get verification tag'}</span>
-      ) : (
-        <>
-          <div className="l-vfy-step">1. Add this to your site&apos;s <code>&lt;head&gt;</code>:</div>
-          <div className="l-vfy-code" onClick={() => { try { navigator.clipboard?.writeText(tag) } catch { /* noop */ } setCopied(true) }}>{tag}<span className="l-vfy-copy">{copied ? 'copied' : 'copy'}</span></div>
-          <div className="l-vfy-step">…or add a DNS TXT record <code>_legit.{p.domain}</code> = <code>{token}</code></div>
-          <span className="l-btn" style={{ marginTop: 12, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={doVerify}>{busy ? 'Checking…' : "I've added it — Verify"}</span>
-          {msg && <div className="l-suberr" style={{ marginTop: 10 }}>{msg}</div>}
-        </>
-      )}
     </div>
   )
 }
