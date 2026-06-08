@@ -77,7 +77,13 @@ export default function App() {
   // /check is the ad-traffic LP · chrome-less. Drop the 200px sidebar
   // gutter on that route so the LP spans full width. Nav itself short-
   // circuits on the same path (see Nav.tsx).
-  const isChromeless = location.pathname === '/check' || location.pathname.startsWith('/v2')
+  // Directory (Legit) routes render their own chrome (LegitShell) — hide the
+  // commit.show Nav/sidebar/footer on them. Everything else (the legacy
+  // commit.show product, now under /old + its feature pages) keeps the chrome.
+  const _p = location.pathname
+  const isChromeless = _p === '/' || _p === '/insights' || _p === '/add'
+    || _p.startsWith('/s/') || _p.startsWith('/alternatives/') || _p.startsWith('/v2/')
+    || _p === '/check'
   return (
     // 2026-05-05 · primary nav moved to a 200px left sidebar on md+.
     // md:pl-[200px] reserves the space without changing any page-level
@@ -100,7 +106,8 @@ export default function App() {
       <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-          <Route path="/"                 element={<LandingPage />} />
+          <Route path="/"                 element={<DirectoryPage />} />
+          <Route path="/old"              element={<LandingPage />} />
           {/* /projects merged into /ladder (2026-04-30 · single-surface decision).
               Card view lives at /ladder?view=cards. Direct project URLs unchanged. */}
           <Route path="/projects"         element={<Navigate to="/ladder?view=cards" replace />} />
@@ -110,6 +117,7 @@ export default function App() {
               cards display "/project/<name>" instead of a uuid. */}
           <Route path="/project/:slug"    element={<ProjectSlugRedirect />} />
           <Route path="/submit"           element={<SubmitPage />} />
+          <Route path="/add"              element={<LegitSubmitPage />} />
           <Route path="/me"               element={<ProfilePage />} />
           <Route path="/me/products"      element={<MyProductsPage />} />
           <Route path="/library"          element={<LibraryPage />} />
@@ -150,11 +158,9 @@ export default function App() {
           {/* Ad-traffic LP · paid acquisition entry · Nav + sidebar hidden
               (Nav.tsx + App.tsx shell). One CTA: paste URL → 60s audit. */}
           <Route path="/check"            element={<CheckPage />} />
-          <Route path="/v2"               element={<DirectoryPage />} />
-          <Route path="/v2/insights"      element={<InsightsPage />} />
-          <Route path="/v2/submit"        element={<LegitSubmitPage />} />
-          <Route path="/v2/alternatives/:slug" element={<AlternativesPage />} />
-          <Route path="/v2/s/:slug"       element={<ListingDetailPage />} />
+          <Route path="/insights"         element={<InsightsPage />} />
+          <Route path="/alternatives/:slug" element={<AlternativesPage />} />
+          <Route path="/s/:slug"          element={<ListingDetailPage />} />
           <Route path="/v2/admin"         element={<DirectoryAdminPage />} />
           <Route path="/admin"            element={<AdminPage />} />
           <Route path="/admin/cmo"        element={<CmoPreviewPage />} />

@@ -85,13 +85,13 @@ export function DirectoryAdminPage() {
   if (!user) return (
     <LegitShell><div className="l-wrap" style={{ padding: '60px 24px', textAlign: 'center' }}>
       <h1 style={{ fontSize: 26, marginBottom: 8 }}>Admin</h1>
-      <p style={{ color: '#6E6557' }}>Sign in with an admin account. <Link to="/v2" style={{ color: '#97600F' }}>← directory</Link></p>
+      <p style={{ color: '#6E6557' }}>Sign in with an admin account. <Link to="/" style={{ color: '#97600F' }}>← directory</Link></p>
     </div></LegitShell>
   )
   if (!isAdmin) return (
     <LegitShell><div className="l-wrap" style={{ padding: '60px 24px', textAlign: 'center' }}>
       <h1 style={{ fontSize: 26, marginBottom: 8 }}>Not authorized</h1>
-      <p style={{ color: '#6E6557' }}>This account is not an admin. <Link to="/v2" style={{ color: '#97600F' }}>← directory</Link></p>
+      <p style={{ color: '#6E6557' }}>This account is not an admin. <Link to="/" style={{ color: '#97600F' }}>← directory</Link></p>
     </div></LegitShell>
   )
 
@@ -100,7 +100,7 @@ export function DirectoryAdminPage() {
       <div className="l-wrap" style={{ padding: '26px 24px 60px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
           <h1 style={{ fontSize: 26 }}>Directory admin</h1>
-          <Link to="/v2" style={{ color: '#97600F', fontSize: 13 }}>view directory →</Link>
+          <Link to="/" style={{ color: '#97600F', fontSize: 13 }}>view directory →</Link>
         </div>
         <p style={{ color: '#9A9080', fontSize: 13.5, marginBottom: 22 }}>
           Ingest from sources and curate listings. Ingest runs Claude server-side and upserts into the public directory.
@@ -162,7 +162,7 @@ export function DirectoryAdminPage() {
           <div key={l.id} className="l-row" style={{ cursor: 'default' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="l-nm" style={{ fontSize: 16 }}>
-                <Link to={`/v2/s/${l.slug}`} style={{ color: '#211C15' }}>{l.name}</Link>{' '}
+                <Link to={`/s/${l.slug}`} style={{ color: '#211C15' }}>{l.name}</Link>{' '}
                 <span className="l-dm">{l.domain}</span>
               </div>
               <div className="l-ol" style={{ fontSize: 13 }}>{(l.tagline || l.description || '—').slice(0, 110)}</div>

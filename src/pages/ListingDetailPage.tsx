@@ -30,7 +30,7 @@ export function ListingDetailPage() {
         {p === null && (
           <div className="l-head">
             <h1>Not found</h1>
-            <p><Link to="/v2" style={{ color: '#97600F' }}>← directory</Link></p>
+            <p><Link to="/" style={{ color: '#97600F' }}>← directory</Link></p>
           </div>
         )}
         {p && <Detail p={p} onReload={() => setBump(b => b + 1)} />}
@@ -79,7 +79,7 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
     setHead({
       title: `${p.name} — ${(p.tagline || cat).slice(0, 60)} | Legit.Show`,
       description: `${blurb}. ${rated}Features, pricing, reviews and an objective benchmark on Legit.Show.`.replace(/\s+/g, ' ').slice(0, 200),
-      canonical: `https://commit.show/v2/s/${p.slug}`,
+      canonical: `https://commit.show/s/${p.slug}`,
       jsonld: {
         '@context': 'https://schema.org', '@type': 'SoftwareApplication',
         name: p.name, url: p.url, applicationCategory: cat,
@@ -94,7 +94,7 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
   return (
     <>
       <div className="l-crumb" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <Link to="/v2">Home</Link> ›
+        <Link to="/">Home</Link> ›
         {p.category ? <CategoryPicker variant="crumb" current={p.category} /> : <span>{p.platform || 'Service'}</span>}
         › {p.name}
       </div>
@@ -109,15 +109,15 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
           </div>
           <div className="l-one">{p.tagline || p.description}</div>
           <div className="l-pills">
-            <Link to={`/v2?platform=${encodeURIComponent(p.platform || 'web')}`} className="l-pill plat">{p.platform || 'web'}</Link>
+            <Link to={`/?platform=${encodeURIComponent(p.platform || 'web')}`} className="l-pill plat">{p.platform || 'web'}</Link>
             <span className="l-pill">{p.domain}</span>
-            {p.category && <Link to={`/v2?cat=${encodeURIComponent(p.category)}`} className="l-pill plat">{p.category}</Link>}
+            {p.category && <Link to={`/?cat=${encodeURIComponent(p.category)}`} className="l-pill plat">{p.category}</Link>}
           </div>
         </div>
         <div className="l-heroact">
           <a className="l-btn" href={p.url} target="_blank" rel="noopener noreferrer">Visit site ↗</a>
           {p.category && altCount > 0 && (
-            <Link to={`/v2/alternatives/${p.slug}`} className="l-altcta">
+            <Link to={`/alternatives/${p.slug}`} className="l-altcta">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4" /><path d="M4 7h16" /><path d="m16 21 4-4-4-4" /><path d="M20 17H4" /></svg>
               Compare {altCount} alternative{altCount === 1 ? '' : 's'}
             </Link>

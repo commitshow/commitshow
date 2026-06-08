@@ -50,7 +50,7 @@ export function LegitSubmitPage() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    setHead({ title: 'Add your service — Legit.Show', description: "Add your launched product to the Legit.Show directory. Verify you own the domain, then it's listed with an objective benchmark.", canonical: 'https://commit.show/v2/submit' })
+    setHead({ title: 'Add your service — Legit.Show', description: "Add your launched product to the Legit.Show directory. Verify you own the domain, then it's listed with an objective benchmark.", canonical: 'https://commit.show/add' })
   }, [])
 
   const set = (k: keyof Fields, v: string) => setF(prev => ({ ...prev, [k]: v }))
@@ -79,7 +79,7 @@ export function LegitSubmitPage() {
     try {
       const { data } = await invoke({ action: 'verify_prepare', url: url.trim() })
       const d = (data || {}) as { token?: string; domain?: string; existing?: boolean; slug?: string; error?: string; message?: string }
-      if (d.existing && d.slug) { nav(`/v2/s/${d.slug}`); return }
+      if (d.existing && d.slug) { nav(`/s/${d.slug}`); return }
       if (d.error) { setErr(d.message || 'Could not start verification.'); setBusy(false); return }
       if (d.token) { setToken(d.token); setDomain(d.domain || '') }
       setBusy(false)
@@ -92,7 +92,7 @@ export function LegitSubmitPage() {
     try {
       const { data } = await invoke({ action: 'verify_publish', url: url.trim(), fields: f })
       const d = (data || {}) as { slug?: string; verified?: boolean; existing?: boolean; error?: string; message?: string }
-      if (d.slug) { nav(`/v2/s/${d.slug}`); return }
+      if (d.slug) { nav(`/s/${d.slug}`); return }
       if (d.verified === false || d.error) { setErr(d.message || "Couldn't verify yet — add the tag and try again."); setBusy(false); return }
       setErr('Could not publish. Please try again.'); setBusy(false)
     } catch { setErr('Network error. Please try again.'); setBusy(false) }
@@ -129,7 +129,7 @@ export function LegitSubmitPage() {
               <button className="l-btn" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={fetchDetails}>{busy ? 'Reading…' : 'Fetch details'}</button>
             </div>
             {err && <div className="l-suberr" style={{ marginTop: 10 }}>{err}</div>}
-            {existing && <div className="sub-exist">Already in the directory — <span className="sub-link" onClick={() => nav(`/v2/s/${existing}`)}>view the listing →</span></div>}
+            {existing && <div className="sub-exist">Already in the directory — <span className="sub-link" onClick={() => nav(`/s/${existing}`)}>view the listing →</span></div>}
             <div className="sub-prov">App Store / Play apps: submit the marketing site · you'll verify the domain next</div>
           </div>
         ) : phase === 'form' ? (

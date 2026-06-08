@@ -77,8 +77,7 @@ const SECTION_URLS: Array<{ loc: string; changefreq: string; priority: string }>
   { loc: '/scouts',                 changefreq: 'daily',   priority: '0.7' },
   { loc: '/creators',               changefreq: 'daily',   priority: '0.7' },
   { loc: '/library',                changefreq: 'daily',   priority: '0.8' },
-  { loc: '/v2',                     changefreq: 'daily',   priority: '0.9' },
-  { loc: '/v2/insights',            changefreq: 'weekly',  priority: '0.6' },
+  { loc: '/insights',               changefreq: 'weekly',  priority: '0.6' },
   { loc: '/community',              changefreq: 'daily',   priority: '0.8' },
   { loc: '/community/open-mic',     changefreq: 'daily',   priority: '0.7' },
   { loc: '/community/build-logs',   changefreq: 'daily',   priority: '0.7' },
@@ -178,10 +177,10 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       .filter(l => l.slug)
       .flatMap(l => {
         const lastmod = l.updated_at ?? l.last_fetched_at
-        const entries = [urlEntry(`${base}/v2/s/${l.slug}`, lastmod, 'weekly', '0.7')]
+        const entries = [urlEntry(`${base}/s/${l.slug}`, lastmod, 'weekly', '0.7')]
         // "{X} alternatives" comparison page — only for categorized listings
         // (an uncategorized one has no comparison set).
-        if (l.category) entries.push(urlEntry(`${base}/v2/alternatives/${l.slug}`, lastmod, 'weekly', '0.6'))
+        if (l.category) entries.push(urlEntry(`${base}/alternatives/${l.slug}`, lastmod, 'weekly', '0.6'))
         return entries
       })
       .join('\n')

@@ -69,10 +69,10 @@ export function DirectoryPage() {
     setHead({
       title: 'Legit.Show — every launched service, tested',
       description: 'A directory of launched web apps, SaaS, AI tools, MCP servers and Skills — what each does, who it is for, real ratings, and an objective benchmark.',
-      canonical: 'https://commit.show/v2',
+      canonical: 'https://commit.show',
       jsonld: {
-        '@context': 'https://schema.org', '@type': 'WebSite', name: 'Legit.Show', url: 'https://commit.show/v2',
-        potentialAction: { '@type': 'SearchAction', target: 'https://commit.show/v2?q={search_term_string}', 'query-input': 'required name=search_term_string' },
+        '@context': 'https://schema.org', '@type': 'WebSite', name: 'Legit.Show', url: 'https://commit.show',
+        potentialAction: { '@type': 'SearchAction', target: 'https://commit.show/?q={search_term_string}', 'query-input': 'required name=search_term_string' },
       },
     })
     return () => clearJsonLd()
@@ -142,7 +142,7 @@ export function DirectoryPage() {
           <div className="l-statrow">
             <span><b>{rows ? rows.length : '—'}</b> services</span>
             <span><b>{cats.length}</b> categories</span>
-            <Link to="/v2/insights" style={{ color: '#97600F', textDecoration: 'none' }}>insights →</Link>
+            <Link to="/insights" style={{ color: '#97600F', textDecoration: 'none' }}>insights →</Link>
           </div>
         </div>
       </div>
@@ -153,7 +153,7 @@ export function DirectoryPage() {
         )}
         {platform && (
           <div className="l-feedhead" style={{ marginTop: 6 }}>
-            <span className="c" style={{ fontSize: 13 }}>Platform · <b style={{ color: '#211C15' }}>{platform}</b> · <Link to="/v2" style={{ color: '#97600F' }}>clear</Link></span>
+            <span className="c" style={{ fontSize: 13 }}>Platform · <b style={{ color: '#211C15' }}>{platform}</b> · <Link to="/" style={{ color: '#97600F' }}>clear</Link></span>
           </div>
         )}
         {cats.length > 0 && (

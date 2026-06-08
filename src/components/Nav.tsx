@@ -135,7 +135,12 @@ export function Nav() {
   // first 2 seconds. Render nothing on that route. Hook calls above stay
   // unconditional (Rules of Hooks). The page itself renders its own
   // minimal commit.show wordmark.
-  if (location.pathname === '/check' || location.pathname.startsWith('/v2')) return null
+  // Hide on the Legit directory (now at the root) and its sub-routes — they
+  // render their own LegitShell chrome — and on the legacy /v2/* + /check.
+  const _np = location.pathname
+  if (_np === '/' || _np === '/insights' || _np === '/add'
+    || _np.startsWith('/s/') || _np.startsWith('/alternatives/')
+    || _np.startsWith('/v2/') || _np === '/check') return null
 
   return (
     <>
@@ -149,7 +154,7 @@ export function Nav() {
       >
         {/* Left · Logo */}
         <div className="flex-1 flex items-center">
-          <NavLink to="/" className="flex items-center" style={{ textDecoration: 'none' }} onClick={() => setMobileOpen(false)}>
+          <NavLink to="/old" className="flex items-center" style={{ textDecoration: 'none' }} onClick={() => setMobileOpen(false)}>
             <span className="font-display font-bold text-xl tracking-tight" style={{ color: 'var(--cream)' }}>
               Commit<span style={{ color: 'var(--gold-500)' }}>.Show</span>
             </span>

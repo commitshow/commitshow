@@ -13,3 +13,13 @@
 # these 301s handle external inbound traffic + search crawlers.
 /leaderboard/tokens  /tokens  301
 /leaderboard         /map     301
+
+# 2026-06-09 · directory promoted from /v2 to the root domain. 301 the old
+# /v2 surface to the new clean URLs so search/AEO link equity transfers.
+# (/v2/admin is intentionally NOT redirected — directory admin stays there.)
+/v2                      /                       301
+/v2/                     /                       301
+/v2/insights            /insights               301
+/v2/submit              /add                    301
+/v2/s/*                 /s/:splat               301
+/v2/alternatives/*      /alternatives/:splat    301

@@ -98,7 +98,7 @@ export function AlternativesPage() {
       : `Tested ${cat} alternatives to ${subject.name} on Legit.Show.`).replace(/\s+/g, ' ').slice(0, 200)
     setHead({
       title, description,
-      canonical: `${SITE}/v2/alternatives/${subject.slug}`,
+      canonical: `${SITE}/alternatives/${subject.slug}`,
       jsonld: {
         '@context': 'https://schema.org', '@type': 'ItemList',
         name: `${subject.name} alternatives`,
@@ -121,13 +121,13 @@ export function AlternativesPage() {
         {subject === null && (
           <div style={{ padding: '40px 0' }}>
             <h1 className="alt-h">Not found</h1>
-            <p><Link to="/v2" style={{ color: '#97600F' }}>← directory</Link></p>
+            <p><Link to="/" style={{ color: '#97600F' }}>← directory</Link></p>
           </div>
         )}
         {subject && (
           <>
             <div className="alt-crumb">
-              <Link to="/v2">Home</Link> › <Link to={`/v2?cat=${encodeURIComponent(cat)}`}>{cat}</Link> › <Link to={`/v2/s/${subject.slug}`}>{subject.name}</Link> › alternatives
+              <Link to="/">Home</Link> › <Link to={`/?cat=${encodeURIComponent(cat)}`}>{cat}</Link> › <Link to={`/s/${subject.slug}`}>{subject.name}</Link> › alternatives
             </div>
             <h1 className="alt-h">{subject.name} alternatives</h1>
             <div className="alt-sub">
@@ -135,7 +135,7 @@ export function AlternativesPage() {
             </div>
 
             {alts && alts.length === 0
-              ? <div className="alt-empty">No other tested {cat} services yet. <Link to="/v2" style={{ color: '#97600F' }}>Browse the directory →</Link></div>
+              ? <div className="alt-empty">No other tested {cat} services yet. <Link to="/" style={{ color: '#97600F' }}>Browse the directory →</Link></div>
               : (
                 <div className="alt-scroll">
                   <table className="alt-tbl">
@@ -174,7 +174,7 @@ function ServiceRow({ l, st, you = false }: { l: Listing; st: Stat; you?: boolea
         <div className="alt-svc">
           <FaviconTile name={l.name} domain={l.domain} icon={ic} cls="alt-ic" />
           <div>
-            <Link to={`/v2/s/${l.slug}`} className="alt-nm">{l.name}</Link>
+            <Link to={`/s/${l.slug}`} className="alt-nm">{l.name}</Link>
             {you && <span className="alt-you">this</span>}
             <div className="alt-dm">{l.domain}</div>
           </div>

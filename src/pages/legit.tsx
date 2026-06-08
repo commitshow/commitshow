@@ -279,7 +279,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
   const navShell = useNavigate()
   // Submitting needs an account (attribution + later claim) — sign in first,
   // then go to the proper submit page.
-  const openSubmit = () => { if (!user) { openAuth('signup'); return } navShell('/v2/submit') }
+  const openSubmit = () => { if (!user) { openAuth('signup'); return } navShell('/add') }
   const name = member?.display_name || user?.email?.split('@')[0] || 'You'
   const initial = name.trim()[0]?.toUpperCase() || '?'
 
@@ -289,13 +289,13 @@ export function LegitShell({ children }: { children: ReactNode }) {
         <LegitStyles />
         <header className="l-h">
           <div className="l-wrap l-hd">
-            <Link to="/v2" className="l-logo"><img className="l-logoowl" src="/favicon2.png" alt="" />Legit</Link>
+            <Link to="/" className="l-logo"><img className="l-logoowl" src="/favicon2.png" alt="" />Legit</Link>
             <div className="l-auth" style={{ marginLeft: 'auto' }}>
               <span className="l-addbtn" onClick={openSubmit}>+ Add your service</span>
               {user
                 ? <>
                     <LegitBell recipientId={user.id || ''} />
-                    <ProfileMenu name={name} email={user.email || ''} initial={initial} avatar={member?.avatar_url || null} isAdmin={!!member?.is_admin} memberId={user.id || ''} onSignOut={() => signOut('/v2')} />
+                    <ProfileMenu name={name} email={user.email || ''} initial={initial} avatar={member?.avatar_url || null} isAdmin={!!member?.is_admin} memberId={user.id || ''} onSignOut={() => signOut('/')} />
                   </>
                 : <span className="l-btn" onClick={() => openAuth('signin')}>Start</span>}
             </div>
@@ -318,12 +318,12 @@ function LegitFooter() {
     <footer className="l-ft">
       <div className="l-wrap l-ftin">
         <div className="l-ftbrand">
-          <Link to="/v2" className="l-ftlogo"><img className="l-ftowl" src="/favicon2.png" alt="" />Legit</Link>
+          <Link to="/" className="l-ftlogo"><img className="l-ftowl" src="/favicon2.png" alt="" />Legit</Link>
           <p className="l-fttag">Every launched service, tested — what it does, who it&apos;s for, and an objective benchmark.</p>
         </div>
         <nav className="l-ftnav">
-          <Link to="/v2">Directory</Link>
-          <Link to="/v2/insights">Insights</Link>
+          <Link to="/">Directory</Link>
+          <Link to="/insights">Insights</Link>
           <span onClick={openSubmit}>Add your service</span>
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
@@ -462,7 +462,7 @@ function Chevron() {
 }
 
 // Reusable category dropdown — used in the hero search box and the detail
-// breadcrumb. Fetches distinct categories and navigates to /v2?cat=…
+// breadcrumb. Fetches distinct categories and navigates to /?cat=…
 export function CategoryPicker({ current = null, variant = 'crumb' }: { current?: string | null; variant?: 'search' | 'crumb' }) {
   const [cats, setCats] = useState<string[]>([])
   const [open, setOpen] = useState(false)
@@ -478,7 +478,7 @@ export function CategoryPicker({ current = null, variant = 'crumb' }: { current?
     })
     return () => { alive = false }
   }, [])
-  const go = (c?: string) => { setOpen(false); nav(c ? `/v2?cat=${encodeURIComponent(c)}` : '/v2') }
+  const go = (c?: string) => { setOpen(false); nav(c ? `/?cat=${encodeURIComponent(c)}` : '/') }
   // search box: keep the trigger short — "All" default, long names truncated
   const label = current ? (variant === 'search' && current.length > 10 ? current.slice(0, 10) + '…' : current) : 'All'
   return (
@@ -1158,7 +1158,7 @@ export function FaviconTile({ name, domain, icon = null, cls = 'l-ic' }: { name:
 export function ListingRow({ p, tickets = 0 }: { p: Listing; tickets?: number }) {
   const oneliner = (p.tagline || p.description || '').slice(0, 180)
   return (
-    <Link to={`/v2/s/${p.slug}`} className="l-row">
+    <Link to={`/s/${p.slug}`} className="l-row">
       <FaviconTile name={p.name} domain={p.domain} icon={visuals(p).icon} />
       <div style={{ flex: 1 }}>
         <div className="l-nm">{p.name} <span className="l-dm">{p.domain}</span></div>
@@ -1200,7 +1200,7 @@ function CardVisual({ p }: { p: Listing }) {
 
 export function PremiumCard({ p, tickets = 0 }: { p: Listing; tickets?: number }) {
   return (
-    <Link to={`/v2/s/${p.slug}`} className="l-card">
+    <Link to={`/s/${p.slug}`} className="l-card">
       <CardVisual p={p} />
       <div className="l-cbody">
         <div className="l-cn">{p.name}</div>

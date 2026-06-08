@@ -233,10 +233,173 @@ async function logVisitorHit(env: Env, req: Request, response: Response): Promis
   } catch { /* swallowed · waitUntil */ }
 }
 
+// ─── Legit.Show directory SEO/AEO · server-rendered meta + JSON-LD ──────────
+// The directory now lives at the root. These routes (/, /s/<slug>, /insights,
+// /alternatives/<slug>) get per-page <title>/meta + schema.org injected at the
+// edge so crawlers and answer engines see structured data without running JS.
+// Non-directory paths return null → the SPA shell is served unchanged (so the
+// legacy commit.show product under /old keeps its own default meta).
+const SITE = 'https://commit.show'
+const supa = (env: Env) => env.SUPABASE_URL ?? 'https://tekemubwihsjdzittoqf.supabase.co'
+
+type Listing = {
+  id: string; slug: string; name: string; domain: string; url: string
+  platform: string | null; category: string | null
+  tagline: string | null; description: string | null
+  who_for: string[] | null; features: string[] | null
+  pricing: string | null; image_url: string | null; icon_url: string | null
+  has_pricing: boolean; info_as_of: string | null
+}
+async function getListing(env: Env, slug: string): Promise<Listing | null> {
+  const key = env.SUPABASE_ANON_KEY ?? ''
+  if (!key) return null
+  const cols = 'id,slug,name,domain,url,platform,category,tagline,description,who_for,features,pricing,image_url,icon_url,has_pricing,info_as_of'
+  const r = await fetch(`${supa(env)}/rest/v1/listings?slug=eq.${encodeURIComponent(slug)}&select=${cols}&limit=1`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } })
+  if (!r.ok) return null
+  return ((await r.json()) as Listing[])[0] ?? null
+}
+async function getStats(env: Env, id: string): Promise<{ avg: number; count: number }> {
+  const key = env.SUPABASE_ANON_KEY ?? ''
+  const h = { apikey: key, Authorization: `Bearer ${key}` }
+  try {
+    const a = await fetch(`${supa(env)}/rest/v1/listing_rating_stats?listing_id=eq.${id}&select=avg_rating,rating_count`, { headers: h })
+    const ar = a.ok ? (await a.json())[0] : null
+    return { avg: ar?.avg_rating ?? 0, count: ar?.rating_count ?? 0 }
+  } catch { return { avg: 0, count: 0 } }
+}
+async function getAlternatives(env: Env, category: string | null, slug: string): Promise<{ slug: string; name: string; url: string }[]> {
+  const key = env.SUPABASE_ANON_KEY ?? ''
+  if (!key || !category) return []
+  const r = await fetch(`${supa(env)}/rest/v1/listings?category=eq.${encodeURIComponent(category)}&slug=neq.${encodeURIComponent(slug)}&benchmark=not.is.null&select=slug,name,url&limit=12`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } })
+  if (!r.ok) return []
+  return await r.json() as { slug: string; name: string; url: string }[]
+}
+const clean = (s: string | null | undefined, max = 300) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+const ldSafe = (obj: unknown) => JSON.stringify(obj).replace(/</g, '\\u003c')
+class Meta { constructor(private v: string) {} element(e: Element) { e.setAttribute('content', this.v) } }
+class Attr { constructor(private a: string, private v: string) {} element(e: Element) { e.setAttribute(this.a, this.v) } }
+class TitleEl { constructor(private t: string) {} element(e: Element) { e.setInnerContent(this.t) } }
+class HeadInject { constructor(private html: string) {} element(e: Element) { e.append(this.html, { html: true }) } }
+function rewriteHtml(res: Response, opts: { title: string; description: string; canonical: string; ogImage?: string; jsonld: unknown[] }): Response {
+  const { title, description, canonical, ogImage, jsonld } = opts
+  let rw = new HTMLRewriter()
+    .on('title', new TitleEl(title))
+    .on('meta[name="description"]', new Meta(description))
+    .on('link[rel="canonical"]', new Attr('href', canonical))
+    .on('meta[property="og:url"]', new Meta(canonical))
+    .on('meta[property="og:site_name"]', new Meta('Legit.Show'))
+    .on('meta[property="og:title"]', new Meta(title))
+    .on('meta[name="twitter:title"]', new Meta(title))
+    .on('meta[property="og:description"]', new Meta(description))
+    .on('meta[name="twitter:description"]', new Meta(description))
+  if (ogImage) {
+    rw = rw.on('meta[property="og:image"]', new Meta(ogImage)).on('meta[property="og:image:alt"]', new Meta(title))
+      .on('meta[name="twitter:image"]', new Meta(ogImage)).on('meta[name="twitter:image:alt"]', new Meta(title))
+  }
+  const ld = jsonld.map(o => `<script type="application/ld+json">${ldSafe(o)}</script>`).join('')
+  rw = rw.on('head', new HeadInject(ld))
+  return rw.transform(res)
+}
+async function directoryMetaResponse(env: Env, request: Request): Promise<Response | null> {
+  const url = new URL(request.url)
+  const path = url.pathname.replace(/\.html$/, '')
+  const isIndex = path === '/' || path === ''
+  const isInsights = path === '/insights' || path === '/insights/'
+  const m = path.match(/^\/s\/([A-Za-z0-9._-]+)\/?$/)
+  const ma = path.match(/^\/alternatives\/([A-Za-z0-9._-]+)\/?$/)
+  if (!isIndex && !isInsights && !m && !ma) return null
+  const assetRes = await fetch(new URL('/index.html', request.url).toString())
+  if (!assetRes.ok) return null
+
+  if (isIndex) {
+    const canonical = SITE
+    const title = 'Legit.Show — every launched service, tested'
+    const description = 'A directory of launched web apps, SaaS, AI tools, MCP servers and developer tools — what each does, who it is for, real ratings, and an objective benchmark.'
+    const website = {
+      '@context': 'https://schema.org', '@type': 'WebSite', name: 'Legit.Show', url: canonical, description,
+      potentialAction: { '@type': 'SearchAction', target: `${SITE}/?q={search_term_string}`, 'query-input': 'required name=search_term_string' },
+    }
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [website] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'index'); return r
+  }
+  if (isInsights) {
+    const canonical = `${SITE}/insights`
+    const title = 'Directory insights — Legit.Show'
+    const description = 'Benchmark averages, trust & security posture, and discovery-source breakdown across every tested launched service on Legit.Show.'
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [{ '@context': 'https://schema.org', '@type': 'WebPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } }] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'insights'); return r
+  }
+  if (ma) {
+    const aslug = ma[1]
+    let subject: Listing | null = null
+    try { subject = await getListing(env, aslug) } catch { subject = null }
+    if (!subject) { const pt = new Response(assetRes.body, assetRes); pt.headers.set('x-legit-seo', 'miss'); return pt }
+    const acat = subject.category || subject.platform || 'service'
+    const alts = await getAlternatives(env, subject.category, aslug)
+    const canonical = `${SITE}/alternatives/${subject.slug}`
+    const names = alts.map(a => a.name)
+    const title = `${subject.name} alternatives — ${names.length} tested options compared | Legit.Show`
+    const description = clean(names.length
+      ? `${names.length} tested ${acat} alternatives to ${subject.name}, compared on the same objective benchmark: ${names.slice(0, 6).join(', ')}.`
+      : `Tested ${acat} alternatives to ${subject.name} on Legit.Show.`, 200)
+    const graph = { '@context': 'https://schema.org', '@graph': [
+      { '@type': 'CollectionPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } },
+      { '@type': 'ItemList', name: `${subject.name} alternatives`, numberOfItems: alts.length,
+        itemListElement: alts.map((a, i) => ({ '@type': 'ListItem', position: i + 1, item: { '@type': 'SoftwareApplication', name: a.name, url: a.url, applicationCategory: acat } })) },
+      { '@type': 'BreadcrumbList', itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Legit.Show', item: SITE },
+        { '@type': 'ListItem', position: 2, name: acat, item: `${SITE}/?cat=${encodeURIComponent(acat)}` },
+        { '@type': 'ListItem', position: 3, name: subject.name, item: `${SITE}/s/${subject.slug}` },
+        { '@type': 'ListItem', position: 4, name: 'alternatives', item: canonical },
+      ] },
+    ] }
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [graph] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'alternatives'); r.headers.set('x-legit-slug', subject.slug); return r
+  }
+  // listing detail
+  const slug = m![1]
+  let listing: Listing | null = null
+  try { listing = await getListing(env, slug) } catch { listing = null }
+  if (!listing) { const pt = new Response(assetRes.body, assetRes); pt.headers.set('x-legit-seo', 'miss'); return pt }
+  const stats = await getStats(env, listing.id)
+  const cat = listing.category || listing.platform || 'service'
+  const canonical = `${SITE}/s/${listing.slug}`
+  const blurb = clean(listing.tagline || listing.description, 160)
+  const ratingTxt = stats.count > 0 ? `Rated ${stats.avg}★ by ${stats.count}. ` : ''
+  const title = `${listing.name} — ${clean(listing.tagline || cat, 60)} | Legit.Show`
+  const description = clean(`${blurb}. ${ratingTxt}Features, pricing, reviews and an objective benchmark on Legit.Show.`, 200)
+  const ogImage = listing.image_url || listing.icon_url || `${SITE}/og-image.png`
+  const app: Record<string, unknown> = {
+    '@type': 'SoftwareApplication', '@id': `${canonical}#app`,
+    name: listing.name, url: listing.url, applicationCategory: cat,
+    operatingSystem: /apps\.apple\.com/.test(listing.url) ? 'iOS' : 'Web',
+    description: clean(listing.description || listing.tagline, 280),
+  }
+  if (ogImage) app.image = ogImage
+  if (Array.isArray(listing.features) && listing.features.length) app.featureList = listing.features.slice(0, 12)
+  if (stats.count > 0) app.aggregateRating = { '@type': 'AggregateRating', ratingValue: stats.avg, reviewCount: stats.count, bestRating: 5, worstRating: 1 }
+  if (!listing.has_pricing && !clean(listing.pricing)) app.offers = { '@type': 'Offer', price: 0, priceCurrency: 'USD' }
+  const graph = { '@context': 'https://schema.org', '@graph': [
+    { '@type': 'WebPage', '@id': canonical, url: canonical, name: title, description, primaryImageOfPage: ogImage, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } },
+    app,
+    { '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Legit.Show', item: SITE },
+      { '@type': 'ListItem', position: 2, name: cat, item: `${SITE}/?cat=${encodeURIComponent(cat)}` },
+      { '@type': 'ListItem', position: 3, name: listing.name, item: canonical },
+    ] },
+  ] }
+  const out = rewriteHtml(assetRes, { title, description, canonical, ogImage, jsonld: [graph] })
+  const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'listing'); r.headers.set('x-legit-slug', listing.slug); return r
+}
+
 export const onRequest: PagesFunction<Env> = async (ctx) => {
-  // Always pass through first · anything that fails in classification or
-  // logging must never affect the user response.
-  const response = await ctx.next()
+  // Directory (Legit.Show) routes get server-rendered meta + JSON-LD; every
+  // other path falls through to the SPA shell unchanged.
+  let response: Response | null = null
+  try { response = await directoryMetaResponse(ctx.env, ctx.request) } catch { response = null }
+  if (!response) response = await ctx.next()
 
   // 2026-05-15 · /assets/* miss-as-HTML guard.
   //
