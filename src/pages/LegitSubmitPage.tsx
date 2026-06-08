@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { LegitShell, PricingField, VerifyOwnership, useLegitAuth } from './legit'
+import { LegitShell, PricingField, useLegitAuth } from './legit'
 import { setHead } from '../lib/seo'
 
-// Proper "add your service" page — paste a URL, we read the public page and
-// prefill the listing fields, then the owner reviews/edits before it's added.
-// Backed by ingest-directory's submit action (preview = prefill, no save).
+// Add your service — owner-gated. Paste a URL, review the prefilled details, then
+// verify domain ownership (meta tag / DNS TXT). The listing is only published
+// once verification passes — nothing goes live before you prove you own it.
 
 const CANON_CATS = [
   'AI & Agents', 'Developer Tools', 'MCP & Integrations', 'Frameworks & Starter Kits',
@@ -17,7 +17,9 @@ const CANON_CATS = [
 
 const CSS = `
 .sub-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:28px;color:#211C15;margin:4px 0 6px;letter-spacing:-.01em}
-.sub-sub{font-size:14px;color:#6E6557;line-height:1.6;margin-bottom:26px;max-width:560px}
+.sub-sub{font-size:14px;color:#6E6557;line-height:1.6;margin-bottom:24px;max-width:560px}
+.sub-steps{display:flex;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#9A9080;margin-bottom:18px;text-transform:uppercase;letter-spacing:.04em}
+.sub-steps b{color:#97600F}
 .sub-card{background:#FCFAF5;border:1px solid #E7D4AC;border-radius:14px;padding:22px}
 .sub-row{display:flex;gap:10px;align-items:flex-start}
 .sub-row .l-authin{margin-bottom:0}
@@ -31,6 +33,7 @@ const CSS = `
 
 type Fields = { name: string; tagline: string; description: string; category: string; pricing: string; has_pricing: boolean }
 const EMPTY: Fields = { name: '', tagline: '', description: '', category: '', pricing: '', has_pricing: false }
+const invoke = (body: Record<string, unknown>) => supabase.functions.invoke('ingest-directory', { body })
 
 export function LegitSubmitPage() {
   const nav = useNavigate()
@@ -38,69 +41,83 @@ export function LegitSubmitPage() {
   const { openAuth } = useLegitAuth()
   const [url, setUrl] = useState('')
   const [phase, setPhase] = useState<'url' | 'form' | 'verify'>('url')
-  const [done, setDone] = useState<{ id: string; domain: string; slug: string; name: string } | null>(null)
   const [f, setF] = useState<Fields>(EMPTY)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [existing, setExisting] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  const [domain, setDomain] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    setHead({ title: 'Add your service — Legit.Show', description: 'Add your launched product to the Legit.Show directory. We read the public page, structure it, and run the benchmark.', canonical: 'https://commit.show/v2/submit' })
+    setHead({ title: 'Add your service — Legit.Show', description: "Add your launched product to the Legit.Show directory. Verify you own the domain, then it's listed with an objective benchmark.", canonical: 'https://commit.show/v2/submit' })
   }, [])
 
   const set = (k: keyof Fields, v: string) => setF(prev => ({ ...prev, [k]: v }))
 
+  // url -> form (prefill from the public page)
   const fetchDetails = async () => {
     setErr(null); setExisting(null)
-    const u = url.trim()
-    if (!u) { setErr('Enter your service URL.'); return }
+    if (!url.trim()) { setErr('Enter your service URL.'); return }
     setBusy(true)
     try {
-      const { data, error } = await supabase.functions.invoke('ingest-directory', { body: { action: 'submit', url: u, preview: true } })
-      const d = (data || {}) as { preview?: boolean; fields?: Partial<Fields>; existing?: boolean; slug?: string; error?: string; message?: string }
+      const { data, error } = await invoke({ action: 'submit', url: url.trim(), preview: true })
+      const d = (data || {}) as { fields?: Partial<Fields>; existing?: boolean; slug?: string; error?: string; message?: string }
       if (error && !d?.fields && !d?.error) { setErr('Could not read that page. Please try again.'); setBusy(false); return }
       if (d.existing && d.slug) { setExisting(d.slug); setBusy(false); return }
       if (d.error) { setErr(d.message || 'Could not read that page.'); setBusy(false); return }
-      setF({ ...EMPTY, ...d.fields })
-      setPhase('form'); setBusy(false)
+      setF({ ...EMPTY, ...d.fields }); setPhase('form'); setBusy(false)
     } catch { setErr('Network error. Please try again.'); setBusy(false) }
   }
 
-  const submit = async () => {
+  // form -> verify (fetch the ownership token)
+  const toVerify = async () => {
     setErr(null)
     if (!f.name.trim()) { setErr('A name is required.'); return }
+    setPhase('verify'); setToken(null)
     setBusy(true)
     try {
-      const { data, error } = await supabase.functions.invoke('ingest-directory', { body: { action: 'submit', url: url.trim(), fields: f } })
-      const d = (data || {}) as { slug?: string; id?: string; domain?: string; name?: string; existing?: boolean; error?: string; message?: string }
-      if (error && !d?.slug && !d?.error) { setErr('Could not save. Please try again.'); setBusy(false); return }
-      if (d.error) { setErr(d.message || 'Could not save this service.'); setBusy(false); return }
-      if (d.slug) {
-        const host = d.domain || url.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')
-        let id = d.id || ''
-        if (!id) {
-          const { data: row } = await supabase.from('listings').select('id,domain').eq('slug', d.slug).maybeSingle()
-          const r = row as { id?: string; domain?: string } | null
-          id = r?.id || ''
-        }
-        setDone({ id, domain: host, slug: d.slug, name: d.name || f.name })
-        setPhase('verify'); setBusy(false); return
-      }
-      setErr('Could not save this service.'); setBusy(false)
+      const { data } = await invoke({ action: 'verify_prepare', url: url.trim() })
+      const d = (data || {}) as { token?: string; domain?: string; existing?: boolean; slug?: string; error?: string; message?: string }
+      if (d.existing && d.slug) { nav(`/v2/s/${d.slug}`); return }
+      if (d.error) { setErr(d.message || 'Could not start verification.'); setBusy(false); return }
+      if (d.token) { setToken(d.token); setDomain(d.domain || '') }
+      setBusy(false)
     } catch { setErr('Network error. Please try again.'); setBusy(false) }
   }
+
+  // verify -> publish (only creates the listing if ownership checks out)
+  const verifyPublish = async () => {
+    setErr(null); setBusy(true)
+    try {
+      const { data } = await invoke({ action: 'verify_publish', url: url.trim(), fields: f })
+      const d = (data || {}) as { slug?: string; verified?: boolean; existing?: boolean; error?: string; message?: string }
+      if (d.slug) { nav(`/v2/s/${d.slug}`); return }
+      if (d.verified === false || d.error) { setErr(d.message || "Couldn't verify yet — add the tag and try again."); setBusy(false); return }
+      setErr('Could not publish. Please try again.'); setBusy(false)
+    } catch { setErr('Network error. Please try again.'); setBusy(false) }
+  }
+
+  const tag = token ? `<meta name="legit-verify" content="${token}">` : ''
 
   return (
     <LegitShell>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="l-wrap" style={{ maxWidth: 640, paddingTop: 32, paddingBottom: 72 }}>
         <h1 className="sub-h">Add your service</h1>
-        <p className="sub-sub">Paste your product URL — we read the public page and prefill the details. Review, edit anything, and add it to the directory. One entry per product.</p>
+        <p className="sub-sub">Paste your product URL, review the details, and verify you own the domain. It publishes only after verification — so every self-added listing is owner-verified.</p>
+        {user && (
+          <div className="sub-steps">
+            <b style={{ color: phase === 'url' ? '#97600F' : undefined }}>1 URL</b> ·
+            <b style={{ color: phase === 'form' ? '#97600F' : '#9A9080' }}>2 Details</b> ·
+            <b style={{ color: phase === 'verify' ? '#97600F' : '#9A9080' }}>3 Verify &amp; publish</b>
+          </div>
+        )}
 
         {!user ? (
           <div className="sub-card">
             <div className="l-subh">Sign in to add your service</div>
-            <p className="l-modaltext">An account lets us attribute the listing to you, so you can edit it and verify ownership later.</p>
+            <p className="l-modaltext">An account ties the listing to you and lets you verify ownership.</p>
             <button className="l-btn l-authsubmit" onClick={() => openAuth('signup')}>Sign in</button>
           </div>
         ) : phase === 'url' ? (
@@ -109,17 +126,11 @@ export function LegitSubmitPage() {
             <div className="sub-row">
               <input className="l-authin" type="url" inputMode="url" placeholder="https://yourproduct.com" value={url}
                 onChange={e => setUrl(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') fetchDetails() }} autoFocus disabled={busy} />
-              <button className="l-btn" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={fetchDetails}>
-                {busy ? 'Reading…' : 'Fetch details'}
-              </button>
+              <button className="l-btn" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={fetchDetails}>{busy ? 'Reading…' : 'Fetch details'}</button>
             </div>
             {err && <div className="l-suberr" style={{ marginTop: 10 }}>{err}</div>}
-            {existing && (
-              <div className="sub-exist">
-                Already in the directory — <span className="sub-link" onClick={() => nav(`/v2/s/${existing}`)}>view the listing →</span>
-              </div>
-            )}
-            <div className="sub-prov">App Store / Play apps: submit the marketing site · public landing pages only · up to 5 per day</div>
+            {existing && <div className="sub-exist">Already in the directory — <span className="sub-link" onClick={() => nav(`/v2/s/${existing}`)}>view the listing →</span></div>}
+            <div className="sub-prov">App Store / Play apps: submit the marketing site · you'll verify the domain next</div>
           </div>
         ) : phase === 'form' ? (
           <div className="sub-card">
@@ -138,23 +149,24 @@ export function LegitSubmitPage() {
             <label className="l-edlabel">Pricing</label>
             <PricingField initial={f.pricing} onChange={(pricing, has_pricing) => setF(prev => ({ ...prev, pricing, has_pricing }))} />
             {err && <div className="l-suberr" style={{ marginTop: 10 }}>{err}</div>}
-            <button className="l-btn l-authsubmit" style={{ marginTop: 16, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={submit}>
-              {busy ? 'Adding & benchmarking…' : 'Add to directory'}
-            </button>
-            <div className="sub-prov" style={{ marginTop: 12 }}>{url.replace(/^https?:\/\//, '')} · benchmark runs automatically</div>
+            <button className="l-btn l-authsubmit" style={{ marginTop: 16 }} onClick={toVerify}>Continue to verification →</button>
           </div>
         ) : (
           <div className="sub-card">
-            <div className="l-subh" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E7A3D" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-              {done?.name || 'Your service'} is in the directory
-            </div>
-            <p className="l-modaltext">Verify ownership now to manage the listing and earn a verified badge — or skip and do it later from the listing.</p>
-            {done?.id && <VerifyOwnership listingId={done.id} domain={done.domain} verified={false} onVerified={() => done && nav(`/v2/s/${done.slug}`)} />}
-            <div style={{ marginTop: 18, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="l-btn" onClick={() => done && nav(`/v2/s/${done.slug}`)}>View listing →</button>
-              <span className="sub-link" onClick={() => done && nav(`/v2/s/${done.slug}`)}>Do this later</span>
-            </div>
+            <span className="sub-back" onClick={() => { setPhase('form'); setErr(null) }}>← back to details</span>
+            <div className="l-subh">Verify you own {domain || 'the domain'}</div>
+            <p className="l-modaltext">Your listing publishes the moment we confirm you control the domain.</p>
+            {!token ? (
+              <button className="l-btn" style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={toVerify}>{busy ? 'Starting…' : 'Get verification tag'}</button>
+            ) : (
+              <>
+                <div className="l-vfy-step">1. Add this to your site&apos;s <code>&lt;head&gt;</code>:</div>
+                <div className="l-vfy-code" onClick={() => { try { navigator.clipboard?.writeText(tag) } catch { /* noop */ } setCopied(true) }}>{tag}<span className="l-vfy-copy">{copied ? 'copied' : 'copy'}</span></div>
+                <div className="l-vfy-step">…or add a DNS TXT record <code>_legit.{domain}</code> = <code>{token}</code></div>
+                <button className="l-btn l-authsubmit" style={{ marginTop: 14, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }} onClick={verifyPublish}>{busy ? 'Verifying…' : 'Verify & publish'}</button>
+              </>
+            )}
+            {err && <div className="l-suberr" style={{ marginTop: 10 }}>{err}</div>}
           </div>
         )}
       </div>

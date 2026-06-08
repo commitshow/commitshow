@@ -166,7 +166,8 @@ const CSS = `
 .l-authh{font-family:Fraunces,Georgia,serif;font-size:18px;color:#211C15;text-align:center;margin:5px 0 20px;font-weight:600}
 .l-oauth{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;border:1px solid #E0D8C8;border-radius:10px;padding:11px;font-size:14px;font-weight:500;color:#211C15;cursor:pointer;margin-bottom:9px;font-family:Inter,sans-serif}.l-oauth:hover{border-color:#E7D4AC;background:#FCFAF5}
 .l-author{display:flex;align-items:center;gap:12px;margin:14px 0;color:#9A9080;font-size:12px;font-family:'JetBrains Mono',monospace}.l-author::before,.l-author::after{content:'';flex:1;height:1px;background:#E9E2D4}
-.l-authin{width:100%;border:1px solid #E0D8C8;border-radius:10px;padding:11px 13px;font-size:14px;font-family:Inter,sans-serif;margin-bottom:9px;box-sizing:border-box;background:#fff;color:#2C261D}.l-authin:focus{outline:none;border-color:#C9A22E}
+.l-authin{width:100%;border:1px solid #E0D8C8;border-radius:10px;padding:11px 13px;font-size:14px;font-family:Inter,sans-serif;margin-bottom:9px;box-sizing:border-box;background:#fff;color:#2C261D}
+.lgt select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239A9080' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:38px}.l-authin:focus{outline:none;border-color:#C9A22E}
 .l-autherr{font-size:12.5px;color:#C8102E;margin:1px 0 9px}
 .l-authsubmit{width:100%;text-align:center;padding:11px;margin-top:3px}
 .l-authtoggle{text-align:center;font-size:13px;color:#6E6557;margin-top:16px}.l-authtoggle span{color:#97600F;cursor:pointer;font-weight:500}.l-authtoggle span:hover{text-decoration:underline}

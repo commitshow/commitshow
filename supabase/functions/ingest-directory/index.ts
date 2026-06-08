@@ -115,6 +115,55 @@ async function runVerify(id: string, memberId: string) {
   return { verified: true }
 }
 
+// Deterministic per-(member, domain) token — recomputed on verify, no storage.
+// Lets the submit flow gate publishing on ownership BEFORE any listing exists.
+async function makeVerifyToken(memberId: string, ckey: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SR_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${memberId}:${ckey}`))
+  return 'legit-' + btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/[+/=]/g, '').slice(0, 28)
+}
+async function domainHasToken(url: string | null, domain: string, token: string): Promise<boolean> {
+  const tok = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const html = await fetchText(url || `https://${domain}`, UA_WEB, 9000)
+  if (new RegExp(`<meta[^>]+name=["']legit-verify["'][^>]+content=["']${tok}["']`, 'i').test(html)
+    || new RegExp(`<meta[^>]+content=["']${tok}["'][^>]+name=["']legit-verify["']`, 'i').test(html)) return true
+  try {
+    const dr = await fetch(`https://cloudflare-dns.com/dns-query?name=_legit.${domain}&type=TXT`, { headers: { accept: 'application/dns-json' } })
+    const dj = await dr.json() as { Answer?: { data: string }[] }
+    if (dj.Answer?.some(a => a.data.includes(token))) return true
+  } catch { /* DNS lookup failed */ }
+  return false
+}
+function normalizeSubmitUrl(rawUrl: string): { url: string; host: string } | { error: string; message: string } {
+  let url = (rawUrl || '').trim()
+  if (!url) return { error: 'no_url', message: 'Enter your service URL.' }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url
+  let host = ''
+  try { host = new URL(url).host.toLowerCase().replace(/^www\./, '') } catch { return { error: 'bad_url', message: 'That does not look like a valid URL.' } }
+  if (NOISE(host)) return { error: 'not_eligible', message: "That URL isn't eligible — submit the product's own site." }
+  return { url, host }
+}
+async function existingSlug(ckey: string): Promise<string | null> {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?canonical_key=eq.${encodeURIComponent(ckey)}&select=slug&limit=1`,
+    { headers: { apikey: SR_KEY, authorization: `Bearer ${SR_KEY}` } })
+  return r.ok ? (await r.json() as { slug: string }[])[0]?.slug || null : null
+}
+// Submit flow is owner-gated: prepare a token, then publish only after verify.
+async function runVerifyPrepare(rawUrl: string, memberId: string) {
+  const n = normalizeSubmitUrl(rawUrl); if ('error' in n) return n
+  const ckey = canonicalKey(n.url)
+  const slug = await existingSlug(ckey); if (slug) return { existing: true, slug }
+  return { token: await makeVerifyToken(memberId, ckey), domain: n.host }
+}
+async function runVerifyPublish(rawUrl: string, memberId: string, fields: SubmitFields) {
+  const n = normalizeSubmitUrl(rawUrl); if ('error' in n) return n
+  const ckey = canonicalKey(n.url)
+  const slug = await existingSlug(ckey); if (slug) return { existing: true, slug }
+  const token = await makeVerifyToken(memberId, ckey)
+  if (!(await domainHasToken(n.url, n.host, token))) return { verified: false, message: "Couldn't find the verification tag yet. Add it, give it a minute to deploy, and try again." }
+  return await runSubmit(n.url, memberId, { fields, verifiedBy: memberId })
+}
+
 const UA_RSS = 'legit-directory-research/0.1 (by /u/legit_research)'
 const UA_WEB = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
 const EXTRACT_MODEL = 'claude-haiku-4-5'
@@ -432,6 +481,7 @@ async function upsertListings(rows: any[]) {
     has_pricing: !!L.price, js_starved: !!L.starved, enriched: !!(L.rich || L.prose),
     canonical_key: L.ckey || null,
     ...(L.submitted_by ? { submitted_by: L.submitted_by } : {}),
+    ...(L.verified_by ? { verified_by: L.verified_by, verified_at: L.verified_at } : {}),
     last_fetched_at: new Date().toISOString(),
   }))
   const r = await fetch(`${SUPABASE_URL}/rest/v1/listings?on_conflict=slug`, {
@@ -596,7 +646,7 @@ async function deleteListing(id: string) {
 // route to an existing listing if we already have it · per-member daily cap ·
 // spam/junk gate · grounded Claude enrich · upsert · fire-and-forget benchmark.
 type SubmitFields = { name?: string; tagline?: string; description?: string; category?: string; pricing?: string; platform?: string; has_pricing?: boolean }
-async function runSubmit(rawUrl: string, memberId: string, opts: { preview?: boolean; fields?: SubmitFields } = {}) {
+async function runSubmit(rawUrl: string, memberId: string, opts: { preview?: boolean; fields?: SubmitFields; verifiedBy?: string } = {}) {
   let url = (rawUrl || '').trim()
   if (!url) return { error: 'no_url', message: 'Enter your service URL.' }
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url
@@ -658,6 +708,7 @@ async function runSubmit(rawUrl: string, memberId: string, opts: { preview?: boo
     url, domain: host, platform: f.platform || guessPlatform(url),
     image: ex.image, icon: ex.icon, price: f.has_pricing != null ? f.has_pricing : !!(f.pricing || ex.price), starved: ex.starved,
     source: 'Submitted', postTitle: '', meta: '', rich: richOut, prose: proseOut, ckey, submitted_by: memberId,
+    verified_by: opts.verifiedBy || null, verified_at: opts.verifiedBy ? new Date().toISOString() : null,
   }
   const up = await upsertListings([row])
   if ((up as { error?: string })?.error) return { error: 'save_failed', message: 'Could not save the listing. Please try again.' }
@@ -694,7 +745,18 @@ Deno.serve(async (req) => {
     catch (e) { return json({ error: 'server', message: String(e) }, 500) }
   }
 
-  // Ownership verification — any signed-in member (proof is domain control).
+  // Owner-gated submit: prepare a domain token, then publish only after verify.
+  if (action === 'verify_prepare' || action === 'verify_publish') {
+    const memberId = await getMemberId(req)
+    if (!memberId) return json({ error: 'unauthorized', message: 'Sign in to add your service.' }, 401)
+    try {
+      return json(action === 'verify_prepare'
+        ? await runVerifyPrepare(String(payload.url || ''), memberId)
+        : await runVerifyPublish(String(payload.url || ''), memberId, payload.fields || {}))
+    } catch (e) { return json({ error: 'server', message: String(e) }, 500) }
+  }
+
+  // Ownership verification of an existing listing (claim from the listing page).
   if (action === 'verify_token' || action === 'verify') {
     const memberId = await getMemberId(req)
     if (!memberId) return json({ error: 'unauthorized', message: 'Sign in to verify ownership.' }, 401)
