@@ -79,7 +79,7 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
     setHead({
       title: `${p.name} — ${(p.tagline || cat).slice(0, 60)} | Legit.Show`,
       description: `${blurb}. ${rated}Features, pricing, reviews and an objective benchmark on Legit.Show.`.replace(/\s+/g, ' ').slice(0, 200),
-      canonical: `https://commit.show/s/${p.slug}`,
+      canonical: `https://legit.show/s/${p.slug}`,
       jsonld: {
         '@context': 'https://schema.org', '@type': 'SoftwareApplication',
         name: p.name, url: p.url, applicationCategory: cat,

@@ -69,10 +69,10 @@ export function DirectoryPage() {
     setHead({
       title: 'Legit.Show — every launched service, tested',
       description: 'A directory of launched web apps, SaaS, AI tools, MCP servers and Skills — what each does, who it is for, real ratings, and an objective benchmark.',
-      canonical: 'https://commit.show',
+      canonical: 'https://legit.show',
       jsonld: {
-        '@context': 'https://schema.org', '@type': 'WebSite', name: 'Legit.Show', url: 'https://commit.show',
-        potentialAction: { '@type': 'SearchAction', target: 'https://commit.show/?q={search_term_string}', 'query-input': 'required name=search_term_string' },
+        '@context': 'https://schema.org', '@type': 'WebSite', name: 'Legit.Show', url: 'https://legit.show',
+        potentialAction: { '@type': 'SearchAction', target: 'https://legit.show/?q={search_term_string}', 'query-input': 'required name=search_term_string' },
       },
     })
     return () => clearJsonLd()

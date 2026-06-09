@@ -64,7 +64,7 @@ Allow: /
 User-agent: meta-externalagent
 Allow: /
 
-Sitemap: https://commit.show/sitemap.xml
+Sitemap: https://legit.show/sitemap.xml
 `
 
 export const onRequest: PagesFunction = async () => {

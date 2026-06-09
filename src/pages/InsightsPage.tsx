@@ -78,7 +78,7 @@ export function InsightsPage() {
     setHead({
       title: 'Category insights — Legit.Show',
       description: 'Benchmark averages, trust & security posture, and discovery-source breakdown across launched web apps, SaaS, AI tools, MCP servers and developer tools tested on Legit.Show.',
-      canonical: 'https://commit.show/insights',
+      canonical: 'https://legit.show/insights',
     })
     supabase.from('listings')
       .select('category,has_pricing,source,form:benchmark->form,sig:benchmark->signals,q:benchmark->quality,t:benchmark->trust,a:benchmark->activity,tr:benchmark->transparency')

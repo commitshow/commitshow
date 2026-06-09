@@ -239,7 +239,7 @@ async function logVisitorHit(env: Env, req: Request, response: Response): Promis
 // edge so crawlers and answer engines see structured data without running JS.
 // Non-directory paths return null → the SPA shell is served unchanged (so the
 // legacy commit.show product under /old keeps its own default meta).
-const SITE = 'https://commit.show'
+const SITE = 'https://legit.show'
 const supa = (env: Env) => env.SUPABASE_URL ?? 'https://tekemubwihsjdzittoqf.supabase.co'
 
 type Listing = {

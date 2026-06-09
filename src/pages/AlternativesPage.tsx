@@ -10,7 +10,7 @@ import { setHead, clearJsonLd } from '../lib/seo'
 // leverage on existing data; no overall score shown.
 
 const COLS = 'id,slug,name,domain,url,platform,category,tagline,pricing,has_pricing,image_url,icon_url,benchmark'
-const SITE = 'https://commit.show'
+const SITE = 'https://legit.show'
 
 const CSS = `
 .alt-crumb{font-size:13px;color:#6E6557;padding:24px 0 0}

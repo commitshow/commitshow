@@ -50,7 +50,7 @@ export function LegitSubmitPage() {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    setHead({ title: 'Add your service — Legit.Show', description: "Add your launched product to the Legit.Show directory. Verify you own the domain, then it's listed with an objective benchmark.", canonical: 'https://commit.show/add' })
+    setHead({ title: 'Add your service — Legit.Show', description: "Add your launched product to the Legit.Show directory. Verify you own the domain, then it's listed with an objective benchmark.", canonical: 'https://legit.show/add' })
   }, [])
 
   const set = (k: keyof Fields, v: string) => setF(prev => ({ ...prev, [k]: v }))

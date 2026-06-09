@@ -155,7 +155,7 @@ async function fetchListings(env: Env): Promise<ListingRow[]> {
 }
 
 export const onRequest: PagesFunction<Env> = async (ctx) => {
-  const base = 'https://commit.show'
+  const base = 'https://legit.show'
 
   const sections = SECTION_URLS
     .map(s => urlEntry(`${base}${s.loc}`, null, s.changefreq, s.priority))
