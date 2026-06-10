@@ -24,9 +24,21 @@ export type Listing = {
   verified_by?: string | null; verified_at?: string | null
 }
 
+// 7-frame production-readiness benchmark (engine schema 2). Each frame is null
+// when the form factor can't measure it honestly (a github URL has no rendered
+// page → perf/a11y/privacy null) — null = not assessed, never a zero.
+// maintenance is the conditional 8th: only set when there's a code host / linked
+// repo. Legacy quality/trust/activity/transparency stay optional for old rows +
+// the back-compat derivation the engine still emits.
+export type FrameKey = 'performance' | 'accessibility' | 'security' | 'privacy' | 'reliability' | 'standards' | 'discoverability' | 'maintenance'
 export type Benchmark = {
-  quality: number; trust: number; activity: number; transparency: number
-  overall: number; form: string; scored_at?: string; signals?: Record<string, unknown>
+  performance?: number | null; accessibility?: number | null; security?: number | null
+  privacy?: number | null; reliability?: number | null; standards?: number | null
+  discoverability?: number | null; maintenance?: number | null
+  overall: number; assessed?: number; form: string; scored_at?: string; schema?: number
+  signals?: Record<string, unknown>
+  // legacy 4-axis (old rows + derived) — readers migrate off these
+  quality?: number; trust?: number; activity?: number; transparency?: number
 }
 
 const CSS = `
@@ -136,6 +148,7 @@ a.l-pill:hover{border-color:#C9A22E;background:#F1E6CC}
 .l-bmlabel{font-family:Inter,sans-serif;font-size:12px;color:#6E6557}
 .l-bmtrack{height:7px;background:#E4DCCB;border-radius:4px;overflow:hidden}.l-bmfill{display:block;height:100%;border-radius:4px;transition:width .4s}
 .l-bmval{font-size:12px;color:#211C15;text-align:right;font-weight:600}
+.l-bmmore{margin-top:13px;background:none;border:none;padding:0;font-size:12.5px;color:#97600F;font-weight:600;cursor:pointer}.l-bmmore:hover{text-decoration:underline}
 .l-lockt{font-family:Inter,sans-serif;font-size:14px;font-weight:600;color:#211C15;margin-top:14px}.l-locksub{font-family:Inter,sans-serif;font-size:11.5px;color:#6E6557;max-width:230px;margin:6px auto 10px}
 .l-engage{display:flex;align-items:center;justify-content:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .l-vouchbtn{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:8px 15px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:700;transition:.12s;flex-shrink:0}.l-vouchbtn:hover{border-color:#E7D4AC}.l-vouchbtn.on{background:#FCF6E9}
@@ -1093,32 +1106,155 @@ export function isIconImage(url: string | null | undefined): boolean {
   )
 }
 
-// 4-axis benchmark chart — same axes for every form, so listings compare on one
-// objective chart. Source badge says which signals fed it.
-// Each axis gets its own warm earth tone — slightly different per the design guide.
-const BM_AXES: [keyof Benchmark, string, string][] = [
-  ['quality', 'Quality', '#C99A2E'],        // gold
-  ['trust', 'Trust', '#A8743A'],            // bronze
-  ['activity', 'Activity', '#C2683E'],      // terracotta
-  ['transparency', 'Transparency', '#7E8A4E'], // olive
+// 7-frame production-readiness benchmark — "what separates a demo from production",
+// measured from the outside (URL · headers · Lighthouse) so closed-source SaaS is
+// fully assessable. Each frame is null when the form factor can't measure it
+// honestly; null renders as "n/a", never a zero that would understate the score.
+export const FRAMES: { key: FrameKey; label: string; tone: string; blurb: string }[] = [
+  { key: 'performance',     label: 'Performance',     tone: '#C99A2E', blurb: 'How fast it loads (Lighthouse)' },
+  { key: 'accessibility',   label: 'Accessibility',   tone: '#B5882B', blurb: 'Usable by everyone (Lighthouse)' },
+  { key: 'security',        label: 'Security',        tone: '#A8743A', blurb: 'Transport · security headers · no leaked secrets' },
+  { key: 'privacy',         label: 'Privacy',         tone: '#9A6B45', blurb: 'Privacy policy · terms · cookie consent' },
+  { key: 'reliability',     label: 'Reliability',     tone: '#C2683E', blurb: 'Routes reachable · valid SSL · real 404' },
+  { key: 'standards',       label: 'Standards',       tone: '#8C7A36', blurb: 'Best-practices · responsive · manifest' },
+  { key: 'discoverability', label: 'Discoverability', tone: '#7E8A4E', blurb: 'Meta · OpenGraph · structured data · sitemap' },
+  { key: 'maintenance',     label: 'Maintenance',     tone: '#6E8557', blurb: 'Actively maintained (repo signals)' },
+]
+// Old-schema rows (pre-7-frame) still carry the 4 axes — render those until the
+// re-benchmark sweep overwrites every row with frame data.
+const LEGACY_AXES: { key: keyof Benchmark; label: string; tone: string }[] = [
+  { key: 'quality', label: 'Quality', tone: '#C99A2E' }, { key: 'trust', label: 'Trust', tone: '#A8743A' },
+  { key: 'activity', label: 'Activity', tone: '#C2683E' }, { key: 'transparency', label: 'Transparency', tone: '#7E8A4E' },
 ]
 const BM_FORM: Record<string, string> = { web: 'live site', app_store: 'App Store signals', github: 'GitHub signals', npm: 'npm signals' }
-export function BenchmarkChart({ b, showOverall = false }: { b: Benchmark; showOverall?: boolean }) {
+
+export function BenchmarkChart({ b, showOverall = false, interactive = false }: { b: Benchmark; showOverall?: boolean; interactive?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const assessed = FRAMES.filter(f => b[f.key] != null)
+  const hasFrames = assessed.length > 0
+  const rows = hasFrames
+    ? assessed.map(f => ({ label: f.label, tone: f.tone, v: b[f.key] as number }))
+    : LEGACY_AXES.map(a => ({ label: a.label, tone: a.tone, v: (b[a.key] as number) || 0 }))
   return (
     <div className="l-bm">
-      {showOverall && <div className="l-bmtop" title="overall (admin only)"><span className="l-bmscore">{b.overall}</span><span className="l-bmscoremax">/100</span></div>}
-      <div className="l-bmsrc" style={{ textAlign: showOverall ? 'center' : 'left', margin: '4px 0 13px' }}>evaluated on {BM_FORM[b.form] || b.form}</div>
+      {showOverall && <div className="l-bmtop" title="overall · mean of assessed frames (admin only)"><span className="l-bmscore">{b.overall}</span><span className="l-bmscoremax">/100</span></div>}
+      <div className="l-bmsrc" style={{ textAlign: showOverall ? 'center' : 'left', margin: '4px 0 13px' }}>
+        evaluated on {BM_FORM[b.form] || b.form}{hasFrames ? ` · ${assessed.length} of 8 frames` : ''}
+      </div>
       <div className="l-bmbars">
-        {BM_AXES.map(([k, label, color]) => {
-          const v = (b[k] as number) || 0
+        {rows.map(r => (
+          <div key={r.label} className="l-bmrow">
+            <span className="l-bmlabel">{r.label}</span>
+            <span className="l-bmtrack"><span className="l-bmfill" style={{ width: `${r.v}%`, background: r.tone }} /></span>
+            <span className="l-bmval">{r.v}</span>
+          </div>
+        ))}
+      </div>
+      {interactive && hasFrames && <button className="l-bmmore" onClick={() => setOpen(true)}>See the evidence →</button>}
+      {open && <BenchmarkDetailModal b={b} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
+
+// ── benchmark detail modal — the evidence behind every frame ──
+// Reads benchmark.signals.frames.<frame> and renders each underlying check as
+// pass / fail / value. n/a frames show why they weren't assessed (e.g. a code host
+// has no rendered page) so the score is never silently inflated.
+const SIG_LABEL: Record<string, string> = {
+  lighthouse: 'Lighthouse ran', perf: 'Performance score', a11y: 'Accessibility score', bestPractices: 'Best-practices score', responseMs: 'Response time',
+  https: 'HTTPS', hsts: 'HSTS', csp: 'Content-Security-Policy', xFrame: 'X-Frame-Options', xContent: 'X-Content-Type-Options', referrer: 'Referrer-Policy',
+  mixedContent: 'No mixed content', secretsFound: 'No leaked secrets',
+  privacyPage: 'Privacy policy page', termsPage: 'Terms page', consentBanner: 'Cookie consent',
+  homeStatus: 'Homepage responds', routesChecked: 'Internal routes checked', routesOk: 'Routes reachable', proper404: 'Real 404 page',
+  responsive: 'Responsive (viewport)', favicon: 'Favicon', manifest: 'Web manifest',
+  title: 'Title tag', metaDescription: 'Meta description', ogTitle: 'OpenGraph title', ogImage: 'OpenGraph image', canonical: 'Canonical URL', structuredData: 'Structured data (JSON-LD)', sitemap: 'Sitemap',
+  license: 'License', topics: 'Topics', archived: 'Archived', homepage: 'Homepage link', hasDescription: 'Description', description: 'Description', readme: 'README', repository: 'Repository link', hasRepository: 'Repository link', types: 'TypeScript types', versions: 'Published versions',
+  pushed_at: 'Last push', daysSincePush: 'Days since push', modified: 'Last publish', daysSinceModified: 'Days since publish', releaseDate: 'Last release', daysSinceRelease: 'Days since release',
+  screenshots: 'Screenshots', appPrivacyLabel: 'App privacy label', ageRating: 'Age rating',
+}
+const INVERTED = new Set(['mixedContent']) // boolean where true = bad
+type EvRow = { label: string; state: 'pass' | 'fail' | 'info'; value?: string }
+function frameEvidence(sig: Record<string, unknown> | undefined): EvRow[] {
+  if (!sig) return []
+  const out: EvRow[] = []
+  for (const [k, val] of Object.entries(sig)) {
+    if (k === 'assessed' || k === 'reason' || val == null) continue
+    const label = SIG_LABEL[k] || k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())
+    if (k === 'secretsFound') {
+      const arr = val as string[]
+      out.push(arr.length ? { label: `Leaked secrets: ${arr.join(', ')}`, state: 'fail' } : { label: 'No leaked secrets', state: 'pass' })
+    } else if (k === 'archived') {
+      out.push({ label: 'Not archived', state: (val as boolean) ? 'fail' : 'pass' })
+    } else if (typeof val === 'boolean') {
+      const good = INVERTED.has(k) ? !val : val
+      out.push({ label, state: good ? 'pass' : 'fail' })
+    } else if (typeof val === 'number') {
+      const v = k === 'responseMs' ? `${val} ms` : /^daysSince/.test(k) ? `${val}d ago` : String(val)
+      out.push({ label, state: 'info', value: v })
+    } else if (typeof val === 'string') {
+      out.push({ label, state: 'info', value: val.length > 40 ? val.slice(0, 40) + '…' : val })
+    }
+  }
+  return out
+}
+const BD_CSS = `
+.l-bdov{position:fixed;inset:0;background:rgba(33,28,21,.55);backdrop-filter:blur(3px);z-index:120;display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px 16px;overflow:auto}
+.l-bdpanel{background:#FCFAF5;border:1px solid #E7D4AC;border-radius:16px;max-width:560px;width:100%;padding:24px 24px 28px;box-shadow:0 24px 60px rgba(33,28,21,.22)}
+.l-bdhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px}
+.l-bdtitle{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:21px;color:#211C15}
+.l-bdsub{font-size:12.5px;color:#6E6557;line-height:1.55;margin-bottom:18px}
+.l-bdx{font-size:22px;line-height:1;color:#9A9080;cursor:pointer;background:none;border:none;padding:0}
+.l-bdframe{border-top:1px solid #EFE4CC;padding:13px 0}
+.l-bdframe:first-of-type{border-top:none}
+.l-bdfh{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+.l-bdfname{font-weight:600;font-size:14.5px;color:#2E2820}
+.l-bdfscore{font-family:'JetBrains Mono',monospace;font-size:13px;color:#97600F;margin-left:auto}
+.l-bdfna{font-family:'JetBrains Mono',monospace;font-size:11px;color:#A99F8C;margin-left:auto;text-transform:uppercase;letter-spacing:.04em}
+.l-bdblurb{font-size:11.5px;color:#8A8170;margin-bottom:8px}
+.l-bdtrack{height:5px;background:#EFE6D2;border-radius:3px;overflow:hidden;margin-bottom:9px}
+.l-bdfill{display:block;height:100%;border-radius:3px}
+.l-bdev{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#5A5347;padding:1.5px 0}
+.l-bddot{width:14px;text-align:center;flex:0 0 auto;font-weight:700}
+.l-bddot.pass{color:#5C8A3E}.l-bddot.fail{color:#C24A33}.l-bddot.info{color:#A8893E}
+.l-bdev .v{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#7A7160}
+.l-bdnote{font-size:11px;color:#9A9080;margin-top:16px;font-family:'JetBrains Mono',monospace}
+`
+export function BenchmarkDetailModal({ b, onClose }: { b: Benchmark; onClose: () => void }) {
+  const framesSig = (b.signals?.frames || {}) as Record<string, Record<string, unknown>>
+  return (
+    <div className="l-bdov" onClick={onClose}>
+      <style dangerouslySetInnerHTML={{ __html: BD_CSS }} />
+      <div className="l-bdpanel" onClick={e => e.stopPropagation()}>
+        <div className="l-bdhead">
+          <div className="l-bdtitle">Benchmark evidence</div>
+          <button className="l-bdx" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <p className="l-bdsub">Seven frames of production-readiness, measured from the outside — {BM_FORM[b.form] || b.form}. Each frame shows the exact checks behind its score. Frames a {b.form === 'web' ? 'live site' : 'this form'} can&apos;t prove are marked not assessed, never scored as zero.</p>
+        {FRAMES.map(f => {
+          const v = b[f.key]
+          const sig = framesSig[f.key]
+          const ev = frameEvidence(sig)
           return (
-            <div key={k} className="l-bmrow">
-              <span className="l-bmlabel">{label}</span>
-              <span className="l-bmtrack"><span className="l-bmfill" style={{ width: `${v}%`, background: color }} /></span>
-              <span className="l-bmval">{v}</span>
+            <div key={f.key} className="l-bdframe">
+              <div className="l-bdfh">
+                <span className="l-bdfname">{f.label}</span>
+                {v != null ? <span className="l-bdfscore">{v as number}/100</span> : <span className="l-bdfna">not assessed</span>}
+              </div>
+              <div className="l-bdblurb">{f.blurb}</div>
+              {v != null && <div className="l-bdtrack"><span className="l-bdfill" style={{ width: `${v as number}%`, background: f.tone }} /></div>}
+              {v != null
+                ? ev.map((r, i) => (
+                    <div key={i} className="l-bdev">
+                      <span className={`l-bddot ${r.state}`}>{r.state === 'pass' ? '✓' : r.state === 'fail' ? '✕' : '•'}</span>
+                      <span>{r.label}</span>
+                      {r.value && <span className="v">{r.value}</span>}
+                    </div>
+                  ))
+                : <div className="l-bdev"><span className="l-bddot info">•</span><span>{(sig?.reason as string) || 'not measurable for this form'}</span></div>}
             </div>
           )
         })}
+        <div className="l-bdnote">Measured by Legit.Show · deterministic · re-checked weekly</div>
       </div>
     </div>
   )

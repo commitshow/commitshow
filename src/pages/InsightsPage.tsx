@@ -8,7 +8,15 @@ import { setHead } from '../lib/seo'
 // leverage on data we already hold; no overall score (that stays admin-only).
 // Computed client-side over the full set (a few hundred rows).
 
-type Sig = { https?: boolean; csp?: boolean; privacy?: boolean; lighthouse?: { perf?: number; a11y?: number; bp?: number } | null }
+type Sig = {
+  https?: boolean; csp?: boolean; privacy?: boolean; lighthouse?: { perf?: number; a11y?: number; bp?: number } | null // legacy flat
+  frames?: {
+    security?: { https?: boolean; csp?: boolean }
+    privacy?: { privacyPage?: boolean }
+    performance?: { perf?: number | null }
+    accessibility?: { a11y?: number | null }
+  }
+}
 type Row = {
   category: string | null
   has_pricing: boolean
@@ -119,14 +127,19 @@ export function InsightsPage() {
     // ── trust & security (web form only — these signals are web-specific) ──
     const web = list.filter(r => r.form === 'web')
     const pctOf = (f: (r: Row) => boolean | undefined) => web.length ? Math.round(web.filter(r => !!f(r)).length / web.length * 100) : 0
-    const lh = (k: 'perf' | 'a11y') => avg(web.map(r => r.sig?.lighthouse?.[k]).filter((x): x is number => x != null))
+    // 7-frame engine moved the per-check signals under signals.frames.* — read
+    // there, falling back to the legacy flat shape for any not-yet-re-benchmarked row.
+    const fr = (r: Row) => r.sig?.frames
+    const perfV = (r: Row) => fr(r)?.performance?.perf ?? r.sig?.lighthouse?.perf
+    const a11yV = (r: Row) => fr(r)?.accessibility?.a11y ?? r.sig?.lighthouse?.a11y
+    const lh = (get: (r: Row) => number | null | undefined) => avg(web.map(get).filter((x): x is number => x != null))
     const trust = {
       n: web.length,
-      https: pctOf(r => r.sig?.https),
-      csp: pctOf(r => r.sig?.csp),
-      privacy: pctOf(r => r.sig?.privacy),
-      perf: lh('perf'),
-      a11y: lh('a11y'),
+      https: pctOf(r => fr(r)?.security?.https ?? r.sig?.https),
+      csp: pctOf(r => fr(r)?.security?.csp ?? r.sig?.csp),
+      privacy: pctOf(r => fr(r)?.privacy?.privacyPage ?? r.sig?.privacy),
+      perf: lh(perfV),
+      a11y: lh(a11yV),
     }
 
     // ── by discovery source ──
