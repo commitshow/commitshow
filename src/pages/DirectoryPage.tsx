@@ -142,6 +142,7 @@ export function DirectoryPage() {
           <div className="l-statrow">
             <span><b>{rows ? rows.length : '—'}</b> services</span>
             <span><b>{cats.length}</b> categories</span>
+            <Link to="/reports" style={{ color: '#97600F', textDecoration: 'none' }}>reports →</Link>
             <Link to="/insights" style={{ color: '#97600F', textDecoration: 'none' }}>insights →</Link>
           </div>
         </div>

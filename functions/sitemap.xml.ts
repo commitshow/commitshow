@@ -78,6 +78,8 @@ const SECTION_URLS: Array<{ loc: string; changefreq: string; priority: string }>
   { loc: '/creators',               changefreq: 'daily',   priority: '0.7' },
   { loc: '/library',                changefreq: 'daily',   priority: '0.8' },
   { loc: '/insights',               changefreq: 'weekly',  priority: '0.6' },
+  { loc: '/reports',                changefreq: 'weekly',  priority: '0.8' },
+  { loc: '/methodology',            changefreq: 'monthly', priority: '0.6' },
   { loc: '/community',              changefreq: 'daily',   priority: '0.8' },
   { loc: '/community/open-mic',     changefreq: 'daily',   priority: '0.7' },
   { loc: '/community/build-logs',   changefreq: 'daily',   priority: '0.7' },
@@ -141,6 +143,19 @@ async function fetchProjects(env: Env): Promise<ProjectRow[]> {
   return await res.json() as ProjectRow[]
 }
 
+interface ReportRow { slug: string; published_at: string | null }
+async function fetchReports(env: Env): Promise<ReportRow[]> {
+  const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
+  const anonKey = env.SUPABASE_ANON_KEY ?? ''
+  if (!anonKey) return []
+  const res = await fetch(
+    `${url}/rest/v1/reports?select=slug,published_at&status=eq.published&order=published_at.desc&limit=1000`,
+    { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } },
+  )
+  if (!res.ok) return []
+  return await res.json() as ReportRow[]
+}
+
 interface ListingRow { slug: string; category: string | null; updated_at: string | null; last_fetched_at: string | null }
 async function fetchListings(env: Env): Promise<ListingRow[]> {
   const url     = env.SUPABASE_URL      ?? 'https://tekemubwihsjdzittoqf.supabase.co'
@@ -167,12 +182,18 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   let postsXml    = ''
   let projectsXml = ''
   let listingsXml = ''
+  let reportsXml  = ''
   try {
-    const [posts, projects, listings] = await Promise.all([
+    const [posts, projects, listings, reports] = await Promise.all([
       fetchPosts(ctx.env),
       fetchProjects(ctx.env),
       fetchListings(ctx.env),
+      fetchReports(ctx.env),
     ])
+    reportsXml = reports
+      .filter(r => r.slug)
+      .map(r => urlEntry(`${base}/reports/${r.slug}`, r.published_at, 'monthly', '0.8'))
+      .join('\n')
     listingsXml = listings
       .filter(l => l.slug)
       .flatMap(l => {
@@ -215,7 +236,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   const body =
 `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${sections}${listingsXml ? '\n' + listingsXml : ''}${postsXml ? '\n' + postsXml : ''}${projectsXml ? '\n' + projectsXml : ''}
+${sections}${reportsXml ? '\n' + reportsXml : ''}${listingsXml ? '\n' + listingsXml : ''}${postsXml ? '\n' + postsXml : ''}${projectsXml ? '\n' + projectsXml : ''}
 </urlset>
 `
 

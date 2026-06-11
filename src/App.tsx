@@ -61,6 +61,9 @@ const DirectoryAdminPage      = lazy(() => import('./pages/DirectoryAdminPage').
 const InsightsPage            = lazy(() => import('./pages/InsightsPage').then(m => ({ default: m.InsightsPage })))
 const AlternativesPage        = lazy(() => import('./pages/AlternativesPage').then(m => ({ default: m.AlternativesPage })))
 const LegitSubmitPage         = lazy(() => import('./pages/LegitSubmitPage').then(m => ({ default: m.LegitSubmitPage })))
+const ReportsPage             = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
+const ReportDetailPage        = lazy(() => import('./pages/ReportDetailPage').then(m => ({ default: m.ReportDetailPage })))
+const MethodologyPage         = lazy(() => import('./pages/MethodologyPage').then(m => ({ default: m.MethodologyPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -83,6 +86,7 @@ export default function App() {
   const _p = location.pathname
   const isChromeless = _p === '/' || _p === '/insights' || _p === '/add'
     || _p.startsWith('/s/') || _p.startsWith('/alternatives/') || _p.startsWith('/v2/')
+    || _p === '/reports' || _p.startsWith('/reports/') || _p === '/methodology'
     || _p === '/check'
   return (
     // 2026-05-05 · primary nav moved to a 200px left sidebar on md+.
@@ -159,6 +163,9 @@ export default function App() {
               (Nav.tsx + App.tsx shell). One CTA: paste URL → 60s audit. */}
           <Route path="/check"            element={<CheckPage />} />
           <Route path="/insights"         element={<InsightsPage />} />
+          <Route path="/reports"          element={<ReportsPage />} />
+          <Route path="/reports/:slug"    element={<ReportDetailPage />} />
+          <Route path="/methodology"      element={<MethodologyPage />} />
           <Route path="/alternatives/:slug" element={<AlternativesPage />} />
           <Route path="/s/:slug"          element={<ListingDetailPage />} />
           <Route path="/v2/admin"         element={<DirectoryAdminPage />} />

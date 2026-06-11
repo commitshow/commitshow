@@ -344,6 +344,8 @@ function LegitFooter() {
         </div>
         <nav className="l-ftnav">
           <Link to="/">Directory</Link>
+          <Link to="/reports">Reports</Link>
+          <Link to="/methodology">Methodology</Link>
           <Link to="/insights">Insights</Link>
           <span onClick={openSubmit}>Add your service</span>
           <Link to="/terms">Terms</Link>

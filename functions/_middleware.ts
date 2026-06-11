@@ -259,6 +259,22 @@ async function getListing(env: Env, slug: string): Promise<Listing | null> {
   if (!r.ok) return null
   return ((await r.json()) as Listing[])[0] ?? null
 }
+type ReportRow = {
+  slug: string; title: string; subtitle: string; coined_term: string | null
+  hero_stat: { value: number; label: string; n: number } | null
+  sample: { total: number; scope: string; as_of: string } | null
+  stats: { label: string; fail_pct: number | null; n: number }[] | null
+  published_at: string
+}
+async function getReport(env: Env, slug: string): Promise<ReportRow | null> {
+  const key = env.SUPABASE_ANON_KEY ?? ''
+  if (!key) return null
+  const cols = 'slug,title,subtitle,coined_term,hero_stat,sample,stats,published_at'
+  const r = await fetch(`${supa(env)}/rest/v1/reports?slug=eq.${encodeURIComponent(slug)}&status=eq.published&select=${cols}&limit=1`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } })
+  if (!r.ok) return null
+  return ((await r.json()) as ReportRow[])[0] ?? null
+}
 async function getStats(env: Env, id: string): Promise<{ avg: number; count: number }> {
   const key = env.SUPABASE_ANON_KEY ?? ''
   const h = { apikey: key, Authorization: `Bearer ${key}` }
@@ -309,7 +325,10 @@ async function directoryMetaResponse(env: Env, request: Request): Promise<Respon
   const isInsights = path === '/insights' || path === '/insights/'
   const m = path.match(/^\/s\/([A-Za-z0-9._-]+)\/?$/)
   const ma = path.match(/^\/alternatives\/([A-Za-z0-9._-]+)\/?$/)
-  if (!isIndex && !isInsights && !m && !ma) return null
+  const isReports = path === '/reports' || path === '/reports/'
+  const isMethodology = path === '/methodology' || path === '/methodology/'
+  const mr = path.match(/^\/reports\/([A-Za-z0-9._-]+)\/?$/)
+  if (!isIndex && !isInsights && !m && !ma && !isReports && !isMethodology && !mr) return null
   const assetRes = await fetch(new URL('/index.html', request.url).toString())
   if (!assetRes.ok) return null
 
@@ -357,6 +376,48 @@ async function directoryMetaResponse(env: Env, request: Request): Promise<Respon
     ] }
     const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [graph] })
     const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'alternatives'); r.headers.set('x-legit-slug', subject.slug); return r
+  }
+  if (isReports) {
+    const canonical = `${SITE}/reports`
+    const title = 'Reports — Legit.Show'
+    const description = "Periodic, reproducible data reports on the production-readiness of launched software — measured by Legit.Show's 7-Frame benchmark, with stated samples and open methodology."
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [{ '@context': 'https://schema.org', '@type': 'CollectionPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } }] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'reports'); return r
+  }
+  if (isMethodology) {
+    const canonical = `${SITE}/methodology`
+    const title = 'Methodology — the 7-Frame benchmark | Legit.Show'
+    const description = 'How Legit.Show measures production-readiness: seven frames from the public surface, deeper repository code checks, and the integrity rules behind every published number.'
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [{ '@context': 'https://schema.org', '@type': 'WebPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } }] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'methodology'); return r
+  }
+  if (mr) {
+    let rep: ReportRow | null = null
+    try { rep = await getReport(env, mr[1]) } catch { rep = null }
+    if (!rep) { const pt = new Response(assetRes.body, assetRes); pt.headers.set('x-legit-seo', 'miss'); return pt }
+    const canonical = `${SITE}/reports/${rep.slug}`
+    const hv = rep.hero_stat ? `${rep.hero_stat.value}% — ${rep.hero_stat.label}. ` : ''
+    const title = `${rep.title} | Legit.Show`
+    const description = clean(hv + rep.subtitle, 200)
+    const dataset = {
+      '@context': 'https://schema.org', '@type': 'Dataset', name: rep.title, description: clean(rep.subtitle, 300),
+      url: canonical, datePublished: rep.published_at, isAccessibleForFree: true,
+      creator: { '@type': 'Organization', name: 'Legit.Show', url: SITE },
+      measurementTechnique: 'Legit.Show 7-Frame benchmark (deterministic repository + URL analysis)',
+      keywords: ['production readiness', 'AI tools', 'benchmark', rep.coined_term || ''].filter(Boolean),
+      variableMeasured: (rep.stats || []).map(s => ({ '@type': 'PropertyValue', name: s.label, value: `${s.fail_pct}%`, description: `n=${s.n}` })),
+    }
+    const article = {
+      '@context': 'https://schema.org', '@type': 'Article', headline: rep.title, description, datePublished: rep.published_at,
+      author: { '@type': 'Organization', name: 'Legit.Show' }, publisher: { '@type': 'Organization', name: 'Legit.Show', url: SITE }, mainEntityOfPage: canonical,
+    }
+    const breadcrumb = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Legit.Show', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Reports', item: `${SITE}/reports` },
+      { '@type': 'ListItem', position: 3, name: rep.title, item: canonical },
+    ] }
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [dataset, article, breadcrumb] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'report'); r.headers.set('x-legit-slug', rep.slug); return r
   }
   // listing detail
   const slug = m![1]
