@@ -128,7 +128,7 @@ export function DirectoryPage() {
         <div className="l-wrap">
           <h1>Discover Legit Products</h1>
           <div className="sub">What each one does, who it&apos;s for, and how it holds up.</div>
-          <img className="l-owl" src="/owl_up.png" alt="" width="108" height="79" />
+          <img className="l-owl" src="/owl_smallest.webp" alt="" width="108" height="79" fetchpriority="high" />
           <div className="l-bigsearch">
             <CategoryPicker variant="search" current={cat} />
             <input
