@@ -128,7 +128,7 @@ export function ReportDetailPage() {
     <LegitShell>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <main className="l-wrap" style={{ maxWidth: 760, paddingTop: 30, paddingBottom: 80 }}>
-        <div className="l-crumb" style={{ marginBottom: 12 }}><Link to="/reports">Reports</Link> › {r.title}</div>
+        <div className="l-crumb" style={{ marginBottom: 28 }}><Link to="/reports">Reports</Link> › {r.title}</div>
         {r.coined_term && <div className="rp-eyebrow">{r.coined_term} · the 2026 edition</div>}
         <h1 className="rp-h">{r.title}</h1>
         <p className="rp-sub">{r.subtitle}</p>

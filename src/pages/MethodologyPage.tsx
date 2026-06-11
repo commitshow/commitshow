@@ -48,7 +48,7 @@ export function MethodologyPage() {
     <LegitShell>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <main className="l-wrap" style={{ maxWidth: 760, paddingTop: 32, paddingBottom: 80 }}>
-        <div className="l-crumb" style={{ marginBottom: 10 }}><Link to="/reports">Reports</Link> › Methodology</div>
+        <div className="l-crumb" style={{ marginBottom: 28 }}><Link to="/reports">Reports</Link> › Methodology</div>
         <h1 className="mt-h">How we measure</h1>
         <p className="mt-sub">Legit.Show scores every listed service on seven frames of production-readiness — the things that separate a working demo from software that holds up. Scoring is deterministic and reproducible: no LLM in the scoring path, the same inputs always give the same numbers, and every report traces back to this page.</p>
 
