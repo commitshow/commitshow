@@ -247,7 +247,8 @@ a.l-pill:hover{border-color:#C9A22E;background:#F1E6CC}
 .l-ftcc{font-family:'JetBrains Mono',monospace;white-space:nowrap}
 @media(max-width:640px){.l-ftnav{flex-direction:row;flex-wrap:wrap;gap:16px}}
 @media(max-width:560px){.l-ftin{padding:28px 20px 18px;gap:22px}.l-ftbar{padding:0 20px 32px;flex-direction:column;gap:9px}}
-.l-row{display:flex;gap:18px;align-items:flex-start;padding:20px 4px;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
+.l-row{position:relative;display:flex;gap:18px;align-items:flex-start;padding:20px 4px;cursor:pointer;border-radius:10px;transition:background .12s}.l-row:hover{background:#fff}
+.l-rmadmin{position:absolute;top:8px;right:6px;width:22px;height:22px;border:none;background:#F1E8D6;color:#9A9080;border-radius:5px;font-size:15px;line-height:1;cursor:pointer;opacity:0;z-index:2;display:flex;align-items:center;justify-content:center;transition:opacity .12s}.l-row:hover .l-rmadmin{opacity:.55}.l-rmadmin:hover{background:#F6D9D2;color:#C24A33;opacity:1}
 .l-ic{width:72px;height:72px;border-radius:14px;background:linear-gradient(135deg,#C99A2E,#A66A18);color:#fff;font-weight:700;font-size:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Fraunces;background-size:cover;background-position:center;overflow:hidden}
 .l-fav{background:#fff;border:1px solid #EDE6D8}.l-fav img{width:100%;height:100%;object-fit:cover}
 .l-fav-mark{background:#FBF6EC}.l-fav-mark img{object-fit:contain;padding:16%;box-sizing:border-box}
@@ -1172,10 +1173,20 @@ export function FaviconTile({ name, domain, icon = null, cls = 'l-ic' }: { name:
   )
 }
 
-export function ListingRow({ p, tickets = 0 }: { p: Listing; tickets?: number }) {
+export function ListingRow({ p, tickets = 0, onRemove }: { p: Listing; tickets?: number; onRemove?: (id: string) => void }) {
   const oneliner = (p.tagline || p.description || '').slice(0, 180)
+  const { member } = useAuth() as { member: { is_admin?: boolean } | null }
+  const removeListing = async (e: { preventDefault(): void; stopPropagation(): void }) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!window.confirm(`Remove "${p.name}" from the directory?`)) return
+    await supabase.functions.invoke('ingest-directory', { body: { action: 'delete', id: p.id } })
+    onRemove?.(p.id)
+  }
   return (
     <Link to={`/s/${p.slug}`} className="l-row">
+      {member?.is_admin && onRemove && (
+        <button className="l-rmadmin" title="Remove from directory (admin)" aria-label="Remove" onClick={removeListing}>×</button>
+      )}
       <FaviconTile name={p.name} domain={p.domain} icon={visuals(p).icon} />
       <div style={{ flex: 1 }}>
         <div className="l-nm">{p.name} <span className="l-dm">{p.domain}</span></div>

@@ -189,7 +189,7 @@ export function DirectoryPage() {
 
         {rows === null && <div className="l-empty">Loading…</div>}
         {rows && filtered.length === 0 && <div className="l-empty">No services match — try a different search or category.</div>}
-        {filtered.map(p => <ListingRow key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}
+        {filtered.map(p => <ListingRow key={p.id} p={p} tickets={tickets.get(p.id) || 0} onRemove={(id) => setRows(rs => (rs || []).filter(r => r.id !== id))} />)}
       </main>
     </LegitShell>
   )
