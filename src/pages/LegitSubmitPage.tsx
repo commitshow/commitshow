@@ -18,13 +18,13 @@ const CANON_CATS = [
 const CSS = `
 .sub-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:28px;color:#211C15;margin:4px 0 6px;letter-spacing:-.01em}
 .sub-sub{font-size:14px;color:#6E6557;line-height:1.6;margin-bottom:24px;max-width:560px}
-.sub-steps{display:flex;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#9A9080;margin-bottom:18px;text-transform:uppercase;letter-spacing:.04em}
+.sub-steps{display:flex;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#6F6757;margin-bottom:18px;text-transform:uppercase;letter-spacing:.04em}
 .sub-steps b{color:#97600F}
 .sub-card{background:#FCFAF5;border:1px solid #E7D4AC;border-radius:14px;padding:22px}
 .sub-row{display:flex;gap:10px;align-items:flex-start}
 .sub-row .l-authin{margin-bottom:0}
 .sub-row .l-btn{white-space:nowrap;padding:11px 18px}
-.sub-prov{font-size:12px;color:#9A9080;font-family:'JetBrains Mono',monospace;margin-top:18px}
+.sub-prov{font-size:12px;color:#6F6757;font-family:'JetBrains Mono',monospace;margin-top:18px}
 .sub-back{font-size:13px;color:#97600F;cursor:pointer;margin-bottom:16px;display:inline-block}
 .sub-exist{margin-top:12px;font-size:13.5px;color:#5A5347;background:#FBF6EC;border:1px solid #E7D4AC;border-radius:8px;padding:11px 13px}
 .sub-link{color:#97600F;cursor:pointer;font-weight:600}
@@ -109,8 +109,8 @@ export function LegitSubmitPage() {
         {user && (
           <div className="sub-steps">
             <b style={{ color: phase === 'url' ? '#97600F' : undefined }}>1 URL</b> ·
-            <b style={{ color: phase === 'form' ? '#97600F' : '#9A9080' }}>2 Details</b> ·
-            <b style={{ color: phase === 'verify' ? '#97600F' : '#9A9080' }}>3 Verify &amp; publish</b>
+            <b style={{ color: phase === 'form' ? '#97600F' : '#6F6757' }}>2 Details</b> ·
+            <b style={{ color: phase === 'verify' ? '#97600F' : '#6F6757' }}>3 Verify &amp; publish</b>
           </div>
         )}
 

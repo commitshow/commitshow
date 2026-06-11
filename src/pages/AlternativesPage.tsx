@@ -16,10 +16,10 @@ const CSS = `
 .alt-crumb{font-size:13px;color:#6E6557;padding:24px 0 0}
 .alt-crumb a{color:#6E6557;text-decoration:none}.alt-crumb a:hover{color:#211C15}
 .alt-h{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:27px;color:#211C15;margin:10px 0 3px;letter-spacing:-.01em}
-.alt-sub{font-size:12.5px;color:#9A9080;font-family:'JetBrains Mono',monospace;margin-bottom:24px}
+.alt-sub{font-size:12.5px;color:#6F6757;font-family:'JetBrains Mono',monospace;margin-bottom:24px}
 .alt-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .alt-tbl{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
-.alt-tbl th{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:#9A9080;text-transform:uppercase;letter-spacing:.05em;padding:0 0 11px;text-align:right;white-space:nowrap}
+.alt-tbl th{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;color:#6F6757;text-transform:uppercase;letter-spacing:.05em;padding:0 0 11px;text-align:right;white-space:nowrap}
 .alt-tbl th:first-child{text-align:left}
 .alt-tbl thead tr{border-bottom:1px solid #E0D8C8}
 .alt-tbl td{padding:12px 0;border-bottom:1px solid #F1EADE;text-align:right;color:#2C261D;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -30,14 +30,14 @@ const CSS = `
 .alt-ic img{width:100%;height:100%;object-fit:cover}
 .alt-nm{font-weight:600;color:#211C15;font-size:14.5px;line-height:1.2;text-decoration:none}
 .alt-nm:hover{color:#97600F}
-.alt-dm{font-size:11px;color:#9A9080;font-family:'JetBrains Mono',monospace}
+.alt-dm{font-size:11px;color:#6F6757;font-family:'JetBrains Mono',monospace}
 .alt-you{font-size:10px;color:#97600F;font-family:'JetBrains Mono',monospace;margin-left:7px;text-transform:uppercase;letter-spacing:.05em}
 .alt-q{display:inline-flex;align-items:center;gap:9px;justify-content:flex-end}
 .alt-bar{width:50px;height:5px;border-radius:3px;background:#F1EADE;overflow:hidden;flex-shrink:0}
 .alt-bar>i{display:block;height:100%;background:#E0A92E}
-.alt-ct{color:#9A9080;font-size:11.5px;margin-left:4px}
-.alt-dim{color:#9A9080}
-.alt-empty{font-size:14px;color:#9A9080;padding:8px 0 40px}
+.alt-ct{color:#6F6757;font-size:11.5px;margin-left:4px}
+.alt-dim{color:#6F6757}
+.alt-empty{font-size:14px;color:#6F6757;padding:8px 0 40px}
 @media(max-width:640px){.alt-bar{display:none}.alt-tbl th.opt,.alt-tbl td.opt{display:none}.alt-dm{display:none}}
 `
 

@@ -163,7 +163,7 @@ function Detail({ p, onReload }: { p: Listing; onReload: () => void }) {
             {p.benchmark
               ? <BenchmarkChart b={p.benchmark} showOverall={isAdmin} interactive />
               : <>
-                  <svg className="l-lockic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9A9080" strokeWidth="1.7">
+                  <svg className="l-lockic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6F6757" strokeWidth="1.7">
                     <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
                   <div className="l-lockt">Benchmark pending</div>

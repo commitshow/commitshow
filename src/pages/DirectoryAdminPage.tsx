@@ -102,12 +102,12 @@ export function DirectoryAdminPage() {
           <h1 style={{ fontSize: 26 }}>Directory admin</h1>
           <Link to="/" style={{ color: '#97600F', fontSize: 13 }}>view directory →</Link>
         </div>
-        <p style={{ color: '#9A9080', fontSize: 13.5, marginBottom: 22 }}>
+        <p style={{ color: '#6F6757', fontSize: 13.5, marginBottom: 22 }}>
           Ingest from sources and curate listings. Ingest runs Claude server-side and upserts into the public directory.
         </p>
 
         {/* scope: recency window + count */}
-        <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#9A9080', letterSpacing: '.05em', marginBottom: 8 }}>SCOPE</div>
+        <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#6F6757', letterSpacing: '.05em', marginBottom: 8 }}>SCOPE</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 18 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 13, color: '#6E6557' }}>Window</span>
@@ -120,26 +120,26 @@ export function DirectoryAdminPage() {
             <input type="number" min={1} max={30} value={count}
               onChange={e => setCount(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
               style={{ width: 64, border: '1px solid #E0D8C8', borderRadius: 8, padding: '6px 10px', fontSize: 14, fontFamily: "'JetBrains Mono',monospace" }} />
-            <span style={{ fontSize: 12, color: '#9A9080' }}>(≤30 · all get Claude write-up up to 16)</span>
+            <span style={{ fontSize: 12, color: '#6F6757' }}>(≤30 · all get Claude write-up up to 16)</span>
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: '#9A9080', marginBottom: 16 }}>
+        <div style={{ fontSize: 11.5, color: '#6F6757', marginBottom: 16 }}>
           Window applies to Reddit (top of) and Hacker News (posted within). GitHub/npm rank by stars/relevance.
         </div>
 
         {/* ingest */}
-        <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#9A9080', letterSpacing: '.05em', marginBottom: 10 }}>INGEST SOURCES</div>
+        <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: '#6F6757', letterSpacing: '.05em', marginBottom: 10 }}>INGEST SOURCES</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           {SOURCES.map(s => (
             <div key={s.key} className="l-cattile" title={`Add to field: ${s.key}`}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '9px 13px', borderRadius: 10, opacity: busy ? 0.6 : 1, pointerEvents: busy ? 'none' : 'auto' }}
               onClick={() => runIngest(s.key)}>
               <span style={{ fontWeight: 600, fontSize: 13.5, color: '#211C15' }}>{busy === s.key ? '⏳ ' : '▶ '}{s.label}</span>
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#9A9080', lineHeight: 1.35 }}>{s.hint}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#6F6757', lineHeight: 1.35 }}>{s.hint}</span>
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 12.5, color: '#9A9080', marginBottom: 6, maxWidth: 620 }}>
+        <div style={{ fontSize: 12.5, color: '#6F6757', marginBottom: 6, maxWidth: 620 }}>
           Custom sources — space-separated. Mix any: subreddit name (e.g. <code>SideProject</code>) ·{' '}
           <code>hn</code> · <code>mcp</code> · <code>skills</code> · <code>betalist</code> · <code>ph</code> ·{' '}
           <code>gh:&lt;keyword&gt;</code> (GitHub search) · <code>npm:&lt;keyword&gt;</code> (npm search).

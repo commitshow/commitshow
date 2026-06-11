@@ -128,7 +128,7 @@ export function DirectoryPage() {
         <div className="l-wrap">
           <h1>Discover Legit Products</h1>
           <div className="sub">What each one does, who it&apos;s for, and how it holds up.</div>
-          <img className="l-owl" src="/owl_up.png" alt="" width="108" />
+          <img className="l-owl" src="/owl_up.png" alt="" width="108" height="79" />
           <div className="l-bigsearch">
             <CategoryPicker variant="search" current={cat} />
             <input
@@ -147,7 +147,7 @@ export function DirectoryPage() {
         </div>
       </div>
 
-      <div className="l-wrap">
+      <main className="l-wrap">
         {!q && !cat && !platform && featured.length > 0 && (
           <div className="l-premium">{featured.map(p => <PremiumCard key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}</div>
         )}
@@ -176,7 +176,7 @@ export function DirectoryPage() {
         {rows === null && <div className="l-empty">Loading…</div>}
         {rows && filtered.length === 0 && <div className="l-empty">No services match — try a different search or category.</div>}
         {filtered.map(p => <ListingRow key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}
-      </div>
+      </main>
     </LegitShell>
   )
 }
