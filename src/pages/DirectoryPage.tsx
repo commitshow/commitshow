@@ -147,7 +147,9 @@ export function DirectoryPage() {
         </div>
       </div>
 
-      <main className="l-wrap">
+      {/* reserve a screen height so the footer starts below the fold — the async
+          listings would otherwise shift it up→down (the main CLS culprit) */}
+      <main className="l-wrap" style={{ minHeight: '100vh' }}>
         {!q && !cat && !platform && featured.length > 0 && (
           <div className="l-premium">{featured.map(p => <PremiumCard key={p.id} p={p} tickets={tickets.get(p.id) || 0} />)}</div>
         )}
