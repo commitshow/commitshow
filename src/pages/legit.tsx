@@ -1138,8 +1138,15 @@ export const FRAMES: { key: FrameKey; label: string; tone: string; blurb: string
 // and a wide `preview` (for cards/detail banners). icon_url is the explicit
 // app icon column; legacy rows may carry an icon-type image_url instead.
 export function visuals(p: Listing): { icon: string | null; preview: string | null } {
-  const icon = p.icon_url || (isIconImage(p.image_url) ? p.image_url : null)
+  let icon = p.icon_url || (isIconImage(p.image_url) ? p.image_url : null)
   const preview = p.image_url && !isIconImage(p.image_url) ? p.image_url : null
+  // For a GitHub repo with no stored icon, use the owner's avatar — a crisp,
+  // recognizable org/user logo (e.g. google-gemini) — instead of Google's
+  // low-res, upscaled favicon for github.com.
+  if (!icon) {
+    const gh = (p.url || '').match(/github\.com\/([^/?#]+)/i)
+    if (gh && gh[1].toLowerCase() !== 'github.com') icon = `https://github.com/${gh[1]}.png?size=200`
+  }
   return { icon, preview }
 }
 
