@@ -251,7 +251,7 @@ a.l-pill:hover{border-color:#C9A22E;background:#F1E6CC}
 .l-ic{width:72px;height:72px;border-radius:14px;background:linear-gradient(135deg,#C99A2E,#A66A18);color:#fff;font-weight:700;font-size:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:Fraunces;background-size:cover;background-position:center;overflow:hidden}
 .l-fav{background:#fff;border:1px solid #EDE6D8}.l-fav img{width:100%;height:100%;object-fit:cover}
 .l-fav-mark{background:#FBF6EC}.l-fav-mark img{object-fit:contain;padding:16%;box-sizing:border-box}
-.l-nm{font-weight:600;color:#211C15;font-size:19px;font-family:Fraunces,Georgia,serif;line-height:1.2}.l-dm{font-size:12.5px;color:#6F6757;font-family:'JetBrains Mono',monospace;font-weight:400}.l-ol{font-size:15px;color:#463F33;margin-top:5px;line-height:1.55;max-width:680px;display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.l-nm{font-weight:600;color:#211C15;font-size:19px;font-family:Fraunces,Georgia,serif;line-height:1.2}.l-dm{font-size:12.5px;color:#6F6757;font-family:'JetBrains Mono',monospace;font-weight:400}.l-ol{font-size:15px;color:#463F33;background:#fff;margin-top:5px;line-height:1.55;max-width:680px;display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .l-tag{font-size:11px;font-family:'JetBrains Mono',monospace;padding:3px 9px;border-radius:5px;background:#F4F0E8;color:#6E6557;border:1px solid #E9E2D4}.l-tag.warn{background:#FBEFD9;color:#97600F;border-color:#E7D4AC}
 .l-score{font-size:11.5px;font-family:'JetBrains Mono',monospace;font-weight:700;padding:3px 9px;border-radius:5px;background:#F6EBD4;color:#97600F;border:1px solid #E7D4AC}
 /* header nav + dropdowns + bell */
