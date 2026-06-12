@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { LegitShell } from './legit'
+import { useAuth } from '../lib/auth'
 import { setHead, clearJsonLd } from '../lib/seo'
 
 // A published data report — the "According to Legit.Show" citation surface. Reads a
@@ -20,6 +21,8 @@ type Report = {
   stats: Stat[]; hall_of_fame: Tool[]; lowlights: Tool[]
   distribution?: { title: string; note: string; bands: Band[] } | null
   by_category?: { metric: string; rows: CatRow[] } | null
+  status?: string
+  trend?: { window_days: number; n: number; avg_delta: number; improved_pct: number; most_improved: { name: string; slug: string; delta: number }[] } | null
   body: { h: string; md: string }[]; published_at: string
 }
 
@@ -79,6 +82,12 @@ const CSS = `
 .lgt a.rp-ctaa{background:#97600F;color:#fff;text-decoration:none;border-radius:8px;padding:12px 20px;font-weight:600;font-size:14.5px}
 .lgt a.rp-ctaa.ghost{background:#fff;color:#97600F;border:1px solid #E7D4AC}
 .rp-body p{font-size:15px;line-height:1.7;color:#3C362C;max-width:680px;margin:10px 0}
+.rp-adminbar{display:flex;align-items:center;gap:10px;margin:-6px 0 14px}
+.rp-status{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:5px}
+.rp-status.draft{background:#FBEFD9;color:#A8742E;border:1px solid #E7D4AC}
+.rp-status.pub{background:#E7F0DD;color:#4E7A36;border:1px solid #CFE0BE}
+.rp-pubbtn{font-size:12.5px;font-weight:600;border:none;border-radius:7px;padding:6px 14px;cursor:pointer;background:#97600F;color:#fff}
+.rp-pubbtn.ghost{background:#fff;color:#97600F;border:1px solid #E7D4AC}
 `
 
 function bold(s: string) {
@@ -90,12 +99,22 @@ export function ReportDetailPage() {
   const { slug } = useParams<{ slug: string }>()
   const [r, setR] = useState<Report | null | undefined>(undefined)
   const [copied, setCopied] = useState(false)
+  const [bump, setBump] = useState(0)
+  const { member } = useAuth() as { member: { is_admin?: boolean } | null }
+  const isAdmin = !!member?.is_admin
 
   useEffect(() => {
     if (!slug) return
-    supabase.from('reports').select('*').eq('slug', slug).eq('status', 'published').maybeSingle()
+    // no status filter — RLS returns drafts only to admins
+    supabase.from('reports').select('*').eq('slug', slug).maybeSingle()
       .then(({ data }) => setR((data as Report | null) ?? null))
-  }, [slug])
+  }, [slug, bump])
+
+  const setStatus = async (status: string) => {
+    if (!r) return
+    await supabase.from('reports').update({ status }).eq('slug', r.slug)
+    setBump(b => b + 1)
+  }
 
   useEffect(() => {
     if (!r) return
@@ -129,8 +148,16 @@ export function ReportDetailPage() {
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <main className="l-wrap" style={{ maxWidth: 760, paddingTop: 30, paddingBottom: 80 }}>
         <div className="l-crumb" style={{ marginBottom: 28 }}><Link to="/reports">Reports</Link> › {r.title}</div>
-        {r.coined_term && <div className="rp-eyebrow">{r.coined_term} · the 2026 edition</div>}
+        {r.coined_term && <div className="rp-eyebrow">{r.coined_term} · {(r.sample?.as_of || '').slice(0, 4)} edition</div>}
         <h1 className="rp-h">{r.title}</h1>
+        {isAdmin && (
+          <div className="rp-adminbar">
+            <span className={`rp-status ${r.status === 'draft' ? 'draft' : 'pub'}`}>{r.status === 'draft' ? 'DRAFT' : 'PUBLISHED'}</span>
+            {r.status === 'draft'
+              ? <button className="rp-pubbtn" onClick={() => setStatus('published')}>Publish</button>
+              : <button className="rp-pubbtn ghost" onClick={() => setStatus('draft')}>Unpublish</button>}
+          </div>
+        )}
         <p className="rp-sub">{r.subtitle}</p>
         <div className="rp-meta">
           <span>Published {(r.sample?.as_of || r.published_at || '').slice(0, 10)}</span>
@@ -189,6 +216,18 @@ export function ReportDetailPage() {
                 </tr>
               ))}
             </tbody></table>
+          </>
+        ) : null}
+
+        {r.trend && r.trend.most_improved?.length ? (
+          <>
+            <h2 className="rp-sec">What changed</h2>
+            <div className="rp-secn">{r.trend.n} tools re-tested over the last {r.trend.window_days} days · {r.trend.improved_pct}% improved · avg {r.trend.avg_delta > 0 ? '+' : ''}{r.trend.avg_delta} pts.</div>
+            <div className="rp-tools">
+              {r.trend.most_improved.map(m => (
+                <Link key={m.slug} to={`/s/${m.slug}`} className="rp-tool">{m.name}<span className="n" style={{ color: '#5C8A3E' }}>+{m.delta}</span></Link>
+              ))}
+            </div>
           </>
         ) : null}
 

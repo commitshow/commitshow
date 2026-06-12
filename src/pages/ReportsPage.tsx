@@ -8,7 +8,7 @@ import { setHead } from '../lib/seo'
 // canonical page; this is the hub crawlers and citations land on.
 
 type ReportCard = {
-  slug: string; title: string; subtitle: string; kind: string
+  slug: string; title: string; subtitle: string; kind: string; status?: string
   hero_stat: { value: number; unit: string; label: string; n: number } | null
   sample: { total: number; as_of: string } | null
   published_at: string
@@ -40,8 +40,9 @@ export function ReportsPage() {
       description: 'Periodic, reproducible data reports on the production-readiness of launched software — measured by Legit.Show’s 7-Frame benchmark. Cite-ready stats with stated samples and open methodology.',
       canonical: 'https://legit.show/reports',
     })
-    supabase.from('reports').select('slug,title,subtitle,kind,hero_stat,sample,published_at')
-      .eq('status', 'published').order('published_at', { ascending: false })
+    // no status filter — RLS returns drafts only to admins
+    supabase.from('reports').select('slug,title,subtitle,kind,status,hero_stat,sample,published_at')
+      .order('published_at', { ascending: false })
       .then(({ data }) => setReports((data as ReportCard[]) || []))
   }, [])
 
@@ -56,7 +57,7 @@ export function ReportsPage() {
         {reports && reports.length === 0 && <div className="rl-empty">No reports published yet.</div>}
         {reports?.map(r => (
           <Link key={r.slug} to={`/reports/${r.slug}`} className="rl-card">
-            <span className="rl-kind">{r.kind}</span>
+            <span className="rl-kind">{r.kind}{r.status === 'draft' ? ' · DRAFT' : ''}</span>
             <div className="rl-top">
               <div className="rl-ct">{r.title}</div>
               {r.hero_stat && (
