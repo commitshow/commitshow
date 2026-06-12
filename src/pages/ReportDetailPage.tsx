@@ -22,6 +22,7 @@ type Report = {
   distribution?: { title: string; note: string; bands: Band[] } | null
   by_category?: { metric: string; rows: CatRow[] } | null
   status?: string
+  compare?: { oss_n: number; saas_n: number; oss_label: string; saas_label: string; frames: { key: string; label: string; oss: number; saas: number }[] } | null
   trend?: { window_days: number; n: number; avg_delta: number; improved_pct: number; most_improved: { name: string; slug: string; delta: number }[] } | null
   body: { h: string; md: string }[]; published_at: string
 }
@@ -82,6 +83,13 @@ const CSS = `
 .lgt a.rp-ctaa{background:#97600F;color:#fff;text-decoration:none;border-radius:8px;padding:12px 20px;font-weight:600;font-size:14.5px}
 .lgt a.rp-ctaa.ghost{background:#fff;color:#97600F;border:1px solid #E7D4AC}
 .rp-body p{font-size:15px;line-height:1.7;color:#3C362C;max-width:680px;margin:10px 0}
+.rp-cmp{padding:12px 0;border-top:1px solid #ECE3D2}.rp-cmp:first-of-type{border-top:none}
+.rp-cmplabel{font-weight:600;font-size:14.5px;color:#2C261D;margin-bottom:7px}
+.rp-cmprow{display:grid;grid-template-columns:90px 1fr 36px;align-items:center;gap:11px;margin:4px 0}
+.rp-cmptag{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6F6757}
+.rp-cmptrack{height:14px;background:#EFE6D2;border-radius:4px;overflow:hidden}.rp-cmpfill{display:block;height:100%;border-radius:4px}
+.rp-cmpv{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:#211C15;text-align:right}
+@media(max-width:560px){.rp-cmprow{grid-template-columns:64px 1fr 30px;gap:8px}}
 .rp-adminbar{display:flex;align-items:center;gap:10px;margin:-6px 0 14px}
 .rp-status{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:5px}
 .rp-status.draft{background:#FBEFD9;color:#A8742E;border:1px solid #E7D4AC}
@@ -140,7 +148,7 @@ export function ReportDetailPage() {
   if (r === null) return <LegitShell><div className="l-wrap" style={{ paddingTop: 40 }}><h1>Report not found</h1><p><Link to="/reports" style={{ color: '#97600F' }}>← all reports</Link></p></div></LegitShell>
 
   const url = `${SITE}/reports/${r.slug}`
-  const citation = `According to Legit.Show’s 7-Frame benchmark (${(r.sample?.as_of || '').slice(0, 4)}), ${r.hero_stat.value}% of ${r.sample?.scope} ${r.hero_stat.label.replace(/^of [^,]+\s/, '')}. (n=${r.hero_stat.n}) — ${url}`
+  const citation = `According to Legit.Show’s 7-Frame benchmark (${(r.sample?.as_of || '').slice(0, 4)}), ${r.hero_stat.value}% of ${r.sample?.scope} ${r.hero_stat.label.replace(/^of [^,]+\s/, '')}. — ${url}`
   const copy = () => { try { navigator.clipboard?.writeText(citation) } catch { /* */ } setCopied(true) }
 
   return (
@@ -161,14 +169,14 @@ export function ReportDetailPage() {
         <p className="rp-sub">{r.subtitle}</p>
         <div className="rp-meta">
           <span>Published {(r.sample?.as_of || r.published_at || '').slice(0, 10)}</span>
-          <span>n = {r.sample?.total} tools</span>
+          <span>{r.sample?.total} services tested</span>
           <span>{r.sample?.scope}</span>
         </div>
 
         <div className="rp-hero">
           <div className="rp-herov">{r.hero_stat.value}{r.hero_stat.unit}</div>
           <div className="rp-herol">{r.hero_stat.label}</div>
-          <div className="rp-herocite">according to Legit.Show · n={r.hero_stat.n} · {(r.sample?.as_of || '').slice(0, 4)}</div>
+          <div className="rp-herocite">according to Legit.Show · {(r.sample?.as_of || '').slice(0, 4)}</div>
         </div>
 
         <h2 className="rp-sec">The 7-Frame trust gap</h2>
@@ -177,7 +185,6 @@ export function ReportDetailPage() {
           <div key={s.key} className={`rp-bar ${s.limited ? 'rp-limited' : ''}`}>
             <div className="rp-barhead">
               <span className="rp-barlabel">{s.label}</span>
-              <span className="rp-barn">n={s.n}{s.limited && <span className="rp-limnote">limited sample</span>}</span>
               <span className="rp-barpct">{s.fail_pct}%</span>
             </div>
             <div className="rp-track"><span className="rp-fill" style={{ width: `${s.fail_pct ?? 0}%` }} /></div>
@@ -210,12 +217,26 @@ export function ReportDetailPage() {
               {r.by_category.rows.map(c => (
                 <tr key={c.category}>
                   <td className="ct">{c.category}</td>
-                  <td className="num">n={c.n}</td>
+                  <td className="num">{c.n}</td>
                   <td className="bar"><span><i style={{ width: `${c.fail_pct}%` }} /></span></td>
                   <td className="pct">{c.fail_pct}%</td>
                 </tr>
               ))}
             </tbody></table>
+          </>
+        ) : null}
+
+        {r.compare?.frames?.length ? (
+          <>
+            <h2 className="rp-sec">{r.compare.oss_label} vs {r.compare.saas_label}</h2>
+            <div className="rp-secn">Group average per frame (0–100) · {r.compare.oss_n} open-source · {r.compare.saas_n} closed.</div>
+            {r.compare.frames.map(f => (
+              <div key={f.key} className="rp-cmp">
+                <div className="rp-cmplabel">{f.label}</div>
+                <div className="rp-cmprow"><span className="rp-cmptag">{r.compare!.oss_label}</span><span className="rp-cmptrack"><span className="rp-cmpfill" style={{ width: `${f.oss}%`, background: '#5C8A3E' }} /></span><span className="rp-cmpv">{f.oss}</span></div>
+                <div className="rp-cmprow"><span className="rp-cmptag">{r.compare!.saas_label}</span><span className="rp-cmptrack"><span className="rp-cmpfill" style={{ width: `${f.saas}%`, background: '#A8742E' }} /></span><span className="rp-cmpv">{f.saas}</span></div>
+              </div>
+            ))}
           </>
         ) : null}
 

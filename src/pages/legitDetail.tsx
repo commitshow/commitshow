@@ -150,6 +150,7 @@ export function BenchmarkDetailModal({ b, onClose }: { b: Benchmark; onClose: ()
 // why-it-matters + file evidence. This is the "extractable depth" reports cite.
 const RA_CHECKS: { key: string; label: string; why: string }[] = [
   { key: 'client_secret',       label: 'Client-side secrets',  why: 'Secret keys in the browser bundle can be stolen and abused' },
+  { key: 'auth',                label: 'Authentication',       why: 'An unauthenticated server runs its tools for anyone who can reach it' },
   { key: 'env_committed',       label: 'Committed .env',       why: 'Credentials checked into the repo leak to anyone who clones it' },
   { key: 'rls_coverage',        label: 'Row-level security',   why: 'Tables without access rules can expose other users’ data' },
   { key: 'rate_limiting',       label: 'API rate limiting',    why: 'No limit lets one user overload the server or run up the bill' },

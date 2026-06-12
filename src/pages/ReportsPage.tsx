@@ -63,7 +63,6 @@ export function ReportsPage() {
               {r.hero_stat && (
                 <div className="rl-stat">
                   <div className="rl-statv">{r.hero_stat.value}{r.hero_stat.unit}</div>
-                  <div className="rl-statl">n={r.hero_stat.n}</div>
                 </div>
               )}
             </div>

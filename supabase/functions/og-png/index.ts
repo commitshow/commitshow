@@ -96,7 +96,7 @@ function buildReportSvg(rep: RepRow): string {
   ${labelSvg}
   <line x1="80" y1="556" x2="1120" y2="556" stroke="#E0D8C8" stroke-width="2"/>
   <text x="80" y="592" font-family="JetBrains Mono" font-size="24" fill="#6F6757">${xmlEsc(rep.title.slice(0, 52))}</text>
-  <text x="1120" y="592" text-anchor="end" font-family="JetBrains Mono" font-size="22" fill="#9A9080">according to legit.show · n=${hero.n} · ${year}</text>
+  <text x="1120" y="592" text-anchor="end" font-family="JetBrains Mono" font-size="22" fill="#9A9080">according to legit.show · ${year}</text>
 </svg>`
 }
 
