@@ -374,8 +374,13 @@ async function discoverHN(cutoff: number | null): Promise<Cand[]> {
   }
   return out
 }
-async function discoverGitHub(q: string, n = 15): Promise<Cand[]> {
-  const j = await fetchJSON(`https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=${Math.min(n, 30)}`, 'legit-directory/0.1')
+async function discoverGitHub(q: string, n = 15, recentSince?: string): Promise<Cand[]> {
+  // recentSince (YYYY-MM-DD) constrains to repos CREATED after that date, while
+  // sort=stars still floats the ones with traction — "recently launched and
+  // already gaining stars". Without it a keyword search returns the all-time
+  // most-starred match (old awesome-lists, study guides), not new projects.
+  const qq = recentSince ? `${q} created:>${recentSince}` : q
+  const j = await fetchJSON(`https://api.github.com/search/repositories?q=${encodeURIComponent(qq)}&sort=stars&order=desc&per_page=${Math.min(n, 30)}`, 'legit-directory/0.1')
   const out: Cand[] = []
   for (const r of ((j && j.items) || [])) {
     const hasHome = r.homepage && /^https?:/i.test(r.homepage)
@@ -497,6 +502,14 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
   const win = ['day', 'week', 'month', 'year', 'all'].includes(opts.window || '') ? opts.window! : 'week'
   const limit = Math.max(1, Math.min(PICK_HARD_CAP, Number(opts.limit) || 16))
   const enrichN = Math.min(limit, ENRICH_HARD_CAP)
+  // GitHub keyword searches sort by stars; without a recency floor they return the
+  // all-time most-starred match (old awesome-lists). Constrain to repos created
+  // within a window-scaled lookback so the search returns *recently launched*
+  // projects that already have traction. (mcp/skills stay unconstrained — we want
+  // established servers there, not only new ones.)
+  const GH_SINCE_DAYS: Record<string, number | null> = { day: 90, week: 120, month: 240, year: 365, all: null }
+  const ghSinceDays = GH_SINCE_DAYS[win]
+  const ghSince = ghSinceDays ? new Date(Date.now() - ghSinceDays * 864e5).toISOString().slice(0, 10) : undefined
   const windowSec = WINDOW_SECONDS[win]
   const hnCutoff = windowSec == null ? null : Math.floor(Date.now() / 1000) - windowSec
   // per-source discovery breadth scales loosely with the requested limit
@@ -536,7 +549,7 @@ async function runIngest(target: string, opts: { window?: string; limit?: number
   if (wantSkills) raw.push(...await discoverGitHub('claude skill in:name,description,topics', perSource))
   if (wantPH) raw.push(...await discoverProductHunt(perSource))
   if (wantBeta) raw.push(...await discoverBetaList(perSource))
-  for (const q of ghQ) raw.push(...await discoverGitHub(`${q} in:name,description,topics`, perSource))
+  for (const q of ghQ) raw.push(...await discoverGitHub(`${q} in:name,description,topics`, perSource, ghSince))
   for (const q of npmQ) raw.push(...await discoverNpm(q, perSource))
   // dedup within this run by canonical key (not just domain)
   const seen = new Set<string>(); const cands: (Cand & { ckey: string })[] = []; let noise = 0
