@@ -2,7 +2,7 @@
 // scoped under `.lgt` / `l-` classes so it never touches the navy app.
 // Reads the `listings` table (populated by the ingest engine).
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import {
@@ -91,9 +91,11 @@ const CSS = `
 /* iOS: stop double-tap zoom on tappable controls (rating stars, vouch, chips, buttons) */
 .lgt button,.lgt a,.l-starbtn,.l-vouchbtn,.l-tkchip,.l-tkthrow,.l-rxuse,.l-row{touch-action:manipulation}
 .l-statrow{display:flex;gap:22px;justify-content:center;align-items:center;margin-top:22px;font-size:12.5px;color:#6F6757;font-family:'JetBrains Mono',monospace;flex-wrap:wrap}.l-statrow b{color:#211C15}
-.lgt a.l-hnavlink{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6E6557;text-decoration:none;letter-spacing:.01em;white-space:nowrap}
-.lgt a.l-hnavlink:hover{color:#97600F}
-@media(max-width:560px){.lgt a.l-hnavlink{font-size:12px}}
+.l-subnav{border-bottom:1px solid #EFE6D2;background:#FCFAF5}
+.l-subnavin{display:flex;gap:26px;align-items:center;height:40px;overflow-x:auto;scrollbar-width:none}.l-subnavin::-webkit-scrollbar{display:none}
+.lgt a.l-subnavlink{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6E6557;text-decoration:none;white-space:nowrap;letter-spacing:.02em}
+.lgt a.l-subnavlink:hover{color:#97600F}
+.lgt a.l-subnavlink.on{color:#97600F;font-weight:600}
 .l-cattiles{display:flex;flex-wrap:nowrap;gap:8px;padding:24px 0 6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}.l-cattiles::-webkit-scrollbar{display:none}
 .l-cattile{font-size:13.5px;color:#6E6557;background:#fff;border:1px solid #E9E2D4;border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:500;white-space:nowrap;flex:0 0 auto}.l-cattile:hover{border-color:#E7D4AC;color:#211C15}.l-cattile.on{background:#97600F;color:#fff;border-color:#97600F}
 .l-catwrap{position:relative}
@@ -302,6 +304,7 @@ export function LegitShell({ children }: { children: ReactNode }) {
   }
   const openAuth = (m: AuthMode = 'signin') => { setMode(m); setOpen(true) }
   const navShell = useNavigate()
+  const loc = useLocation()
   // Submitting needs an account (attribution + later claim) — sign in first,
   // then go to the proper submit page.
   const openSubmit = () => { if (!user) { openAuth('signup'); return } navShell('/add') }
@@ -316,8 +319,6 @@ export function LegitShell({ children }: { children: ReactNode }) {
           <div className="l-wrap l-hd">
             <Link to="/" className="l-logo"><img className="l-logoowl" src="/favicon2.png" alt="" width="24" height="24" />Legit</Link>
             <div className="l-auth" style={{ marginLeft: 'auto' }}>
-              <Link to="/reports" className="l-hnavlink">Reports</Link>
-              <Link to="/insights" className="l-hnavlink">Insights</Link>
               <span className="l-addbtn" onClick={openSubmit}>+ Add your service</span>
               {user
                 ? <>
@@ -328,6 +329,14 @@ export function LegitShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
+        <nav className="l-subnav">
+          <div className="l-wrap l-subnavin">
+            {([['/', 'Directory'], ['/reports', 'Reports'], ['/insights', 'Insights'], ['/methodology', 'Methodology']] as [string, string][]).map(([to, label]) => {
+              const on = to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to)
+              return <Link key={to} to={to} className={`l-subnavlink${on ? ' on' : ''}`}>{label}</Link>
+            })}
+          </div>
+        </nav>
         {children}
         <LegitFooter />
       </div>
