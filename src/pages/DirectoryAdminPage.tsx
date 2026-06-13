@@ -213,6 +213,12 @@ type Rep = { slug: string; title: string; hero_stat: { value: number; unit?: str
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
+const LAUNCH_THREAD = [
+  `We started as commit.show — a league grading vibe-coded projects on whether they actually hold up in production.\n\nThe scoreboard was the gimmick. The audit engine underneath was the real product.\n\nSo we rebuilt around it. 🧵`,
+  `Meet Legit.Show — a directory of launched web apps, SaaS, AI tools & MCP servers, each with an objective 7-Frame production-readiness benchmark.\n\ncommit.show now runs under the hood as the analysis engine.\n\nlegit.show`,
+  `AI ships a flawless demo. Production is the quiet part it skips — monitoring, rate limits, access rules, a real 404.\n\nWe measure that gap from the outside, and report exactly what we find.\n\n@Legit_Show`,
+]
+
 function tweetsFor(rep: Rep): { kind: string; body: string }[] {
   const h = rep.hero_stat
   if (!h) return []
@@ -248,6 +254,8 @@ function TwitterSection() {
     setBusy(true)
     await supabase.from('tweet_drafts').delete().eq('status', 'draft')   // regenerate fresh; keep approved/posted
     const rows: Omit<Draft, 'id'>[] = []
+    const lgid = crypto.randomUUID()
+    LAUNCH_THREAD.forEach((body, i) => rows.push({ kind: 'thread', source_slug: 'launch', group_id: lgid, idx: i, body, status: 'draft' }))
     for (const rep of reports) {
       const gid = crypto.randomUUID()
       let i = 0
@@ -267,7 +275,7 @@ function TwitterSection() {
   // group drafts by group_id, preserving report order
   const groups = new Map<string, Draft[]>()
   for (const d of drafts || []) { const k = d.group_id || d.id; (groups.get(k) || groups.set(k, []).get(k)!).push(d) }
-  const ordered = [...groups.values()].map(g => g.sort((a, b) => a.idx - b.idx))
+  const ordered = [...groups.values()].map(g => g.sort((a, b) => a.idx - b.idx)).sort((a, b) => (a[0].source_slug === 'launch' ? -1 : 0) - (b[0].source_slug === 'launch' ? -1 : 0))
   const cc = (b: string) => b.replace(/https?:\/\/\S+|legit\.show\/\S+/g, 'x'.repeat(23)).length  // URLs ≈ 23 on X
 
   return (

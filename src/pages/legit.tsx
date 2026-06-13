@@ -370,7 +370,7 @@ function LegitFooter() {
       </div>
       <div className="l-wrap l-ftbar">
         <span>legit structures publicly available information on launched services. Listings reflect each provider&apos;s own materials — confirm details on the official site.</span>
-        <span className="l-ftcc">© {year} Madeflo Inc.</span>
+        <span className="l-ftcc">Benchmark engine · powered by commit.show · © {year} Madeflo Inc.</span>
       </div>
     </footer>
   )
