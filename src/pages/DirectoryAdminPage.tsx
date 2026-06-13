@@ -216,8 +216,17 @@ const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 const LAUNCH_THREAD = [
   `We started as commit.show — a league grading vibe-coded projects on whether they actually hold up in production.\n\nThe scoreboard was the gimmick. The audit engine underneath was the real product.\n\nSo we rebuilt around it. 🧵`,
   `Meet Legit.Show — a directory of launched web apps, SaaS, AI tools & MCP servers, each with an objective 7-Frame production-readiness benchmark.\n\ncommit.show now runs under the hood as the analysis engine.\n\nlegit.show`,
-  `AI ships a flawless demo. Production is the quiet part it skips — monitoring, rate limits, access rules, a real 404.\n\nWe measure that gap from the outside, and report exactly what we find.\n\n@Legit_Show`,
+  `AI ships a flawless demo. Production is the quiet part it skips — monitoring, rate limits, access rules, a real 404.\n\nWe measure that gap from the outside, and report exactly what we find.\n\n@Legit_Show\n\n#buildinpublic #vibecoding #devtools`,
 ]
+
+function hashtagsFor(slug: string): string {
+  if (slug.includes('mcp')) return '#MCP #AI #LLM'
+  if (slug.includes('security')) return '#websecurity #infosec #webdev'
+  if (slug.includes('privacy')) return '#privacy #GDPR #webdev'
+  if (slug.includes('ai-built')) return '#vibecoding #AItools #buildinpublic'
+  if (slug.includes('open-source')) return '#opensource #SaaS #devtools'
+  return '#buildinpublic #devtools #AItools'
+}
 
 function tweetsFor(rep: Rep): { kind: string; body: string }[] {
   const h = rep.hero_stat
@@ -225,13 +234,14 @@ function tweetsFor(rep: Rep): { kind: string; body: string }[] {
   const url = `legit.show/reports/${rep.slug}`
   const stat = `${h.value}${h.unit || '%'} ${h.label || ''}`.trim()
   const scope = (rep.sample?.scope || 'launched services').split(',')[0]
+  const tags = hashtagsFor(rep.slug)
   const out: { kind: string; body: string }[] = []
-  out.push({ kind: 'single', body: `${cap(stat)}.\n\nWe benchmarked them straight from the source — here's exactly what we measured.\n\n${url}` })
+  out.push({ kind: 'single', body: `${cap(stat)}.\n\nWe benchmarked them straight from the source — here's exactly what we measured.\n\n${url}\n\n${tags}` })
   out.push({ kind: 'thread', body: `${cap(stat)}.\n\nWe ran Legit.Show's production-readiness benchmark across ${rep.sample?.total ?? ''} ${scope}. 🧵` })
   const top = (rep.stats || []).slice(0, 3)
   if (top.length) out.push({ kind: 'thread', body: `What's missing:\n\n${top.map(s => `→ ${s.fail_pct}% ${s.label.toLowerCase()}`).join('\n')}` })
   out.push({ kind: 'thread', body: `Not bad engineers — it's the invisible production controls a demo never forces you to add, and a model rarely does.` })
-  out.push({ kind: 'thread', body: `Full report + open methodology (we show exactly what was measured):\n${url}\n\n@Legit_Show` })
+  out.push({ kind: 'thread', body: `Full report + open methodology (we show exactly what was measured):\n${url}\n\n@Legit_Show\n\n${tags}` })
   return out
 }
 
