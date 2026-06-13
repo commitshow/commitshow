@@ -177,7 +177,7 @@ async function buildPrivacy(period: string, asOf: string) {
     title: `The Privacy Gap · ${period.toUpperCase()}`,
     subtitle: `We checked what ${total} launched web apps, SaaS and AI tools tell you about your data — before you ever sign in. Most tell you nothing.`,
     coined_term: 'the consent gap',
-    hero_stat: { value: hero.fail_pct, unit: '%', label: `of launched web apps ${hero.label.toLowerCase()}`, n: total },
+    hero_stat: { value: hero.fail_pct, unit: '%', label: `of launched web apps ship with ${hero.label.toLowerCase()}`, n: total },
     sample: { total, scope: 'launched web apps, SaaS and AI tools', as_of: asOf },
     stats, distribution, by_category, hall_of_fame: [], lowlights: [],
     body: [
@@ -215,7 +215,7 @@ async function buildMcp(period: string, asOf: string) {
     title: `The State of MCP Servers · ${period.toUpperCase()}`,
     subtitle: `MCP is the newest way to give an AI tools — and ${total} of the servers in our catalog were scanned straight from their repositories. The protocol is young; the production hygiene shows it.`,
     coined_term: 'the open-tool gap',
-    hero_stat: { value: hero?.fail_pct ?? 0, unit: '%', label: `of MCP servers ${(hero?.label || '').toLowerCase()}`, n: hero?.n ?? total },
+    hero_stat: { value: hero?.fail_pct ?? 0, unit: '%', label: `of MCP servers ship with ${(hero?.label || '').toLowerCase()}`, n: hero?.n ?? total },
     sample: { total, scope: 'open-source MCP servers with a public repository', as_of: asOf },
     stats, distribution: null, by_category: null, hall_of_fame: hall, lowlights: [],
     body: [
