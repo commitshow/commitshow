@@ -64,6 +64,7 @@ const LegitSubmitPage         = lazy(() => import('./pages/LegitSubmitPage').the
 const ReportsPage             = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const ReportDetailPage        = lazy(() => import('./pages/ReportDetailPage').then(m => ({ default: m.ReportDetailPage })))
 const MethodologyPage         = lazy(() => import('./pages/MethodologyPage').then(m => ({ default: m.MethodologyPage })))
+const AboutPage               = lazy(() => import('./pages/AboutPage').then(m => ({ default: m.AboutPage })))
 
 // Suspense fallback — faint monospace ping that stays out of the way while
 // a chunk downloads. No spinner · matches the Ivy League restraint.
@@ -86,7 +87,7 @@ export default function App() {
   const _p = location.pathname
   const isChromeless = _p === '/' || _p === '/insights' || _p === '/add'
     || _p.startsWith('/s/') || _p.startsWith('/alternatives/') || _p.startsWith('/v2/')
-    || _p === '/reports' || _p.startsWith('/reports/') || _p === '/methodology'
+    || _p === '/reports' || _p.startsWith('/reports/') || _p === '/methodology' || _p === '/about'
     || _p === '/check'
   return (
     // 2026-05-05 · primary nav moved to a 200px left sidebar on md+.
@@ -166,6 +167,7 @@ export default function App() {
           <Route path="/reports"          element={<ReportsPage />} />
           <Route path="/reports/:slug"    element={<ReportDetailPage />} />
           <Route path="/methodology"      element={<MethodologyPage />} />
+          <Route path="/about"            element={<AboutPage />} />
           <Route path="/alternatives/:slug" element={<AlternativesPage />} />
           <Route path="/s/:slug"          element={<ListingDetailPage />} />
           <Route path="/v2/admin"         element={<DirectoryAdminPage />} />

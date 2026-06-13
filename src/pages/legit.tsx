@@ -362,6 +362,7 @@ function LegitFooter() {
           <Link to="/reports">Reports</Link>
           <Link to="/methodology">Methodology</Link>
           <Link to="/insights">Insights</Link>
+          <Link to="/about">About</Link>
           <span onClick={openSubmit}>Add your service</span>
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>

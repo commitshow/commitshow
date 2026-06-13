@@ -80,6 +80,7 @@ const SECTION_URLS: Array<{ loc: string; changefreq: string; priority: string }>
   { loc: '/insights',               changefreq: 'weekly',  priority: '0.6' },
   { loc: '/reports',                changefreq: 'weekly',  priority: '0.8' },
   { loc: '/methodology',            changefreq: 'monthly', priority: '0.6' },
+  { loc: '/about',                  changefreq: 'monthly', priority: '0.5' },
   { loc: '/community',              changefreq: 'daily',   priority: '0.8' },
   { loc: '/community/open-mic',     changefreq: 'daily',   priority: '0.7' },
   { loc: '/community/build-logs',   changefreq: 'daily',   priority: '0.7' },

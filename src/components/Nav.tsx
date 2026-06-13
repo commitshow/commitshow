@@ -140,7 +140,7 @@ export function Nav() {
   const _np = location.pathname
   if (_np === '/' || _np === '/insights' || _np === '/add'
     || _np.startsWith('/s/') || _np.startsWith('/alternatives/')
-    || _np === '/reports' || _np.startsWith('/reports/') || _np === '/methodology'
+    || _np === '/reports' || _np.startsWith('/reports/') || _np === '/methodology' || _np === '/about'
     || _np.startsWith('/v2/') || _np === '/check') return null
 
   return (

@@ -355,8 +355,9 @@ async function directoryMetaResponse(env: Env, request: Request): Promise<Respon
   const ma = path.match(/^\/alternatives\/([A-Za-z0-9._-]+)\/?$/)
   const isReports = path === '/reports' || path === '/reports/'
   const isMethodology = path === '/methodology' || path === '/methodology/'
+  const isAbout = path === '/about' || path === '/about/'
   const mr = path.match(/^\/reports\/([A-Za-z0-9._-]+)\/?$/)
-  if (!isIndex && !isInsights && !m && !ma && !isReports && !isMethodology && !mr) return null
+  if (!isIndex && !isInsights && !m && !ma && !isReports && !isMethodology && !mr && !isAbout) return null
   const assetRes = await fetch(new URL('/index.html', request.url).toString())
   if (!assetRes.ok) return null
 
@@ -418,6 +419,13 @@ async function directoryMetaResponse(env: Env, request: Request): Promise<Respon
     const description = 'How Legit.Show measures production-readiness: seven frames from the public surface, deeper repository code checks, and the integrity rules behind every published number.'
     const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [{ '@context': 'https://schema.org', '@type': 'WebPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } }] })
     const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'methodology'); return r
+  }
+  if (isAbout) {
+    const canonical = `${SITE}/about`
+    const title = 'About — Legit.Show'
+    const description = 'Legit.Show is a directory of launched web apps, SaaS, AI tools and MCP servers — each with an objective 7-Frame production-readiness benchmark, plus reproducible "according to Legit.Show" data reports.'
+    const out = rewriteHtml(assetRes, { title, description, canonical, ogImage: `${SITE}/og-image.png`, jsonld: [{ '@context': 'https://schema.org', '@type': 'AboutPage', '@id': canonical, url: canonical, name: title, description, isPartOf: { '@type': 'WebSite', name: 'Legit.Show', url: SITE } }] })
+    const r = new Response(out.body, out); r.headers.set('x-legit-seo', 'about'); return r
   }
   if (mr) {
     let rep: ReportRow | null = null
